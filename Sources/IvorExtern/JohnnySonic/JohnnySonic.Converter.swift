@@ -1,3 +1,5 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
 internal import IvorModel
 
 private import IvorJohnnySonic
@@ -41,8 +43,8 @@ extension JohnnySonic.Converter {
         part.noteTable.forEach { btime, bdur, sfreq, efreq, _ in
             let startBeat = btime.doubleValue
             let duration = bdur.doubleValue
-            let volume = part.loudnessMap[btime].doubleValue * 10 // ???
-            let location = part.positionMap[btime].doubleValue
+            let volume = part.dynamicMap[btime].doubleValue * 10 // ???
+            let location = part.panMap[btime].doubleValue
             let startPitch = -sfreq.doubleValue
             let endPitch = -efreq.doubleValue
             let instrument = part.instrumentMap[btime].stringValue
@@ -75,8 +77,8 @@ extension JohnnySonic.Converter {
         part.noteTable.forEach { btime, bdur, snnum, ennum, _ in
             let startBeat = btime.doubleValue
             let duration = bdur.doubleValue
-            let volume = part.loudnessMap[btime].doubleValue * 10 // ???
-            let location = part.positionMap[btime].doubleValue
+            let volume = part.dynamicMap[btime].doubleValue * 10 // ???
+            let location = part.panMap[btime].doubleValue
             let startPitch = snnum.doubleValue
             let endPitch = ennum.doubleValue
             let instrument = part.instrumentMap[btime].stringValue
@@ -109,8 +111,8 @@ extension JohnnySonic.Converter {
         part.noteTable.forEach { btime, bdur, spit, epit, _ in
             let startBeat = btime.doubleValue
             let duration = bdur.doubleValue
-            let volume = part.loudnessMap[btime].doubleValue * 10 // ???
-            let location = part.positionMap[btime].doubleValue
+            let volume = part.dynamicMap[btime].doubleValue * 10 // ???
+            let location = part.panMap[btime].doubleValue
             let startPitch = _pitchNumber(for: spit).doubleValue
             let endPitch = _pitchNumber(for: epit).doubleValue
             let instrument = part.instrumentMap[btime].stringValue

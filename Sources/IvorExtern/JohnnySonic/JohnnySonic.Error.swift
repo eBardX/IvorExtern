@@ -1,3 +1,5 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
 internal import XestiTools
 
 extension JohnnySonic {
@@ -36,7 +38,7 @@ extension JohnnySonic.Error: EnhancedError {
             "Unable to format JohnnySonic score"
 
         case let .unsupportedFileFormat(fileFormat):
-            "Unsupported file format: ‘\(fileFormat)‘"
+            "Unsupported file format: ‘\(fileFormat)’"
 
         case let .unsupportedWorkTimeBasis(timeBasis):
             "Unsupported Ivor work time basis: \(timeBasis)"

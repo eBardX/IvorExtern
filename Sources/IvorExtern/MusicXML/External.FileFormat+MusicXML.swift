@@ -1,3 +1,5 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
 extension External.FileFormat {
     internal static let musicXML = Self(displayName: "MusicXML Document",
                                         filenameExtensions: ["musicxml",                        // preferred goes 1st

@@ -1,3 +1,5 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
 import IvorExtern
 import Testing
 
@@ -12,6 +14,13 @@ extension ExportFileFormatTests {
         let fmt = try #require(ExportFileFormat.exportFileFormat(for: "dkm"))
 
         #expect(fmt.canWrite(to: "dkm"))
+    }
+
+    @Test
+    func canWrite_matchingMIMEType() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "audio/midi"))
+
+        #expect(fmt.canWrite(to: "audio/midi"))
     }
 
     @Test
@@ -36,6 +45,12 @@ extension ExportFileFormatTests {
     }
 
     @Test
+    func exportFileFormat_knownMIMEType() {
+        #expect(ExportFileFormat.exportFileFormat(for: "audio/midi") != nil)
+        #expect(ExportFileFormat.exportFileFormat(for: "audio/x-midi") != nil)
+    }
+
+    @Test
     func exportFileFormat_unknownExtension() {
         #expect(ExportFileFormat.exportFileFormat(for: "xyz") == nil)
         #expect(ExportFileFormat.exportFileFormat(for: "") == nil)
@@ -49,7 +64,43 @@ extension ExportFileFormatTests {
     }
 
     @Test
+    func mimeTypes_notEmpty() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+
+        #expect(!fmt.mimeTypes.isEmpty)
+    }
+
+    @Test
+    func preferredFilenameExtension_notNil() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+
+        #expect(fmt.preferredFilenameExtension != nil)
+    }
+
+    @Test
+    func preferredFilenameExtensions_notEmpty() {
+        #expect(!ExportFileFormat.preferredFilenameExtensions.isEmpty)
+    }
+
+    @Test
+    func preferredMIMEType_notNil() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "audio/midi"))
+
+        #expect(fmt.preferredMIMEType != nil)
+    }
+
+    @Test
+    func preferredMIMETypes_notEmpty() {
+        #expect(!ExportFileFormat.preferredMIMETypes.isEmpty)
+    }
+
+    @Test
     func supportedFilenameExtensions_notEmpty() {
         #expect(!ExportFileFormat.supportedFilenameExtensions.isEmpty)
+    }
+
+    @Test
+    func supportedMIMETypes_notEmpty() {
+        #expect(!ExportFileFormat.supportedMIMETypes.isEmpty)
     }
 }

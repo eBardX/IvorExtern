@@ -1,0 +1,83 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
+@testable import IvorExtern
+import IvorMusicXML
+import Testing
+import XestiTools
+
+struct MusicXMLErrorTests {
+}
+
+// MARK: -
+
+extension MusicXMLErrorTests {
+    @Test
+    func convertFailure_message() {
+        let error = MusicXML.Error.convertFailure(nil)
+
+        #expect(error.message == "Unable to convert MusicXML score to Ivor work")
+    }
+
+    @Test
+    func invalidRootFileMediaType_message() {
+        let error = MusicXML.Error.invalidRootFileMediaType("text/plain")
+
+        #expect(error.message == "Invalid root file media type: text/plain")
+    }
+
+    @Test
+    func noRootFileFound_message() {
+        let error = MusicXML.Error.noRootFileFound
+
+        #expect(error.message == "No root files found in container")
+    }
+
+    @Test
+    func parseFailure_message() {
+        let error = MusicXML.Error.parseFailure(nil)
+
+        #expect(error.message == "Unable to parse MusicXML score")
+    }
+
+    @Test
+    func partMismatch_message() {
+        let error = MusicXML.Error.partMismatch
+
+        #expect(error.message == "Number of MusicXML score parts does not match number of MusicXML parts")
+    }
+
+    @Test
+    func unrecognizedPitchAccidental_message() {
+        let error = MusicXML.Error.unrecognizedPitchAccidental(.flat)
+
+        #expect(error.message == "Unrecognized MusicXML pitch accidental: flat")
+    }
+
+    @Test
+    func unrecognizedPitchLetter_message() {
+        let error = MusicXML.Error.unrecognizedPitchLetter(.a)
+
+        #expect(error.message == "Unrecognized MusicXML pitch letter: \u{2018}a\u{2019}")
+    }
+
+    @Test
+    func unrecognizedPitchOctave_message() {
+        let error = MusicXML.Error.unrecognizedPitchOctave(4)
+
+        #expect(error.message == "Unrecognized MusicXML pitch octave: \u{2018}4\u{2019}")
+    }
+
+    @Test
+    func unsupportedFileFormat_message() {
+        let error = MusicXML.Error.unsupportedFileFormat("mxl")
+
+        #expect(error.message == "Unsupported file format: \u{2018}mxl\u{2019}")
+    }
+
+    @Test
+    func unsupportedScoreFormat_message() {
+        let error = MusicXML.Error.unsupportedScoreFormat("timewise")
+
+        #expect(error.message == "Unsupported MusicXML score format: \u{2018}timewise\u{2019}")
+    }
+}

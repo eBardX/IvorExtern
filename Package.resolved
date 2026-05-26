@@ -1,5 +1,5 @@
 {
-  "originHash" : "f8e546fc663783849e1b7983776e7cd12f5fd89baa39fec3aab6a4158af5c80a",
+  "originHash" : "a1f58e0330f285f2e4e1aaaaad529c299f469e312764386e63d0abcfbfafe5cc",
   "pins" : [
     {
       "identity" : "bigint",
@@ -11,12 +11,84 @@
       }
     },
     {
+      "identity" : "ivorabc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorABC.git",
+      "state" : {
+        "revision" : "fce7ef5655849f836a178686f52f09c5e57badc2",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "ivorguido",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorGuido.git",
+      "state" : {
+        "revision" : "8f8abe9edb08cf3f41f16a99e552f3e26974900a",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "ivorjohnnysonic",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorJohnnySonic.git",
+      "state" : {
+        "revision" : "aa106f4f147d0b9932b59db7eb41860bc4920d47",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "ivormidi",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorMIDI.git",
+      "state" : {
+        "revision" : "a7d297127447fedb75d5e816554b8e5bc56fe515",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "ivormodel",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorModel.git",
+      "state" : {
+        "revision" : "7b90c6994e2983f1d290ca448b2d84fc85715b85",
+        "version" : "0.1.0"
+      }
+    },
+    {
+      "identity" : "ivormusicxml",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorMusicXML.git",
+      "state" : {
+        "revision" : "f64f8f18673ddf8a96eaaa52e5f994d06b930c61",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "ivortiming",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorTiming.git",
+      "state" : {
+        "revision" : "a9456724a1f1469268a26480b9f5b08200b42126",
+        "version" : "0.1.2"
+      }
+    },
+    {
+      "identity" : "ivortuning",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorTuning.git",
+      "state" : {
+        "revision" : "3098b1c2f6e8f8f913cdbc51d864c635303b8f2c",
+        "version" : "0.3.0"
+      }
+    },
+    {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-argument-parser.git",
       "state" : {
-        "revision" : "626b5b7b2f45e1b0b1c6f4a309296d1d21d7311b",
-        "version" : "1.7.1"
+        "revision" : "5e0406d68a4937f21ae5f670b8f89dad1d156a1c",
+        "version" : "1.8.0"
       }
     },
     {
@@ -78,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiTools.git",
       "state" : {
-        "revision" : "ca57209e8adf03b22828c9c8d169ce70a845c573",
-        "version" : "7.4.1"
+        "revision" : "1a1417690e7e2d0b33c4def0c601c6adcb2b98ed",
+        "version" : "7.4.2"
       }
     },
     {

@@ -1,3 +1,5 @@
+// © 2025–2026 John Gary Pusey (see LICENSE.md)
+
 private import IvorMIDI
 
 // MARK: Internal Functions
