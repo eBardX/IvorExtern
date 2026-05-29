@@ -50,7 +50,8 @@ extension MIDI.BeatMap {
         let maxIndex = entries.endIndex - 1
 
         guard let idx = entries.firstIndex(where: { eventTime < $0.eventTime })
-        else { return (entries[maxIndex].beatTime,
+        else { return (_beatTime(for: eventTime,
+                                 after: entries[maxIndex]),
                        entries[maxIndex].factor) }
 
         guard idx > 0

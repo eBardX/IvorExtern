@@ -8,6 +8,7 @@ extension JohnnySonic {
     internal enum Error {
         case convertFailure((any EnhancedError)?)
         case formatFailure((any EnhancedError)?)
+        case multipleWorksNotSupported
         case unsupportedFileFormat(String)
         case unsupportedPitchNotation(PitchNotation)
         case unsupportedTimeBasis(TimeBasis)
@@ -39,6 +40,9 @@ extension JohnnySonic.Error: EnhancedError {
 
         case .formatFailure:
             "Unable to format JohnnySonic score"
+
+        case .multipleWorksNotSupported:
+            "Multiple works are not supported"
 
         case let .unsupportedFileFormat(fileFormat):
             "Unsupported file format: ‘\(fileFormat)’"

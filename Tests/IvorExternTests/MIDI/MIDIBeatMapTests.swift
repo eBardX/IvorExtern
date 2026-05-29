@@ -54,4 +54,23 @@ extension MIDIBeatMapTests {
 
         #expect(beatTime == .zero)
     }
+
+    @Test
+    func subscript_pastLastEntry() throws {
+        let beatMap = try MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
+        let (beatTime, _) = beatMap[SMFEventTime(480)]
+
+        #expect(beatTime == BeatTime(1))
+    }
+
+    @Test
+    func subscript_withDuplicateEntryAtZero() throws {
+        var beatMap = try MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
+
+        try beatMap.append(eventTime: SMFEventTime.zero, clockRate: 24)
+
+        let (beatTime, _) = beatMap[SMFEventTime(480)]
+
+        #expect(beatTime == BeatTime(1))
+    }
 }

@@ -23,7 +23,7 @@ extension MusicXML.Converter {
 
     internal func convert(_ score: MusicXML.ScorePW) throws -> Work {
         do {
-            return try Self._convertToWork(score)
+            return try Self._convert(score: score)
         } catch let error as any EnhancedError {
             throw MusicXML.Error.convertFailure(error)
         }
@@ -31,7 +31,7 @@ extension MusicXML.Converter {
 
     internal func convert(_ score: MusicXML.ScoreTW) throws -> Work {
         do {
-            return try Self._convertToWork(score)
+            return try Self._convert(score: score)
         } catch let error as any EnhancedError {
             throw MusicXML.Error.convertFailure(error)
         }
@@ -39,20 +39,52 @@ extension MusicXML.Converter {
 
     // MARK: Private Type Methods
 
-    private static func _convertMusicXMLMeasure(_ measure: MusicXML.MeasurePW,
-                                                _ context: inout Self.Context) throws {
-        try _convertMusicXMLMusicItems(measure.items, &context)
+    private static func _convert(part: MusicXML.PartPW,
+                                 scoreParts: [MusicXML.ScorePart]) throws -> Part<BeatTime, Pitch> {
+        var context = Self.Context()
+
+        try _update(part.measures, &context)
+
+        return Part(name: determinePartName(part, scoreParts),
+                    noteTable: context.noteTable)
     }
 
-    private static func _convertMusicXMLMeasures(_ measures: [MusicXML.MeasurePW],
-                                                 _ context: inout Self.Context) throws {
-        for measure in measures {
-            try _convertMusicXMLMeasure(measure, &context)
+    private static func _convert(parts: [MusicXML.PartPW],
+                                 scoreParts: [MusicXML.ScorePart]) throws -> [Part<BeatTime, Pitch>] {
+        try parts.map {
+            try _convert(part: $0,
+                         scoreParts: scoreParts)
         }
     }
 
-    private static func _convertMusicXMLMusicItem(_ musicItem: MusicXML.MusicItem,
-                                                  _ context: inout Self.Context) throws {
+    private static func _convert(score: MusicXML.ScorePW) throws -> Work {
+        guard score.parts.count == score.partList.scoreParts.count
+        else { throw MusicXML.Error.partMismatch }
+
+        return try Work(name: determineWorkName(score),
+                        content: .standardBeat(_convert(parts: score.parts,
+                                                        scoreParts: score.partList.scoreParts),
+                                               TempoMap()))
+    }
+
+    private static func _convert(score: MusicXML.ScoreTW) throws -> Work {
+        throw MusicXML.Error.unsupportedScoreFormat("timewise")
+    }
+
+    private static func _update(_ measure: MusicXML.MeasurePW,
+                                _ context: inout Self.Context) throws {
+        try _update(measure.items, &context)
+    }
+
+    private static func _update(_ measures: [MusicXML.MeasurePW],
+                                _ context: inout Self.Context) throws {
+        for measure in measures {
+            try _update(measure, &context)
+        }
+    }
+
+    private static func _update(_ musicItem: MusicXML.MusicItem,
+                                _ context: inout Self.Context) throws {
         switch musicItem {
         case let .attributes(duration):
             context.currentDivisions = duration
@@ -75,22 +107,22 @@ extension MusicXML.Converter {
             break       // ignore grace notes for now…
 
         case let .note(note):
-            try _convertMusicXMLNote(note, &context)
+            try _update(note, &context)
 
         default:
             break
         }
     }
 
-    private static func _convertMusicXMLMusicItems(_ musicItems: [MusicXML.MusicItem],
-                                                   _ context: inout Self.Context) throws {
+    private static func _update(_ musicItems: [MusicXML.MusicItem],
+                                _ context: inout Self.Context) throws {
         for musicItem in musicItems {
-            try _convertMusicXMLMusicItem(musicItem, &context)
+            try _update(musicItem, &context)
         }
     }
 
-    private static func _convertMusicXMLNote(_ note: MusicXML.Note,
-                                             _ context: inout Self.Context) throws {
+    private static func _update(_ note: MusicXML.Note,
+                                _ context: inout Self.Context) throws {
         let tmpDuration = context.makeBeatDuration(note.duration)
         let hasStart = note.ties.contains(.start)
         let hasStop = note.ties.contains(.stop)
@@ -109,7 +141,7 @@ extension MusicXML.Converter {
 
         switch note.value {
         case let .pitch(pitch):
-            context.currentStandardPitch = try _convertMusicXMLPitch(pitch, &context)
+            context.currentStandardPitch = try _update(pitch, &context)
 
         default:
             context.currentStandardPitch = nil
@@ -119,38 +151,9 @@ extension MusicXML.Converter {
         context.noteInProgress = true
     }
 
-    private static func _convertMusicXMLPitch(_ pitch: MusicXML.Pitch,
-                                              _ context: inout Self.Context) throws -> Pitch {
+    private static func _update(_ pitch: MusicXML.Pitch,
+                                _ context: inout Self.Context) throws -> Pitch {
         try convertToStandardPitch(pitch)
-    }
-
-    private static func _convertToPart(_ part: MusicXML.PartPW,
-                                       _ scoreParts: [MusicXML.ScorePart]) throws -> Part<BeatTime, Pitch> {
-        var context = Self.Context()
-
-        try _convertMusicXMLMeasures(part.measures, &context)
-
-        return Part(name: determinePartName(part, scoreParts),
-                    noteTable: context.noteTable)
-    }
-
-    private static func _convertToParts(_ parts: [MusicXML.PartPW],
-                                        _ scoreParts: [MusicXML.ScorePart]) throws -> [Part<BeatTime, Pitch>] {
-        try parts.map { try _convertToPart($0, scoreParts) }
-    }
-
-    private static func _convertToWork(_ score: MusicXML.ScorePW) throws -> Work {
-        guard score.parts.count == score.partList.scoreParts.count
-        else { throw MusicXML.Error.partMismatch }
-
-        return try Work(name: determineWorkName(score),
-                        content: .standardBeat(_convertToParts(score.parts,
-                                                               score.partList.scoreParts),
-                                               TempoMap()))
-    }
-
-    private static func _convertToWork(_ score: MusicXML.ScoreTW) throws -> Work {
-        throw MusicXML.Error.unsupportedScoreFormat("timewise")
     }
 }
 

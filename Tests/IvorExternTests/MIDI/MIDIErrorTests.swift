@@ -54,6 +54,13 @@ extension MIDIErrorTests {
     }
 
     @Test
+    func multipleWorksNotSupported_message() {
+        let error = MIDI.Error.multipleWorksNotSupported
+
+        #expect(error.message == "Multiple works are not supported")
+    }
+
+    @Test
     func unsupportedDivision_message() throws {
         let timeCode = try #require(SMPTETimeCode(frameRate: .fps24, tickRate: 40))
         let error = MIDI.Error.unsupportedDivision(.timeCode(timeCode))

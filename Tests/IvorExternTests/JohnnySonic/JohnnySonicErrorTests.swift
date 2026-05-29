@@ -26,6 +26,13 @@ extension JohnnySonicErrorTests {
     }
 
     @Test
+    func multipleWorksNotSupported_message() {
+        let error = JohnnySonic.Error.multipleWorksNotSupported
+
+        #expect(error.message == "Multiple works are not supported")
+    }
+
+    @Test
     func unsupportedFileFormat_message() {
         let error = JohnnySonic.Error.unsupportedFileFormat("dkm")
 

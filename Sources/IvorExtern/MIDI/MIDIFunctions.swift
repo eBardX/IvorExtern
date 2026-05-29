@@ -1,6 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import IvorTiming
+
 private import IvorMIDI
+private import XestiNumbers
+private import XestiTools
 
 // MARK: Internal Functions
 
@@ -26,6 +30,11 @@ internal func convertToBeatMap(_ division: MIDI.Division,
     }
 
     return beatMap
+}
+
+internal func convertToEventTime(_ beatTime: BeatTime,
+                                 _ tickRate: UInt) -> MIDI.EventTime {
+    MIDI.EventTime(UInt((beatTime.doubleValue * Double(tickRate)).rounded()))
 }
 
 internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {

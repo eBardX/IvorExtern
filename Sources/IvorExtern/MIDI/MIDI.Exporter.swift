@@ -26,7 +26,7 @@ extension MIDI.Exporter {
         case .midi:
             guard let work = works.first,
                   works.count == 1
-            else { throw MIDI.Error.formatFailure(nil) }
+            else { throw MIDI.Error.formatFailure(MIDI.Error.multipleWorksNotSupported) }
 
             let sequence = try MIDI.Converter().convert(work)
             let data = try MIDI.Formatter().format(sequence)

@@ -1,5 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import IvorTiming
+internal import IvorTuning
 internal import XestiTools
 
 extension MIDI {
@@ -10,8 +12,11 @@ extension MIDI {
         case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
         case parseFailure((any EnhancedError)?)
+        case multipleWorksNotSupported
         case unsupportedFileFormat(String)
         case unsupportedDivision(Division)
+        case unsupportedPitchNotation(PitchNotation)
+        case unsupportedTimeBasis(TimeBasis)
     }
 }
 
@@ -54,11 +59,20 @@ extension MIDI.Error: EnhancedError {
         case .parseFailure:
             "Unable to parse SMF sequence"
 
+        case .multipleWorksNotSupported:
+            "Multiple works are not supported"
+
         case let .unsupportedFileFormat(fileFormat):
             "Unsupported file format: ‘\(fileFormat)’"
 
         case let .unsupportedDivision(division):
             "Unsupported SMF division: ‘\(division)’"
+
+        case let .unsupportedPitchNotation(pitchNotation):
+            "Unsupported pitch notation: \(pitchNotation)"
+
+        case let .unsupportedTimeBasis(timeBasis):
+            "Unsupported time basis: \(timeBasis)"
         }
     }
 }

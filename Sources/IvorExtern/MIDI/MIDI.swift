@@ -6,13 +6,14 @@ internal struct MIDI {
 
     // MARK: Internal Nested Types
 
-    internal typealias BaseParser = SMFParser
-    internal typealias Channel    = MIDIChannel
-    internal typealias Division   = SMFDivision
-    internal typealias EventTime  = SMFEventTime
-    internal typealias Note       = MIDIData1Value
-    internal typealias Sequence   = SMFSequence
-    internal typealias Track      = SMFTrack
+    internal typealias BaseFormatter = SMFFormatter
+    internal typealias BaseParser    = SMFParser
+    internal typealias Channel       = MIDIChannel
+    internal typealias Division      = SMFDivision
+    internal typealias EventTime     = SMFEventTime
+    internal typealias Note          = MIDIData1Value
+    internal typealias Sequence      = SMFSequence
+    internal typealias Track         = SMFTrack
 
     // MARK: Internal Instance Properties
 

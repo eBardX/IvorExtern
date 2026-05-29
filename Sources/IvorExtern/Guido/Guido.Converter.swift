@@ -23,7 +23,7 @@ extension Guido.Converter {
 
     internal func convert(_ score: Guido.Score) throws -> Work {
         do {
-            return try Self._convertToWork(score)
+            return try Self._convert(score: score)
         } catch let error as any EnhancedError {
             throw Guido.Error.convertFailure(error)
         }
@@ -31,22 +31,41 @@ extension Guido.Converter {
 
     // MARK: Private Type Methods
 
-    private static func _convertGuidoChord(_ chord: Guido.Chord,
-                                           _ context: inout Self.Context) throws {
+    private static func _convert(score: Guido.Score) throws -> Work {
+        try Work(name: determineWorkName(score),
+                 content: .standardBeat(_convert(voices: score.voices),
+                                        TempoMap()))
+    }
+
+    private static func _convert(voice: Guido.Voice) throws -> Part<BeatTime, Pitch> {
+        var context = Self.Context()
+
+        try _update(voice, &context)
+
+        return Part(name: determinePartName(voice),
+                    noteTable: context.noteTable)
+    }
+
+    private static func _convert(voices: [Guido.Voice]) throws -> [Part<BeatTime, Pitch>] {
+        try voices.map { try _convert(voice: $0) }
+    }
+
+    private static func _update(_ chord: Guido.Chord,
+                                _ context: inout Self.Context) throws {
         guard !context.inChord
         else { throw Guido.Error.nestedChord }
 
         context.beginChord()
 
         for segment in chord.segments {
-            try _convertGuidoSymbols(segment.symbols, &context)
+            try _update(segment.symbols, &context)
         }
 
         context.endChord()
     }
 
-    private static func _convertGuidoNote(_ note: Guido.Note,
-                                          _ context: inout Self.Context) throws {
+    private static func _update(_ note: Guido.Note,
+                                _ context: inout Self.Context) throws {
         let bdur = try convertToBeatDuration(note.duration)
 
         if note.pitch.name != .empty {
@@ -60,73 +79,54 @@ extension Guido.Converter {
         context.advance(bdur)
     }
 
-    private static func _convertGuidoRest(_ rest: Guido.Rest,
-                                          _ context: inout Self.Context) throws {
+    private static func _update(_ rest: Guido.Rest,
+                                _ context: inout Self.Context) throws {
         let bdur = try convertToBeatDuration(rest.duration)
 
         context.advance(bdur)
     }
 
-    private static func _convertGuidoSymbol(_ symbol: Guido.Symbol,
-                                            _ context: inout Self.Context) throws {
+    private static func _update(_ symbol: Guido.Symbol,
+                                _ context: inout Self.Context) throws {
         switch symbol {
         case let .chord(chord):
-            try _convertGuidoChord(chord, &context)
+            try _update(chord, &context)
 
         case let .note(note):
-            try _convertGuidoNote(note, &context)
+            try _update(note, &context)
 
         case let .rest(rest):
-            try _convertGuidoRest(rest, &context)
+            try _update(rest, &context)
 
         case .tablature:
             throw Guido.Error.unsupportedSymbol(symbol)
 
         case let .tag(tag):
-            try _convertGuidoTag(tag, &context)
+            try _update(tag, &context)
 
         case .variable:
             throw Guido.Error.unsupportedSymbol(symbol)
         }
     }
 
-    private static func _convertGuidoSymbols(_ symbols: [Guido.Symbol],
-                                             _ context: inout Self.Context) throws {
+    private static func _update(_ symbols: [Guido.Symbol],
+                                _ context: inout Self.Context) throws {
         for symbol in symbols {
-            try _convertGuidoSymbol(symbol, &context)
+            try _update(symbol, &context)
         }
     }
 
-    private static func _convertGuidoTag(_ tag: Guido.Tag,
-                                         _ context: inout Self.Context) throws {
+    private static func _update(_ tag: Guido.Tag,
+                                _ context: inout Self.Context) throws {
         guard !tag.symbols.isEmpty
         else { return }
 
-        try _convertGuidoSymbols(tag.symbols, &context)
+        try _update(tag.symbols, &context)
     }
 
-    private static func _convertGuidoVoice(_ voice: Guido.Voice,
-                                           _ context: inout Self.Context) throws {
-        try _convertGuidoSymbols(voice.symbols, &context)
-    }
-
-    private static func _convertToPart(_ voice: Guido.Voice) throws -> Part<BeatTime, Pitch> {
-        var context = Self.Context()
-
-        try _convertGuidoVoice(voice, &context)
-
-        return Part(name: determinePartName(voice),
-                    noteTable: context.noteTable)
-    }
-
-    private static func _convertToParts(_ voices: [Guido.Voice]) throws -> [Part<BeatTime, Pitch>] {
-        try voices.map { try _convertToPart($0) }
-    }
-
-    private static func _convertToWork(_ score: Guido.Score) throws -> Work {
-        try Work(name: determineWorkName(score),
-                 content: .standardBeat(_convertToParts(score.voices),
-                                        TempoMap()))
+    private static func _update(_ voice: Guido.Voice,
+                                _ context: inout Self.Context) throws {
+        try _update(voice.symbols, &context)
     }
 }
 

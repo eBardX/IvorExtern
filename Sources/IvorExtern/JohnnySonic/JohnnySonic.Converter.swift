@@ -22,7 +22,7 @@ extension JohnnySonic.Converter {
 
     internal func convert(_ work: Work) throws -> JohnnySonic.Score {
         do {
-            return try JohnnySonic.Score(entries: Self._convert(work))
+            return try Self._convert(work: work)
         } catch let error as any EnhancedError {
             throw JohnnySonic.Error.convertFailure(error)
         }
@@ -30,15 +30,15 @@ extension JohnnySonic.Converter {
 
     // MARK: Private Type Methods
 
-    private static func _convert(_ part: Part<BeatTime, Frequency>,
-                                 _ index: Int) throws -> [JohnnySonic.Entry] {
+    private static func _convert(part: Part<BeatTime, Frequency>,
+                                 index: Int) throws -> [JohnnySonic.Entry] {
         var comment = "Part #\(index)"
 
         if !part.name.isEmpty {
             comment += ": " + part.name
         }
 
-        var entries: [JohnnySonic.Entry] = try _makeBoxedComment(comment)
+        var entries: [JohnnySonic.Entry] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, sfreq, efreq, _ in
             let startBeat = btime.doubleValue
@@ -64,15 +64,15 @@ extension JohnnySonic.Converter {
         return entries
     }
 
-    private static func _convert(_ part: Part<BeatTime, NoteNumber>,
-                                 _ index: Int) throws -> [JohnnySonic.Entry] {
+    private static func _convert(part: Part<BeatTime, NoteNumber>,
+                                 index: Int) throws -> [JohnnySonic.Entry] {
         var comment = "Part #\(index)"
 
         if !part.name.isEmpty {
             comment += ": " + part.name
         }
 
-        var entries: [JohnnySonic.Entry] = try _makeBoxedComment(comment)
+        var entries: [JohnnySonic.Entry] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, snnum, ennum, _ in
             let startBeat = btime.doubleValue
@@ -98,27 +98,29 @@ extension JohnnySonic.Converter {
         return entries
     }
 
-    private static func _convert(_ parts: [Part<BeatTime, Frequency>]) throws -> [JohnnySonic.Entry] {
+    private static func _convert(parts: [Part<BeatTime, Frequency>]) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = []
 
         for (idx, part) in parts.enumerated() {
-            entries += try _convert(part, idx + 1)
+            entries += try _convert(part: part,
+                                    index: idx + 1)
         }
 
         return entries
     }
 
-    private static func _convert(_ parts: [Part<BeatTime, NoteNumber>]) throws -> [JohnnySonic.Entry] {
+    private static func _convert(parts: [Part<BeatTime, NoteNumber>]) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = []
 
         for (idx, part) in parts.enumerated() {
-            entries += try _convert(part, idx + 1)
+            entries += try _convert(part: part,
+                                    index: idx + 1)
         }
 
         return entries
     }
 
-    private static func _convert(_ tempoMap: TempoMap) throws -> [JohnnySonic.Entry] {
+    private static func _convert(tempoMap: TempoMap) throws -> [JohnnySonic.Entry] {
         if tempoMap.isEmpty {
             let tempo = tempoMap.defaultTempo.doubleValue
 
@@ -155,19 +157,19 @@ extension JohnnySonic.Converter {
         }
     }
 
-    private static func _convert(_ work: Work) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = try _makeHeader(work)
+    private static func _convert(work: Work) throws -> JohnnySonic.Score {
+        var entries: [JohnnySonic.Entry] = try _makeHeader(work: work)
 
         if let tempoMap = work.tempoMap {
-            entries += try _convert(tempoMap)
+            entries += try _convert(tempoMap: tempoMap)
         }
 
         switch work.content {
         case let .absoluteBeat(parts, _):
-            entries += try _convert(parts)
+            entries += try _convert(parts: parts)
 
         case let .keyboardBeat(parts, _):
-            entries += try _convert(parts)
+            entries += try _convert(parts: parts)
 
         case .standardBeat:
             throw JohnnySonic.Error.unsupportedPitchNotation(work.pitchNotation)
@@ -176,12 +178,12 @@ extension JohnnySonic.Converter {
             throw JohnnySonic.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
-        entries += try _makeTrailer(work)
+        entries += try _makeTrailer(work: work)
 
-        return entries
+        return JohnnySonic.Score(entries: entries)
     }
 
-    private static func _makeBoxedComment(_ comment: String) throws -> [JohnnySonic.Entry] {
+    private static func _makeBoxed(comment: String) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = []
 
         let line = "+-" + "-".repeating(to: comment.count) + "-+"
@@ -196,17 +198,17 @@ extension JohnnySonic.Converter {
         return entries
     }
 
-    private static func _makeHeader(_ work: Work) throws -> [JohnnySonic.Entry] {
+    private static func _makeHeader(work: Work) throws -> [JohnnySonic.Entry] {
         var comment = "Work"
 
         if !work.name.isEmpty {
             comment += ": " + work.name
         }
 
-        return try _makeBoxedComment(comment)
+        return try _makeBoxed(comment: comment)
     }
 
-    private static func _makeTrailer(_ work: Work) throws -> [JohnnySonic.Entry] {
+    private static func _makeTrailer(work: Work) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = [JohnnySonic.Entry(command: .comment)]
 
         let startBeat: Double

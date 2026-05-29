@@ -26,7 +26,7 @@ extension JohnnySonic.Exporter {
         case .dkm:
             guard let work = works.first,
                   works.count == 1
-            else { throw JohnnySonic.Error.formatFailure(nil) }
+            else { throw JohnnySonic.Error.formatFailure(JohnnySonic.Error.multipleWorksNotSupported) }
 
             let score = try JohnnySonic.Converter().convert(work)
             let data = try JohnnySonic.Formatter().format(score)

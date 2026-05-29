@@ -22,23 +22,141 @@ extension MIDI.Converter {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ work: Work) throws -> MIDI.Sequence {
-        throw MIDI.Error.convertFailure(nil)
-    }
-
     internal func convert(_ sequence: MIDI.Sequence) throws -> Work {
         do {
-            return try Self._convertToWork(sequence)
+            return try Self._convert(sequence: sequence)
         } catch let error as any EnhancedError {
             throw MIDI.Error.convertFailure(error)
         }
     }
 
+    internal func convert(_ work: Work) throws -> MIDI.Sequence {
+        do {
+            return try Self._convert(work: work)
+        } catch let error as any EnhancedError {
+            throw MIDI.Error.convertFailure(error)
+        }
+    }
+
+    // MARK: Private Type Properties
+
+    private static let exportTickRate = UInt(480)
+
     // MARK: Private Type Methods
 
-    private static func _convertToPart(_ channel: MIDI.Channel,
-                                       _ beatMap: MIDI.BeatMap,
-                                       _ track: MIDI.Track) throws -> Part<BeatTime, NoteNumber> {
+    private static func _convert(name: String,
+                                 tempoMap: TempoMap) throws -> MIDI.Track {
+        var events: [SMFEvent] = []
+
+        if !name.isEmpty,
+           let smfName = SMFText(stringValue: name) {
+            events.append(.meta(.zero, .sequenceTrackName(smfName)))
+        }
+
+        if let timeSig = SMFTimeSignature(numerator: 4,
+                                          denominator: 2,
+                                          clockRate: 24,
+                                          beatRate: 8) {
+            events.append(.meta(.zero, .timeSignature(timeSig)))
+        }
+
+        if tempoMap.isEmpty {
+            let usPerQN = 60_000_000 / tempoMap.defaultTempo.uintValue
+
+            if let smfTempo = SMFTempo(uintValue: usPerQN) {
+                events.append(.meta(.zero, .tempo(smfTempo)))
+            }
+        } else {
+            tempoMap.forEach { beatTime, tempo, _ in
+                let eventTime = convertToEventTime(beatTime, exportTickRate)
+                let usPerQN = 60_000_000 / tempo.uintValue
+
+                if let smfTempo = SMFTempo(uintValue: usPerQN) {
+                    events.append(.meta(eventTime, .tempo(smfTempo)))
+                }
+            }
+        }
+
+        events.sort { $0.eventTime < $1.eventTime }
+
+        let endTime = events.map(\.eventTime).max() ?? .zero
+
+        events.append(.meta(endTime, .endOfTrack))
+
+        return MIDI.Track(events: events)
+    }
+
+    private static func _convert(part: Part<BeatTime, NoteNumber>) throws -> MIDI.Track {
+        let channel = MIDI.Channel(1)
+        let kvelOn = MIDI.Note(64)
+        let kvalOff = MIDI.Note(0)
+
+        var events: [SMFEvent] = []
+
+        if !part.name.isEmpty,
+           let smfName = SMFText(stringValue: part.name) {
+            events.append(.meta(.zero, .sequenceTrackName(smfName)))
+        }
+
+        part.noteTable.forEach { btime, bdur, startPitch, _, _ in
+            // throw an error ???
+            guard bdur.doubleValue > 0,
+                  let note = MIDI.Note(uintValue: startPitch.uintValue)
+            else { return }
+
+            let attackTime = convertToEventTime(btime, exportTickRate)
+            let releaseTime = MIDI.EventTime(UInt(((btime.doubleValue + bdur.doubleValue) * Double(exportTickRate)).rounded()))
+
+            events.append(.midi(attackTime, .noteOn(channel, note, kvelOn)))
+
+            events.append(.midi(releaseTime, .noteOff(channel, note, kvalOff)))
+        }
+
+        events.sort { $0.eventTime < $1.eventTime }
+
+        // This should be max _release_ time, no?
+        let endTime = events.map(\.eventTime).max() ?? .zero
+
+        events.append(.meta(endTime, .endOfTrack))
+
+        return MIDI.Track(events: events)
+    }
+
+    private static func _convert(parts: [Part<BeatTime, NoteNumber>]) throws -> [MIDI.Track] {
+        try parts.map { try _convert(part: $0) }
+    }
+
+    private static func _convert(sequence: MIDI.Sequence) throws -> Work {
+        guard let track0 = sequence.tracks.first
+        else { return Work(name: "",
+                           content: .keyboardBeat([],
+                                                  TempoMap())) }
+
+        let beatMap = try convertToBeatMap(sequence.division, track0)
+
+        var parts: [Part<BeatTime, NoteNumber>] = []
+
+        for track in sequence.tracks {
+            for rawChan: UInt in 1...16 {
+                let part = try _convert(track: track,
+                                        channel: MIDI.Channel(rawChan),
+                                        beatMap: beatMap)
+
+                if !part.noteTable.isEmpty {
+                    parts.append(part)
+                }
+            }
+        }
+
+        return try Work(name: determineWorkName(sequence),
+                        content: .keyboardBeat(parts,
+                                               _convert(track0: track0,
+                                                        beatMap: beatMap)))
+    }
+
+    private static func _convert(track: MIDI.Track,
+                                 channel: MIDI.Channel,
+                                 beatMap: MIDI.BeatMap) throws -> Part<BeatTime, NoteNumber> {
         var context = Self.Context(beatMap: beatMap)
 
         for event in track.events {
@@ -79,8 +197,8 @@ extension MIDI.Converter {
                     noteTable: context.noteTable)
     }
 
-    private static func _convertToTempoMap(_ beatMap: MIDI.BeatMap,
-                                           _ track0: MIDI.Track) throws -> TempoMap {
+    private static func _convert(track0: MIDI.Track,
+                                 beatMap: MIDI.BeatMap) throws -> TempoMap {
         var tempoMap = TempoMap()
         var prevTempo: Tempo = .default
 
@@ -114,31 +232,29 @@ extension MIDI.Converter {
         return tempoMap
     }
 
-    private static func _convertToWork(_ sequence: MIDI.Sequence) throws -> Work {
-        guard let track0 = sequence.tracks.first
-        else { return Work(name: "",
-                           content: .keyboardBeat([],
-                                                  TempoMap())) }
+    private static func _convert(work: Work) throws -> MIDI.Sequence {
+        var tracks: [MIDI.Track] = []
 
-        let beatMap = try convertToBeatMap(sequence.division, track0)
-
-        var parts: [Part<BeatTime, NoteNumber>] = []
-
-        for track in sequence.tracks {
-            for rawChan: UInt in 1...16 {
-                let part = try _convertToPart(MIDI.Channel(rawChan),
-                                              beatMap,
-                                              track)
-
-                if !part.noteTable.isEmpty {
-                    parts.append(part)
-                }
-            }
+        if let tempoMap = work.tempoMap {
+            try tracks.append(_convert(name: work.name,
+                                       tempoMap: tempoMap))
         }
 
-        return try Work(name: determineWorkName(sequence),
-                        content: .keyboardBeat(parts,
-                                               _convertToTempoMap(beatMap, track0)))
+        switch work.content {
+        case .absoluteBeat,
+                .standardBeat:
+            throw MIDI.Error.unsupportedPitchNotation(work.pitchNotation)
+
+        case let .keyboardBeat(parts, _):
+            tracks += try _convert(parts: parts)
+
+        default:
+            throw MIDI.Error.unsupportedTimeBasis(work.timeBasis)
+        }
+
+        return MIDI.Sequence(format: .format1,
+                             division: MIDI.Division.metrical(SMFTickRate(exportTickRate)),
+                             tracks: tracks)
     }
 }
 
