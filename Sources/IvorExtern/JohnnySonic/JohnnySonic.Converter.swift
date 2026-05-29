@@ -98,40 +98,6 @@ extension JohnnySonic.Converter {
         return entries
     }
 
-    private static func _convert(_ part: Part<BeatTime, Pitch>,
-                                 _ index: Int) throws -> [JohnnySonic.Entry] {
-        var comment = "Part #\(index)"
-
-        if !part.name.isEmpty {
-            comment += ": " + part.name
-        }
-
-        var entries: [JohnnySonic.Entry] = try _makeBoxedComment(comment)
-
-        part.noteTable.forEach { btime, bdur, spit, epit, _ in
-            let startBeat = btime.doubleValue
-            let duration = bdur.doubleValue
-            let volume = part.dynamicMap[btime].doubleValue * 10 // ???
-            let location = part.panMap[btime].doubleValue
-            let startPitch = _pitchNumber(for: spit).doubleValue
-            let endPitch = _pitchNumber(for: epit).doubleValue
-            let instrument = part.instrumentMap[btime].stringValue
-
-            if duration > 0 {
-                entries.append(JohnnySonic.Entry(command: .pitches,
-                                                 arguments: .double(startBeat),
-                                                 .double(duration),
-                                                 .double(volume),
-                                                 .double(location),
-                                                 .double(startPitch),
-                                                 .double(endPitch),
-                                                 .string(instrument)))
-            }
-        }
-
-        return entries
-    }
-
     private static func _convert(_ parts: [Part<BeatTime, Frequency>]) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = []
 
@@ -143,16 +109,6 @@ extension JohnnySonic.Converter {
     }
 
     private static func _convert(_ parts: [Part<BeatTime, NoteNumber>]) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = []
-
-        for (idx, part) in parts.enumerated() {
-            entries += try _convert(part, idx + 1)
-        }
-
-        return entries
-    }
-
-    private static func _convert(_ parts: [Part<BeatTime, Pitch>]) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = []
 
         for (idx, part) in parts.enumerated() {
@@ -202,7 +158,7 @@ extension JohnnySonic.Converter {
     private static func _convert(_ work: Work) throws -> [JohnnySonic.Entry] {
         var entries: [JohnnySonic.Entry] = try _makeHeader(work)
 
-        if let tempoMap = work.content.tempoMap {
+        if let tempoMap = work.tempoMap {
             entries += try _convert(tempoMap)
         }
 
@@ -213,11 +169,11 @@ extension JohnnySonic.Converter {
         case let .keyboardBeat(parts, _):
             entries += try _convert(parts)
 
-        case let .standardBeat(parts, _):
-            entries += try _convert(parts)
+        case .standardBeat:
+            throw JohnnySonic.Error.unsupportedPitchNotation(work.pitchNotation)
 
         default:
-            throw JohnnySonic.Error.unsupportedWorkTimeBasis(work.content.timeBasis.description)
+            throw JohnnySonic.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
         entries += try _makeTrailer(work)
@@ -256,10 +212,10 @@ extension JohnnySonic.Converter {
         let startBeat: Double
         let endBeat: Double
 
-        if let timeRange = work.content.beatTimeRange {
+        if let timeRange = work.beatTimeRange {
             startBeat = timeRange.lowerBound.doubleValue
             endBeat = timeRange.upperBound.doubleValue
-        } else if let timeRange = work.content.wallTimeRange {
+        } else if let timeRange = work.wallTimeRange {
             startBeat = timeRange.lowerBound.doubleValue
             endBeat = timeRange.upperBound.doubleValue
         } else {
@@ -278,86 +234,6 @@ extension JohnnySonic.Converter {
         entries.append(JohnnySonic.Entry(command: .end))
 
         return entries
-    }
-
-    private static func _pitchNumber(for pitch: Pitch) -> Number {
-        clamp(0,
-              _pitchNumber(for: pitch.pitchClass) + Number(pitch.octave.intValue * 12),
-              127)
-    }
-
-    private static func _pitchNumber(for pitchClass: PitchClass) -> Number {
-        switch pitchClass {
-        case .cDoubleFlat:
-            -2
-
-        case .cFlat:
-            -1
-
-        case .c,
-             .dDoubleFlat:
-            0
-
-        case .cSharp,
-             .dFlat:
-            1
-
-        case .cDoubleSharp,
-             .d,
-             .eDoubleFlat:
-            2
-
-        case .dSharp,
-             .eFlat,
-             .fDoubleFlat:
-            3
-
-        case .dDoubleSharp,
-             .e,
-             .fFlat:
-            4
-
-        case .eSharp,
-             .f,
-             .gDoubleFlat:
-            5
-
-        case .eDoubleSharp,
-             .fSharp,
-             .gFlat:
-            6
-
-        case .aDoubleFlat,
-             .fDoubleSharp,
-             .g:
-            7
-
-        case .aFlat,
-             .gSharp:
-            8
-
-        case .a,
-             .bDoubleFlat,
-             .gDoubleSharp:
-            9
-
-        case .aSharp,
-             .bFlat:
-            10
-
-        case .aDoubleSharp,
-             .b:
-            11
-
-        case .bSharp:
-            12
-
-        case .bDoubleSharp:
-            13
-
-        default:
-            0
-        }
     }
 }
 

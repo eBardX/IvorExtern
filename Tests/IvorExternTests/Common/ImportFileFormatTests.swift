@@ -11,9 +11,9 @@ struct ImportFileFormatTests {
 extension ImportFileFormatTests {
     @Test
     func canRead_matchingExtension() throws {
-        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abz"))
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
 
-        #expect(fmt.canRead(from: "abz"))
+        #expect(fmt.canRead(from: "abc"))
     }
 
     @Test
@@ -25,28 +25,28 @@ extension ImportFileFormatTests {
 
     @Test
     func canRead_nonMatchingExtension() throws {
-        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abz"))
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
 
         #expect(!fmt.canRead(from: "xyz"))
     }
 
     @Test
     func displayName_notEmpty() throws {
-        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abz"))
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
 
         #expect(!fmt.displayName.isEmpty)
     }
 
     @Test
     func filenameExtensions_notEmpty() throws {
-        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abz"))
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
 
         #expect(!fmt.filenameExtensions.isEmpty)
     }
 
     @Test
     func importFileFormat_knownExtension() {
-        #expect(ImportFileFormat.importFileFormat(for: "abz") != nil)
+        #expect(ImportFileFormat.importFileFormat(for: "abc") != nil)
         #expect(ImportFileFormat.importFileFormat(for: "midi") != nil)
         #expect(ImportFileFormat.importFileFormat(for: "gmn") != nil)
         #expect(ImportFileFormat.importFileFormat(for: "musicxml") != nil)

@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension MIDI {
-    internal struct Importer: External.Importer {
+    internal struct Importer: ImporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension MIDI.Importer {
 
     // MARK: Internal Instance Properties
 
-    internal var readableFileFormats: [External.FileFormat] {
+    internal var readableFileFormats: [FileFormat] {
         [.midi]
     }
 
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: External.FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws -> [Work] {
         switch fileFormat {
         case .midi:
             guard let data = file.regularFileContents

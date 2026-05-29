@@ -1,5 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import IvorTiming
+internal import IvorTuning
 internal import XestiTools
 
 extension JohnnySonic {
@@ -7,7 +9,8 @@ extension JohnnySonic {
         case convertFailure((any EnhancedError)?)
         case formatFailure((any EnhancedError)?)
         case unsupportedFileFormat(String)
-        case unsupportedWorkTimeBasis(String)
+        case unsupportedPitchNotation(PitchNotation)
+        case unsupportedTimeBasis(TimeBasis)
     }
 }
 
@@ -40,8 +43,11 @@ extension JohnnySonic.Error: EnhancedError {
         case let .unsupportedFileFormat(fileFormat):
             "Unsupported file format: ‘\(fileFormat)’"
 
-        case let .unsupportedWorkTimeBasis(timeBasis):
-            "Unsupported Ivor work time basis: \(timeBasis)"
+        case let .unsupportedPitchNotation(pitchNotation):
+            "Unsupported pitch notation: \(pitchNotation)"
+
+        case let .unsupportedTimeBasis(timeBasis):
+            "Unsupported time basis: \(timeBasis)"
         }
     }
 }

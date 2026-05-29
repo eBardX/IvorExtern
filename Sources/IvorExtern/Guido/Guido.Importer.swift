@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension Guido {
-    internal struct Importer: External.Importer {
+    internal struct Importer: ImporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension Guido.Importer {
 
     // MARK: Internal Instance Properties
 
-    internal var readableFileFormats: [External.FileFormat] {
+    internal var readableFileFormats: [FileFormat] {
         [.gmn]
     }
 
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: External.FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws -> [Work] {
         switch fileFormat {
         case .gmn:
             guard let data = file.regularFileContents

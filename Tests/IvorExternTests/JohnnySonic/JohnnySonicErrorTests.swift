@@ -1,6 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 @testable import IvorExtern
+import IvorTiming
 import Testing
 import XestiTools
 
@@ -32,9 +33,9 @@ extension JohnnySonicErrorTests {
     }
 
     @Test
-    func unsupportedWorkTimeBasis_message() {
-        let error = JohnnySonic.Error.unsupportedWorkTimeBasis("ticks")
+    func unsupportedTimeBasis_message() {
+        let error = JohnnySonic.Error.unsupportedTimeBasis(.beat)
 
-        #expect(error.message == "Unsupported Ivor work time basis: ticks")
+        #expect(error.message == "Unsupported time basis: beat")
     }
 }

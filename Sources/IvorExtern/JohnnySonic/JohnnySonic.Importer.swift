@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension JohnnySonic {
-    internal struct Importer: External.Importer {
+    internal struct Importer: ImporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension JohnnySonic.Importer {
 
     // MARK: Internal Instance Properties
 
-    internal var readableFileFormats: [External.FileFormat] {
+    internal var readableFileFormats: [FileFormat] {
         []
     }
 
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: External.FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws -> [Work] {
         throw JohnnySonic.Error.unsupportedFileFormat(fileFormat.displayName)
     }
 }

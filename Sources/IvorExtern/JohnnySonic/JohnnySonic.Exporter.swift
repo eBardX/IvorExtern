@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension JohnnySonic {
-    internal struct Exporter: External.Exporter {
+    internal struct Exporter: ExporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension JohnnySonic.Exporter {
 
     // MARK: Internal Instance Properties
 
-    internal var writableFileFormats: [External.FileFormat] {
+    internal var writableFileFormats: [FileFormat] {
         [.dkm]
     }
 
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: External.FileFormat) throws -> FileWrapper {
+                        as fileFormat: FileFormat) throws -> FileWrapper {
         switch fileFormat {
         case .dkm:
             guard let work = works.first,

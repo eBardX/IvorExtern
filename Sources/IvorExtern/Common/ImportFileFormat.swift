@@ -2,6 +2,8 @@
 
 public import Foundation
 public import IvorModel
+public import IvorTiming
+public import IvorTuning
 
 /// A value that encapsulates a file format supported for importing works.
 public struct ImportFileFormat {
@@ -19,6 +21,12 @@ public struct ImportFileFormat {
 
     /// The sorted array of all supported MIME types across all import formats.
     public static let supportedMIMETypes = Set(importFileFormats.flatMap { $0.value.mimeTypes }).sorted()
+
+    /// The sorted array of all supported pitch notations across all import formats.
+    public static let supportedPitchNotations = Set(importFileFormats.flatMap { $0.value.pitchNotations }).sorted()
+
+    /// The sorted array of all supported time bases across all import formats.
+    public static let supportedTimeBases = Set(importFileFormats.flatMap { $0.value.timeBases }).sorted()
 
     // MARK: Public Type Methods
 
@@ -48,6 +56,11 @@ public struct ImportFileFormat {
         fileFormat.mimeTypes.sorted()
     }
 
+    /// The sorted array of pitch notations for this import format.
+    public var pitchNotations: [PitchNotation] {
+        fileFormat.pitchNotations.sorted()
+    }
+
     /// The preferred filename extension for this import format, if any.
     public var preferredFilenameExtension: String? {
         fileFormat.preferredFilenameExtension
@@ -56,6 +69,11 @@ public struct ImportFileFormat {
     /// The preferred MIME type for this import format, if any.
     public var preferredMIMEType: String? {
         fileFormat.preferredMIMEType
+    }
+
+    /// The sorted array of time bases for this import format.
+    public var timeBases: [TimeBasis] {
+        fileFormat.timeBases.sorted()
     }
 
     // MARK: Public Instance Methods
@@ -86,7 +104,7 @@ public struct ImportFileFormat {
     private static let importFileFormats: [String: Self] = {
         var dict: [String: Self] = [:]
 
-        for importer in External.importers {
+        for importer in importers {
             for fileFormat in importer.readableFileFormats {
                 let importFileFormat = Self(importer: importer,
                                             fileFormat: fileFormat)
@@ -106,16 +124,16 @@ public struct ImportFileFormat {
 
     // MARK: Private Initializers
 
-    private init(importer: any External.Importer,
-                 fileFormat: External.FileFormat) {
+    private init(importer: any ImporterProtocol,
+                 fileFormat: FileFormat) {
         self.fileFormat = fileFormat
         self.importer = importer
     }
 
     // MARK: Private Instance Properties
 
-    private let fileFormat: External.FileFormat
-    private let importer: any External.Importer
+    private let fileFormat: FileFormat
+    private let importer: any ImporterProtocol
 }
 
 // MARK: - Sendable

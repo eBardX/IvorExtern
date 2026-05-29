@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension ABC {
-    internal struct Importer: External.Importer {
+    internal struct Importer: ImporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension ABC.Importer {
 
     // MARK: Public Instance Properties
 
-    internal var readableFileFormats: [External.FileFormat] {
+    internal var readableFileFormats: [FileFormat] {
         [.abc]
     }
 
     // MARK: Public Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: External.FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws -> [Work] {
         switch fileFormat {
         case .abc:
             guard let data = file.regularFileContents

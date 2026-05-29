@@ -16,14 +16,14 @@ internal struct JohnnySonic {
     internal let importer = Self.Importer()
 }
 
-// MARK: - External.Exportable
+// MARK: - Exportable
 
-extension JohnnySonic: External.Exportable {
+extension JohnnySonic: Exportable {
 }
 
-// MARK: - External.Importable
+// MARK: - Importable
 
-extension JohnnySonic: External.Importable {
+extension JohnnySonic: Importable {
 }
 
 // MARK: - Sendable

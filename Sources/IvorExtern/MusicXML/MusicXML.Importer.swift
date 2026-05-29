@@ -7,7 +7,7 @@ private import IvorMusicXML
 private import XestiTools
 
 extension MusicXML {
-    internal struct Importer: External.Importer {
+    internal struct Importer: ImporterProtocol {
     }
 }
 
@@ -17,7 +17,7 @@ extension MusicXML.Importer {
 
     // MARK: Internal Instance Properties
 
-    internal var readableFileFormats: [External.FileFormat] {
+    internal var readableFileFormats: [FileFormat] {
         [.mxl,
          .musicXML]
     }
@@ -25,7 +25,7 @@ extension MusicXML.Importer {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: External.FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws -> [Work] {
         switch fileFormat {
         case .mxl:
             return try _read(file,

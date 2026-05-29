@@ -20,14 +20,14 @@ internal struct MIDI {
     internal let importer = Self.Importer()
 }
 
-// MARK: - External.Exportable
+// MARK: - Exportable
 
-extension MIDI: External.Exportable {
+extension MIDI: Exportable {
 }
 
-// MARK: - External.Importable
+// MARK: - Importable
 
-extension MIDI: External.Importable {
+extension MIDI: Importable {
 }
 
 // MARK: - Sendable

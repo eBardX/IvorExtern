@@ -25,14 +25,14 @@ internal struct ABC {
     internal let importer = Self.Importer()
 }
 
-// MARK: - External.Exportable
+// MARK: - Exportable
 
-extension ABC: External.Exportable {
+extension ABC: Exportable {
 }
 
-// MARK: - External.Importable
+// MARK: - Importable
 
-extension ABC: External.Importable {
+extension ABC: Importable {
 }
 
 // MARK: - Sendable

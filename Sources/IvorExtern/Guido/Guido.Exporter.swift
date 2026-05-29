@@ -4,7 +4,7 @@ internal import Foundation
 internal import IvorModel
 
 extension Guido {
-    internal struct Exporter: External.Exporter {
+    internal struct Exporter: ExporterProtocol {
     }
 }
 
@@ -14,14 +14,14 @@ extension Guido.Exporter {
 
     // MARK: Internal Instance Properties
 
-    internal var writableFileFormats: [External.FileFormat] {
+    internal var writableFileFormats: [FileFormat] {
         []
     }
 
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: External.FileFormat) throws -> FileWrapper {
+                        as fileFormat: FileFormat) throws -> FileWrapper {
         throw Guido.Error.unsupportedFileFormat(fileFormat.displayName)
     }
 }

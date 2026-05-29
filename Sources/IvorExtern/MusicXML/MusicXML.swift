@@ -30,14 +30,14 @@ internal struct MusicXML {
     internal let importer = Self.Importer()
 }
 
-// MARK: - External.Exportable
+// MARK: - Exportable
 
-extension MusicXML: External.Exportable {
+extension MusicXML: Exportable {
 }
 
-// MARK: - External.Importable
+// MARK: - Importable
 
-extension MusicXML: External.Importable {
+extension MusicXML: Importable {
 }
 
 // MARK: - Sendable

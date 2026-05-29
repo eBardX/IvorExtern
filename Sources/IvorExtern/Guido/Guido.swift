@@ -24,14 +24,14 @@ internal struct Guido {
     internal let importer = Self.Importer()
 }
 
-// MARK: - External.Exportable
+// MARK: - Exportable
 
-extension Guido: External.Exportable {
+extension Guido: Exportable {
 }
 
-// MARK: - External.Importable
+// MARK: - Importable
 
-extension Guido: External.Importable {
+extension Guido: Importable {
 }
 
 // MARK: - Sendable

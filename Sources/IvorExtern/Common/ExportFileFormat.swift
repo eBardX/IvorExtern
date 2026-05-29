@@ -2,6 +2,8 @@
 
 public import Foundation
 public import IvorModel
+public import IvorTiming
+public import IvorTuning
 
 /// A value that encapsulates a file format supported for exporting works.
 public struct ExportFileFormat {
@@ -19,6 +21,12 @@ public struct ExportFileFormat {
 
     /// The sorted array of all supported MIME types across all export formats.
     public static let supportedMIMETypes = Set(exportFileFormats.flatMap { $0.value.mimeTypes }).sorted()
+
+    /// The sorted array of all supported pitch notations across all export formats.
+    public static let supportedPitchNotations = Set(exportFileFormats.flatMap { $0.value.pitchNotations }).sorted()
+
+    /// The sorted array of all supported time bases across all export formats.
+    public static let supportedTimeBases = Set(exportFileFormats.flatMap { $0.value.timeBases }).sorted()
 
     // MARK: Public Type Methods
 
@@ -48,6 +56,11 @@ public struct ExportFileFormat {
         fileFormat.mimeTypes.sorted()
     }
 
+    /// The sorted array of pitch notations for this export format.
+    public var pitchNotations: [PitchNotation] {
+        fileFormat.pitchNotations.sorted()
+    }
+
     /// The preferred filename extension for this export format, if any.
     public var preferredFilenameExtension: String? {
         fileFormat.preferredFilenameExtension
@@ -56,6 +69,11 @@ public struct ExportFileFormat {
     /// The preferred MIME type for this export format, if any.
     public var preferredMIMEType: String? {
         fileFormat.preferredMIMEType
+    }
+
+    /// The sorted array of time bases for this export format.
+    public var timeBases: [TimeBasis] {
+        fileFormat.timeBases.sorted()
     }
 
     // MARK: Public Instance Methods
@@ -86,7 +104,7 @@ public struct ExportFileFormat {
     private static let exportFileFormats: [String: Self] = {
         var dict: [String: Self] = [:]
 
-        for exporter in External.exporters {
+        for exporter in exporters {
             for fileFormat in exporter.writableFileFormats {
                 let exportFileFormat = Self(exporter: exporter,
                                             fileFormat: fileFormat)
@@ -106,16 +124,16 @@ public struct ExportFileFormat {
 
     // MARK: Private Initializers
 
-    private init(exporter: any External.Exporter,
-                 fileFormat: External.FileFormat) {
+    private init(exporter: any ExporterProtocol,
+                 fileFormat: FileFormat) {
         self.fileFormat = fileFormat
         self.exporter = exporter
     }
 
     // MARK: Private Instance Properties
 
-    private let fileFormat: External.FileFormat
-    private let exporter: any External.Exporter
+    private let fileFormat: FileFormat
+    private let exporter: any ExporterProtocol
 }
 
 // MARK: - Sendable
