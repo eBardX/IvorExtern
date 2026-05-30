@@ -16,7 +16,6 @@ struct MIDIFormatterTests {
 // MARK: -
 
 extension MIDIFormatterTests {
-
     @Test
     func format_minimalSequence_nonEmpty() throws {
         let track = SMFTrack(events: [.meta(.zero, .endOfTrack)])
@@ -26,21 +25,6 @@ extension MIDIFormatterTests {
         let data = try MIDI.Formatter().format(sequence)
 
         #expect(!data.isEmpty)
-    }
-
-    @Test
-    func format_startsWithMThd() throws {
-        let track = SMFTrack(events: [.meta(.zero, .endOfTrack)])
-        let sequence = SMFSequence(format: .format1,
-                                   division: .metrical(SMFTickRate(480)),
-                                   tracks: [track])
-        let data = try MIDI.Formatter().format(sequence)
-
-        #expect(data.count >= 4)
-        #expect(data[0] == 0x4d)  // 'M'
-        #expect(data[1] == 0x54)  // 'T'
-        #expect(data[2] == 0x68)  // 'h'
-        #expect(data[3] == 0x64)  // 'd'
     }
 
     @Test
@@ -74,5 +58,20 @@ extension MIDIFormatterTests {
         }
 
         #expect(totalNotes == 3)
+    }
+
+    @Test
+    func format_startsWithMThd() throws {
+        let track = SMFTrack(events: [.meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let data = try MIDI.Formatter().format(sequence)
+
+        #expect(data.count >= 4)
+        #expect(data[0] == 0x4d)  // 'M'
+        #expect(data[1] == 0x54)  // 'T'
+        #expect(data[2] == 0x68)  // 'h'
+        #expect(data[3] == 0x64)  // 'd'
     }
 }

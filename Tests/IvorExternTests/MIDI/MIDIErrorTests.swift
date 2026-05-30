@@ -2,7 +2,10 @@
 
 @testable import IvorExtern
 import IvorMIDI
+import IvorTiming
+import IvorTuning
 import Testing
+import XestiNumbers
 import XestiTools
 
 struct MIDIErrorTests {
@@ -33,6 +36,13 @@ extension MIDIErrorTests {
     }
 
     @Test
+    func invalidBeatDuration_message() {
+        let error = MIDI.Error.invalidBeatDuration(BeatDuration(1))
+
+        #expect(error.message.hasPrefix("Invalid beat duration:"))
+    }
+
+    @Test
     func invalidClockRate_message() {
         let error = MIDI.Error.invalidClockRate(0)
 
@@ -47,10 +57,11 @@ extension MIDIErrorTests {
     }
 
     @Test
-    func parseFailure_message() {
-        let error = MIDI.Error.parseFailure(nil)
+    func invalidNoteNumber_message() throws {
+        let noteNumber = try #require(NoteNumber(uintValue: 60))
+        let error = MIDI.Error.invalidNoteNumber(noteNumber)
 
-        #expect(error.message == "Unable to parse SMF sequence")
+        #expect(error.message.hasPrefix("Invalid note number:"))
     }
 
     @Test
@@ -58,6 +69,13 @@ extension MIDIErrorTests {
         let error = MIDI.Error.multipleWorksNotSupported
 
         #expect(error.message == "Multiple works are not supported")
+    }
+
+    @Test
+    func parseFailure_message() {
+        let error = MIDI.Error.parseFailure(nil)
+
+        #expect(error.message == "Unable to parse SMF sequence")
     }
 
     @Test
@@ -73,5 +91,19 @@ extension MIDIErrorTests {
         let error = MIDI.Error.unsupportedFileFormat("midi")
 
         #expect(error.message == "Unsupported file format: \u{2018}midi\u{2019}")
+    }
+
+    @Test
+    func unsupportedPitchNotation_message() {
+        let error = MIDI.Error.unsupportedPitchNotation(.absolute)
+
+        #expect(error.message.hasPrefix("Unsupported pitch notation:"))
+    }
+
+    @Test
+    func unsupportedTimeBasis_message() {
+        let error = MIDI.Error.unsupportedTimeBasis(.beat)
+
+        #expect(error.message == "Unsupported time basis: beat")
     }
 }

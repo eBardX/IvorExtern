@@ -2,6 +2,7 @@
 
 @testable import IvorExtern
 import IvorTiming
+import IvorTuning
 import Testing
 import XestiTools
 
@@ -37,6 +38,13 @@ extension JohnnySonicErrorTests {
         let error = JohnnySonic.Error.unsupportedFileFormat("dkm")
 
         #expect(error.message == "Unsupported file format: \u{2018}dkm\u{2019}")
+    }
+
+    @Test
+    func unsupportedPitchNotation_message() {
+        let error = JohnnySonic.Error.unsupportedPitchNotation(.absolute)
+
+        #expect(error.message.hasPrefix("Unsupported pitch notation:"))
     }
 
     @Test

@@ -60,22 +60,7 @@ extension MIDI.Converter {
             events.append(.meta(.zero, .timeSignature(timeSig)))
         }
 
-        if tempoMap.isEmpty {
-            let usPerQN = 60_000_000 / tempoMap.defaultTempo.uintValue
-
-            if let smfTempo = SMFTempo(uintValue: usPerQN) {
-                events.append(.meta(.zero, .tempo(smfTempo)))
-            }
-        } else {
-            tempoMap.forEach { beatTime, tempo, _ in
-                let eventTime = convertToEventTime(beatTime, exportTickRate)
-                let usPerQN = 60_000_000 / tempo.uintValue
-
-                if let smfTempo = SMFTempo(uintValue: usPerQN) {
-                    events.append(.meta(eventTime, .tempo(smfTempo)))
-                }
-            }
-        }
+        events += Self._tempoEvents(from: tempoMap)
 
         events.sort { $0.eventTime < $1.eventTime }
 
@@ -98,24 +83,38 @@ extension MIDI.Converter {
             events.append(.meta(.zero, .sequenceTrackName(smfName)))
         }
 
+        var noteError: (any Error)?
+
         part.noteTable.forEach { btime, bdur, startPitch, _, _ in
-            // throw an error ???
-            guard bdur.doubleValue > 0,
-                  let note = MIDI.Note(uintValue: startPitch.uintValue)
+            guard noteError == nil
             else { return }
+
+            guard bdur.doubleValue > 0
+            else {
+                noteError = MIDI.Error.invalidBeatDuration(bdur)
+
+                return
+            }
+
+            guard let note = MIDI.Note(uintValue: startPitch.uintValue)
+            else {
+                noteError = MIDI.Error.invalidNoteNumber(startPitch)
+
+                return
+            }
 
             let attackTime = convertToEventTime(btime, exportTickRate)
             let releaseTime = MIDI.EventTime(UInt(((btime.doubleValue + bdur.doubleValue) * Double(exportTickRate)).rounded()))
 
             events.append(.midi(attackTime, .noteOn(channel, note, kvelOn)))
-
             events.append(.midi(releaseTime, .noteOff(channel, note, kvalOff)))
         }
 
+        if let noteError { throw noteError }
+
         events.sort { $0.eventTime < $1.eventTime }
 
-        // This should be max _release_ time, no?
-        let endTime = events.map(\.eventTime).max() ?? .zero
+        let endTime = events.map { $0.eventTime }.max() ?? .zero
 
         events.append(.meta(endTime, .endOfTrack))
 
@@ -212,8 +211,10 @@ extension MIDI.Converter {
                                                          denominator: tempo.uintValue)).exact
                     let currTempo = Tempo(rawTempo.uintValue)
 
-                    tempoMap.insert(beatTime: beatTime,
-                                    tempo: prevTempo)
+                    if beatTime != .zero {
+                        tempoMap.insert(beatTime: beatTime,
+                                        tempo: prevTempo)
+                    }
 
                     tempoMap.insert(beatTime: beatTime,
                                     tempo: currTempo)
@@ -255,6 +256,74 @@ extension MIDI.Converter {
         return MIDI.Sequence(format: .format1,
                              division: MIDI.Division.metrical(SMFTickRate(exportTickRate)),
                              tracks: tracks)
+    }
+
+    private static func _tempoEvents(from tempoMap: TempoMap) -> [SMFEvent] {
+        var events: [SMFEvent] = []
+
+        guard !tempoMap.isEmpty else {
+            let usPerQN = 60_000_000 / tempoMap.defaultTempo.uintValue
+
+            if let smfTempo = SMFTempo(uintValue: usPerQN) {
+                events.append(.meta(.zero, .tempo(smfTempo)))
+            }
+
+            return events
+        }
+
+        // Collect the distinct beat times (last entry wins at any given
+        // beat time, per the step-change convention).
+        var anchorBeatTimes: [BeatTime] = []
+
+        tempoMap.forEach { beatTime, _, _ in
+            if anchorBeatTimes.last != beatTime {
+                anchorBeatTimes.append(beatTime)
+            }
+        }
+
+        // Build the ordered list of beat times to sample: the anchors
+        // plus every integer beat in the open interval between
+        // consecutive anchors.  The integer beats capture the shape of
+        // any smooth accelerando or ritardando between anchors.
+        var sampleBeatTimes: [BeatTime] = []
+
+        for (index, beatTime) in anchorBeatTimes.enumerated() {
+            sampleBeatTimes.append(beatTime)
+
+            if index + 1 < anchorBeatTimes.count {
+                let nextBeatTime = anchorBeatTimes[index + 1]
+                let first = Int(beatTime.doubleValue.rounded(.down)) + 1
+                let last = Int(nextBeatTime.doubleValue.rounded(.up)) - 1
+
+                if first <= last {
+                    for beat in first...last {
+                        sampleBeatTimes.append(BeatTime(Number(beat)))
+                    }
+                }
+            }
+        }
+
+        // Emit one tempo event per sample, suppressing consecutive
+        // entries with the same tempo.
+        var lastEmittedTempo: Tempo?
+
+        for sampleBeatTime in sampleBeatTimes {
+            let tempo = tempoMap[sampleBeatTime]
+
+            guard tempo != lastEmittedTempo
+            else { continue }
+
+            let eventTime = convertToEventTime(sampleBeatTime, exportTickRate)
+            let usPerQN = 60_000_000 / tempo.uintValue
+
+            if let smfTempo = SMFTempo(uintValue: usPerQN) {
+                events.append(.meta(eventTime, .tempo(smfTempo)))
+
+                lastEmittedTempo = tempo
+            }
+        }
+
+        return events
     }
 }
 

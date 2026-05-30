@@ -9,8 +9,10 @@ extension MIDI {
         case convertFailure((any EnhancedError)?)
         case emptyBeatMap
         case formatFailure((any EnhancedError)?)
+        case invalidBeatDuration(BeatDuration)
         case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
+        case invalidNoteNumber(NoteNumber)
         case parseFailure((any EnhancedError)?)
         case multipleWorksNotSupported
         case unsupportedFileFormat(String)
@@ -50,11 +52,17 @@ extension MIDI.Error: EnhancedError {
         case .formatFailure:
             "Unable to format SMF sequence"
 
+        case let .invalidBeatDuration(beatDuration):
+            "Invalid beat duration: \(beatDuration)"
+
         case let .invalidClockRate(clockRate):
             "Invalid SMF time signature clock rate: \(clockRate)"
 
         case let .invalidEventTime(eventTime):
             "Invalid SMF event time: \(eventTime)"
+
+        case let .invalidNoteNumber(noteNumber):
+            "Invalid note number: \(noteNumber)"
 
         case .parseFailure:
             "Unable to parse SMF sequence"
