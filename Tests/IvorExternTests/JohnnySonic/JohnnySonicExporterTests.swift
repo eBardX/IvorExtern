@@ -4,6 +4,7 @@ import Foundation
 @testable import IvorExtern
 import IvorModel
 import IvorTiming
+import IvorTuning
 import Testing
 
 struct JohnnySonicExporterTests {
@@ -12,6 +13,36 @@ struct JohnnySonicExporterTests {
 // MARK: -
 
 extension JohnnySonicExporterTests {
+    @Test
+    func convert_absoluteBeatWork_empty() throws {
+        let work = Work(name: "Test",
+                        content: .absoluteBeat([] as [Part<BeatTime, Frequency>],
+                                               TempoMap()))
+
+        _ = try JohnnySonic.Exporter().convert(work)
+    }
+
+    @Test
+    func convert_standardBeatWork_throws() {
+        let work = Work(name: "Test",
+                        content: .standardBeat([] as [Part<BeatTime, Pitch>],
+                                               TempoMap()))
+
+        #expect(throws: (any Error).self) {
+            try JohnnySonic.Exporter().convert(work)
+        }
+    }
+
+    @Test
+    func convert_unsupportedTimeBasis_throws() {
+        let work = Work(name: "Test",
+                        content: .keyboardWall([]))
+
+        #expect(throws: (any Error).self) {
+            try JohnnySonic.Exporter().convert(work)
+        }
+    }
+
     @Test
     func write_multipleWorks_throws() {
         let works = [Work(name: "A", content: .keyboardBeat([], TempoMap())),

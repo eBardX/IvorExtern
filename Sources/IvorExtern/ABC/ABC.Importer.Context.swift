@@ -4,7 +4,7 @@ internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
 
-extension ABC.Converter {
+extension ABC.Importer {
 
     // MARK: Internal Nested Types
 
@@ -19,11 +19,16 @@ extension ABC.Converter {
 
 // MARK: -
 
-extension ABC.Converter.Context {
+extension ABC.Importer.Context {
 
     // MARK: Internal Instance Methods
 
     internal mutating func advance(_ duration: BeatDuration) {
         currentBeatTime += duration
     }
+}
+
+// MARK: - Sendable
+
+extension ABC.Importer.Context: Sendable {
 }

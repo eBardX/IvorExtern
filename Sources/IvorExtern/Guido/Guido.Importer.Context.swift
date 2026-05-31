@@ -4,7 +4,7 @@ internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
 
-extension Guido.Converter {
+extension Guido.Importer {
 
     // MARK: Internal Nested Types
 
@@ -21,7 +21,7 @@ extension Guido.Converter {
 
 // MARK: -
 
-extension Guido.Converter.Context {
+extension Guido.Importer.Context {
 
     // MARK: Internal Instance Methods
 
@@ -44,4 +44,9 @@ extension Guido.Converter.Context {
         chordBeatDuration = .zero
         inChord = false
     }
+}
+
+// MARK: - Sendable
+
+extension Guido.Importer.Context: Sendable {
 }

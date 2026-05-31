@@ -6,7 +6,7 @@ internal import IvorTuning
 
 private import XestiNumbers
 
-extension MusicXML.Converter {
+extension MusicXML.Importer {
 
     // MARK: Internal Nested Types
 
@@ -27,7 +27,7 @@ extension MusicXML.Converter {
 
 // MARK: -
 
-extension MusicXML.Converter.Context {
+extension MusicXML.Importer.Context {
 
     // MARK: Internal Instance Methods
 
@@ -56,4 +56,9 @@ extension MusicXML.Converter.Context {
         BeatDuration(Number(numerator: divisions,
                             denominator: currentDivisions))
     }
+}
+
+// MARK: - Sendable
+
+extension MusicXML.Importer.Context: Sendable {
 }
