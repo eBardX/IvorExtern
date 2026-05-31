@@ -10,9 +10,16 @@ internal struct MIDI {
     internal typealias BaseParser    = SMFParser
     internal typealias Channel       = MIDIChannel
     internal typealias Division      = SMFDivision
+    internal typealias Event         = SMFEvent
     internal typealias EventTime     = SMFEventTime
-    internal typealias Note          = MIDIData1Value
+    internal typealias KeyVelocity   = MIDIData1Value
+    internal typealias NoteNumber    = MIDIData1Value
+    internal typealias PanValue      = MIDIData1Value
     internal typealias Sequence      = SMFSequence
+    internal typealias Tempo         = SMFTempo
+    internal typealias Text          = SMFText
+    internal typealias TickRate      = SMFTickRate
+    internal typealias TimeSignature = SMFTimeSignature
     internal typealias Track         = SMFTrack
 
     // MARK: Internal Instance Properties

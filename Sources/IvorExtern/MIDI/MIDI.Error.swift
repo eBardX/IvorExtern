@@ -12,7 +12,7 @@ extension MIDI {
         case invalidBeatDuration(BeatDuration)
         case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
-        case invalidNoteNumber(NoteNumber)
+        case invalidNoteNumber(IvorTuning.NoteNumber)
         case parseFailure((any EnhancedError)?)
         case multipleWorksNotSupported
         case unsupportedFileFormat(String)

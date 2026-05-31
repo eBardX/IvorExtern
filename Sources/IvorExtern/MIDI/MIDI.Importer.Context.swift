@@ -5,9 +5,10 @@ internal import IvorTiming
 internal import IvorTuning
 
 private import IvorMIDI
+private import XestiNumbers
 private import XestiTools
 
-extension MIDI.Converter {
+extension MIDI.Importer {
 
     // MARK: Internal Nested Types
 
@@ -15,13 +16,15 @@ extension MIDI.Converter {
 
         // MARK: Internal Nested Types
 
-        internal typealias PendingNote = (note: MIDI.Note, attackTime: MIDI.EventTime)
+        internal typealias PendingNote = (note: MIDI.NoteNumber, attackTime: MIDI.EventTime, velocity: MIDI.KeyVelocity)
 
         // MARK: Internal Initializers
 
         internal init(beatMap: MIDI.BeatMap) {
             self.beatMap = beatMap
+            self.dynamicMap = DynamicMap()
             self.noteTable = NoteTable()
+            self.panMap = PanMap()
             self.partName = ""
             self.pendingNotes = []
         }
@@ -29,7 +32,9 @@ extension MIDI.Converter {
         // MARK: Internal Instance Properties
 
         internal var beatMap: MIDI.BeatMap
+        internal var dynamicMap: DynamicMap<BeatTime>
         internal var noteTable: NoteTable<BeatTime, NoteNumber>
+        internal var panMap: PanMap<BeatTime>
         internal var partName: String
         internal var pendingNotes: [PendingNote]
     }
@@ -37,16 +42,17 @@ extension MIDI.Converter {
 
 // MARK: -
 
-extension MIDI.Converter.Context {
+extension MIDI.Importer.Context {
 
     // MARK: Internal Instance Methods
 
     internal mutating func handleNoteOff(_ releaseTime: MIDI.EventTime,
-                                         _ note: MIDI.Note) {
+                                         _ note: MIDI.NoteNumber) {
         guard let idx = pendingNotes.firstIndex(where: { note == $0.note })
         else { return }
 
         let attackTime = pendingNotes[idx].attackTime
+        let velocity = pendingNotes[idx].velocity
 
         pendingNotes.remove(at: idx)
 
@@ -56,10 +62,31 @@ extension MIDI.Converter.Context {
         noteTable.insert(attack: attack,
                          duration: release - attack,
                          pitch: NoteNumber(note.uintValue))
+
+        if let dynamic = Dynamic(numberValue: Number(Double(velocity.uintValue) / 127.0)) {
+            dynamicMap.insert(time: attack,
+                              dynamic: dynamic)
+        }
     }
 
     internal mutating func handleNoteOn(_ attackTime: MIDI.EventTime,
-                                        _ note: MIDI.Note) {
-        pendingNotes.append((note, attackTime))
+                                        _ note: MIDI.NoteNumber,
+                                        _ velocity: MIDI.KeyVelocity) {
+        pendingNotes.append((note, attackTime, velocity))
     }
+
+    internal mutating func handlePan(_ eventTime: MIDI.EventTime,
+                                     _ value: MIDI.PanValue) {
+        let (beatTime, _) = beatMap[eventTime]
+
+        if let pan = Pan(numberValue: Number(((Double(value.uintValue) / 127.0) * 2.0) - 1.0)) {
+            panMap.insert(time: beatTime,
+                          pan: pan)
+        }
+    }
+}
+
+// MARK: - Sendable
+
+extension MIDI.Importer.Context: Sendable {
 }

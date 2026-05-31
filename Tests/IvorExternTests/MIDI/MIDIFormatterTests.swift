@@ -40,11 +40,11 @@ extension MIDIFormatterTests {
                             content: .keyboardBeat([part],
                                                    TempoMap()))
 
-        let exportedSequence = try MIDI.Converter().convert(original)
+        let exportedSequence = try MIDI.Exporter().convert(original)
         let data = try MIDI.Formatter().format(exportedSequence)
 
         let parsedSequence = try MIDI.Parser().parse(data)
-        let recovered = try MIDI.Converter().convert(parsedSequence)
+        let recovered = try MIDI.Importer().convert(parsedSequence)
 
         guard case let .keyboardBeat(recoveredParts, _) = recovered.content
         else { Issue.record("Unexpected content type"); return }
