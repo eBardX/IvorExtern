@@ -1,5 +1,5 @@
 {
-  "originHash" : "bb920c2a8b754258a5b9c49c34f7e038d9b817e33bd5ad49564cd6082ea618d2",
+  "originHash" : "55051b6119cf6c30da0696e3b5353edfa2cac6dbb79a9d5b763e74a6ffcad98e",
   "pins" : [
     {
       "identity" : "bigint",
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorJohnnySonic.git",
       "state" : {
-        "revision" : "aa106f4f147d0b9932b59db7eb41860bc4920d47",
-        "version" : "1.0.0"
+        "revision" : "f9dba34b8816076c536451ece0c817e6d309c522",
+        "version" : "2.0.0"
       }
     },
     {

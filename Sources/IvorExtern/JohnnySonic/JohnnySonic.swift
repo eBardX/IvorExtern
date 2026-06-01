@@ -7,7 +7,7 @@ internal struct JohnnySonic {
     // MARK: Internal Nested Types
 
     internal typealias BaseFormatter = DKMFormatter
-    internal typealias Entry         = DKMEntry
+    internal typealias Command       = DKMCommand
     internal typealias Score         = DKMScore
 
     // MARK: Internal Instance Properties

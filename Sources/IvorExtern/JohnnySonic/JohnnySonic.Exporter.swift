@@ -63,104 +63,101 @@ extension JohnnySonic.Exporter {
     // MARK: Private Type Methods
 
     private static func _convert(part: Part<BeatTime, Frequency>,
-                                 index: Int) throws -> [JohnnySonic.Entry] {
+                                 index: Int) throws -> [DKMCommand] {
         var comment = "Part #\(index)"
 
         if !part.name.isEmpty {
             comment += ": " + part.name
         }
 
-        var entries: [JohnnySonic.Entry] = try _makeBoxed(comment: comment)
+        var commands: [DKMCommand] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, sfreq, efreq, _ in
-            let startBeat  = btime.doubleValue
-            let duration   = bdur.doubleValue
-            let volume     = part.dynamicMap[btime].doubleValue * 10 // ???
-            let location   = part.panMap[btime].doubleValue
-            let startPitch = -sfreq.doubleValue
-            let endPitch   = -efreq.doubleValue
+            let startBeat  = convertToBeat(btime)
+            let duration   = convertToDuration(bdur)
+            let volume     = convertToVolume(part.dynamicMap[btime])
+            let location   = convertToLocation(part.panMap[btime])
+            let startPitch = convertToPitch(sfreq)
+            let endPitch   = convertToPitch(efreq)
             let instrument = part.instrumentMap[btime].stringValue
 
             if duration > 0 {
-                entries.append(JohnnySonic.Entry(command: .pitches,
-                                                 arguments: .double(startBeat),
-                                                 .double(duration),
-                                                 .double(volume),
-                                                 .double(location),
-                                                 .double(startPitch),
-                                                 .double(endPitch),
-                                                 .string(instrument)))
+                commands.append(.pitchesNote(startBeat: startBeat,
+                                             duration: duration,
+                                             volume: volume,
+                                             location: location,
+                                             startPitch: startPitch,
+                                             endPitch: endPitch,
+                                             instrument: instrument))
             }
         }
 
-        return entries
+        return commands
     }
 
     private static func _convert(part: Part<BeatTime, NoteNumber>,
-                                 index: Int) throws -> [JohnnySonic.Entry] {
+                                 index: Int) throws -> [DKMCommand] {
         var comment = "Part #\(index)"
 
         if !part.name.isEmpty {
             comment += ": " + part.name
         }
 
-        var entries: [JohnnySonic.Entry] = try _makeBoxed(comment: comment)
+        var commands: [DKMCommand] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, snnum, ennum, _ in
-            let startBeat  = btime.doubleValue
-            let duration   = bdur.doubleValue
-            let volume     = part.dynamicMap[btime].doubleValue * 10 // ???
-            let location   = part.panMap[btime].doubleValue
-            let startPitch = snnum.doubleValue
-            let endPitch   = ennum.doubleValue
+            let startBeat  = convertToBeat(btime)
+            let duration   = convertToDuration(bdur)
+            let volume     = convertToVolume(part.dynamicMap[btime])
+            let location   = convertToLocation(part.panMap[btime])
+            let startPitch = convertToPitch(snnum)
+            let endPitch   = convertToPitch(ennum)
             let instrument = part.instrumentMap[btime].stringValue
 
             if duration > 0 {
-                entries.append(JohnnySonic.Entry(command: .pitches,
-                                                 arguments: .double(startBeat),
-                                                 .double(duration),
-                                                 .double(volume),
-                                                 .double(location),
-                                                 .double(startPitch),
-                                                 .double(endPitch),
-                                                 .string(instrument)))
+                commands.append(.pitchesNote(startBeat: startBeat,
+                                             duration: duration,
+                                             volume: volume,
+                                             location: location,
+                                             startPitch: startPitch,
+                                             endPitch: endPitch,
+                                             instrument: instrument))
             }
         }
 
-        return entries
+        return commands
     }
 
-    private static func _convert(parts: [Part<BeatTime, Frequency>]) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = []
+    private static func _convert(parts: [Part<BeatTime, Frequency>]) throws -> [DKMCommand] {
+        var commands: [DKMCommand] = []
 
         for (idx, part) in parts.enumerated() {
-            entries += try _convert(part: part,
-                                    index: idx + 1)
+            commands += try _convert(part: part,
+                                     index: idx + 1)
         }
 
-        return entries
+        return commands
     }
 
-    private static func _convert(parts: [Part<BeatTime, NoteNumber>]) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = []
+    private static func _convert(parts: [Part<BeatTime, NoteNumber>]) throws -> [DKMCommand] {
+        var commands: [DKMCommand] = []
 
         for (idx, part) in parts.enumerated() {
-            entries += try _convert(part: part,
-                                    index: idx + 1)
+            commands += try _convert(part: part,
+                                     index: idx + 1)
         }
 
-        return entries
+        return commands
     }
 
-    private static func _convert(tempoMap: TempoMap) throws -> [JohnnySonic.Entry] {
+    private static func _convert(tempoMap: TempoMap) throws -> [DKMCommand] {
         if tempoMap.isEmpty {
-            let tempo = tempoMap.defaultTempo.doubleValue
+            let tempo = convertToTempo(tempoMap.defaultTempo)
 
-            return [JohnnySonic.Entry(command: .tempo,
-                                      arguments: .double(0),
-                                      .double(1),
-                                      .double(tempo),
-                                      .double(tempo))]
+            return [.tempoLine(startBeat: 0,
+                               duration: 1,
+                               initialTempo: tempo,
+                               finalTempo: tempo)]
         }
 
         var tmpSeq: [(BeatTime, Tempo)] = []
@@ -171,18 +168,17 @@ extension JohnnySonic.Exporter {
 
         return zip(tmpSeq.dropLast(),
                    tmpSeq.dropFirst()).compactMap { elt in
-            let startBeat  = elt.0.0.doubleValue
-            let endBeat    = elt.1.0.doubleValue
+            let startBeat  = convertToBeat(elt.0.0)
+            let endBeat    = convertToBeat(elt.1.0)
             let duration   = endBeat - startBeat
-            let startTempo = elt.0.1.doubleValue
-            let endTempo   = elt.1.1.doubleValue
+            let startTempo = convertToTempo(elt.0.1)
+            let endTempo   = convertToTempo(elt.1.1)
 
             if duration > 0 {
-                return JohnnySonic.Entry(command: .tempo,
-                                         arguments: .double(startBeat),
-                                         .double(duration),
-                                         .double(startTempo),
-                                         .double(endTempo))
+                return .tempoLine(startBeat: startBeat,
+                                  duration: duration,
+                                  initialTempo: startTempo,
+                                  finalTempo: endTempo)
             } else {
                 return nil
             }
@@ -190,18 +186,18 @@ extension JohnnySonic.Exporter {
     }
 
     private static func _convert(work: Work) throws -> JohnnySonic.Score {
-        var entries: [JohnnySonic.Entry] = try _makeHeader(work: work)
+        var commands: [DKMCommand] = try _makeHeader(work: work)
 
         if let tempoMap = work.tempoMap {
-            entries += try _convert(tempoMap: tempoMap)
+            commands += try _convert(tempoMap: tempoMap)
         }
 
         switch work.content {
         case let .absoluteBeat(parts, _):
-            entries += try _convert(parts: parts)
+            commands += try _convert(parts: parts)
 
         case let .keyboardBeat(parts, _):
-            entries += try _convert(parts: parts)
+            commands += try _convert(parts: parts)
 
         case .standardBeat:
             throw JohnnySonic.Error.unsupportedPitchNotation(work.pitchNotation)
@@ -210,27 +206,24 @@ extension JohnnySonic.Exporter {
             throw JohnnySonic.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
-        entries += try _makeTrailer(work: work)
+        commands += try _makeTrailer(work: work)
 
-        return JohnnySonic.Score(entries: entries)
+        return JohnnySonic.Score(commands: commands)
     }
 
-    private static func _makeBoxed(comment: String) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = []
+    private static func _makeBoxed(comment: String) throws -> [DKMCommand] {
+        var commands: [DKMCommand] = []
 
         let line = "+-" + "-".repeating(to: comment.count) + "-+"
 
-        entries.append(JohnnySonic.Entry(command: .comment,
-                                         arguments: .string(line)))
-        entries.append(JohnnySonic.Entry(command: .comment,
-                                         arguments: .string("| " + comment + " |")))
-        entries.append(JohnnySonic.Entry(command: .comment,
-                                         arguments: .string(line)))
+        commands.append(.comment(line))
+        commands.append(.comment("| " + comment + " |"))
+        commands.append(.comment(line))
 
-        return entries
+        return commands
     }
 
-    private static func _makeHeader(work: Work) throws -> [JohnnySonic.Entry] {
+    private static func _makeHeader(work: Work) throws -> [DKMCommand] {
         var comment = "Work"
 
         if !work.name.isEmpty {
@@ -240,18 +233,15 @@ extension JohnnySonic.Exporter {
         return try _makeBoxed(comment: comment)
     }
 
-    private static func _makeTrailer(work: Work) throws -> [JohnnySonic.Entry] {
-        var entries: [JohnnySonic.Entry] = [JohnnySonic.Entry(command: .comment)]
+    private static func _makeTrailer(work: Work) throws -> [DKMCommand] {
+        var commands: [DKMCommand] = [.comment("")]
 
         let startBeat: Double
         let endBeat: Double
 
         if let timeRange = work.beatTimeRange {
-            startBeat = timeRange.lowerBound.doubleValue
-            endBeat   = timeRange.upperBound.doubleValue
-        } else if let timeRange = work.wallTimeRange {
-            startBeat = timeRange.lowerBound.doubleValue
-            endBeat   = timeRange.upperBound.doubleValue
+            startBeat = convertToBeat(timeRange.lowerBound)
+            endBeat   = convertToBeat(timeRange.upperBound)
         } else {
             startBeat = 0
             endBeat   = 0
@@ -259,15 +249,15 @@ extension JohnnySonic.Exporter {
 
         let duration = endBeat - startBeat
 
-        entries.append(JohnnySonic.Entry(command: .mix,
-                                         arguments: .double(startBeat),
-                                         .double(duration),
-                                         .double(0),
-                                         .double(0),
-                                         .double(1)))
-        entries.append(JohnnySonic.Entry(command: .end))
+        commands.append(.mixLine(startBeat: startBeat,
+                                 duration: duration,
+                                 gainLossdB: 0,
+                                 keepSoundBuffer: false,
+                                 sign: 1,
+                                 timeOffset: 0))
+        commands.append(.end)
 
-        return entries
+        return commands
     }
 }
 
