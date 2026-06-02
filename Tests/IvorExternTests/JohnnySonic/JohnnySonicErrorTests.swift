@@ -27,10 +27,24 @@ extension JohnnySonicErrorTests {
     }
 
     @Test
+    func inconsistentPitchNotation_message() {
+        let error = JohnnySonic.Error.inconsistentPitchNotation
+
+        #expect(error.message == "Score contains both absolute and keyboard pitch notations")
+    }
+
+    @Test
     func multipleWorksNotSupported_message() {
         let error = JohnnySonic.Error.multipleWorksNotSupported
 
         #expect(error.message == "Multiple works are not supported")
+    }
+
+    @Test
+    func parseFailure_message() {
+        let error = JohnnySonic.Error.parseFailure(nil)
+
+        #expect(error.message == "Unable to parse JohnnySonic score")
     }
 
     @Test

@@ -55,8 +55,10 @@ extension JohnnySonicExporterTests {
 
     @Test
     func write_singleKeyboardBeatWork_returnsRegularFile() throws {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
-        let wrapper = try JohnnySonic.Exporter().write(works: [work], as: .dkm)
+        let work = Work(name: "Test",
+                        content: .keyboardBeat([], TempoMap()))
+        let wrapper = try JohnnySonic.Exporter().write(works: [work],
+                                                       as: .dkm)
 
         #expect(wrapper.isRegularFile)
         #expect(wrapper.regularFileContents?.isEmpty == false)
@@ -64,10 +66,12 @@ extension JohnnySonicExporterTests {
 
     @Test
     func write_unsupportedFormat_throws() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test",
+                        content: .keyboardBeat([], TempoMap()))
 
         #expect(throws: (any Error).self) {
-            try JohnnySonic.Exporter().write(works: [work], as: .abc)
+            try JohnnySonic.Exporter().write(works: [work],
+                                             as: .abc)
         }
     }
 
