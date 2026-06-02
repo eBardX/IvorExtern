@@ -9,24 +9,6 @@ private import XestiNumbers
 
 // MARK: Internal Functions
 
-internal func determineWorkName(_ score: JohnnySonic.Score) -> String {
-    let prefix = "| Work: "
-    let suffix = " |"
-
-    for command in score.commands {
-        guard case let .comment(text) = command
-        else { continue }
-
-        if text.hasPrefix(prefix), text.hasSuffix(suffix) {
-            return String(text.dropFirst(prefix.count).dropLast(suffix.count))
-        }
-    }
-
-    return ""
-}
-
-// MARK: Internal Functions (Import)
-
 internal func convertToBeatDuration(_ duration: Double) -> BeatDuration {
     BeatDuration(Number(duration))
 }
@@ -43,6 +25,34 @@ internal func convertToFrequency(_ pitch: Double) -> Frequency? {
     Frequency(numberValue: Number(-pitch))
 }
 
+internal func convertToJohnnySonicBeat(_ beatTime: BeatTime) -> JohnnySonic.Beat {
+    beatTime.doubleValue
+}
+
+internal func convertToJohnnySonicDuration(_ beatDuration: BeatDuration) -> JohnnySonic.Duration {
+    beatDuration.doubleValue
+}
+
+internal func convertToJohnnySonicLocation(_ pan: Pan) -> JohnnySonic.Location {
+    pan.doubleValue
+}
+
+internal func convertToJohnnySonicPitch(_ frequency: Frequency) -> JohnnySonic.Pitch {
+    -frequency.doubleValue
+}
+
+internal func convertToJohnnySonicPitch(_ noteNumber: NoteNumber) -> JohnnySonic.Pitch {
+    noteNumber.doubleValue
+}
+
+internal func convertToJohnnySonicTempo(_ tempo: Tempo) -> JohnnySonic.Tempo {
+    tempo.doubleValue
+}
+
+internal func convertToJohnnySonicVolume(_ dynamic: Dynamic) -> JohnnySonic.Volume {
+    dynamic.doubleValue * 10
+}
+
 internal func convertToNoteNumber(_ pitch: Double) -> NoteNumber? {
     guard pitch >= 0
     else { return nil }
@@ -50,7 +60,7 @@ internal func convertToNoteNumber(_ pitch: Double) -> NoteNumber? {
     return NoteNumber(uintValue: UInt(pitch.rounded()))
 }
 
-internal func convertToPan(_ location: Double) -> Pan? {
+internal func convertToPan(_ location: JohnnySonic.Location) -> Pan? {
     Pan(numberValue: Number(location))
 }
 
@@ -61,32 +71,18 @@ internal func convertToTempo(_ bpm: Double) -> Tempo {
     return Tempo(uintValue: UInt(bpm.rounded())) ?? .default
 }
 
-// MARK: Internal Functions (Export)
+internal func determineWorkName(_ score: JohnnySonic.Score) -> String {
+    let prefix = "| Work: "
+    let suffix = " |"
 
-internal func convertToBeat(_ beatTime: BeatTime) -> Double {
-    beatTime.doubleValue
-}
+    for command in score.commands {
+        guard case let .comment(text) = command
+        else { continue }
 
-internal func convertToDuration(_ beatDuration: BeatDuration) -> Double {
-    beatDuration.doubleValue
-}
+        if text.hasPrefix(prefix), text.hasSuffix(suffix) {
+            return String(text.dropFirst(prefix.count).dropLast(suffix.count))
+        }
+    }
 
-internal func convertToLocation(_ pan: Pan) -> Double {
-    pan.doubleValue
-}
-
-internal func convertToPitch(_ frequency: Frequency) -> Double {
-    -frequency.doubleValue
-}
-
-internal func convertToPitch(_ noteNumber: NoteNumber) -> Double {
-    noteNumber.doubleValue
-}
-
-internal func convertToTempo(_ tempo: Tempo) -> Double {
-    tempo.doubleValue
-}
-
-internal func convertToVolume(_ dynamic: Dynamic) -> Double {
-    dynamic.doubleValue * 10
+    return ""
 }

@@ -154,9 +154,7 @@ extension MIDI.Importer {
                 switch message {
                 case let .tempo(tempo):
                     let (beatTime, factor) = beatMap[eventTime]
-                    let rawTempo = round(factor * Number(numerator: 60_000_000,
-                                                         denominator: tempo.uintValue)).exact
-                    let currTempo = Tempo(rawTempo.uintValue)
+                    let currTempo = convertToTempo(tempo, factor)
 
                     if beatTime != .zero {
                         tempoMap.insert(beatTime: beatTime,

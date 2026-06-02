@@ -10,6 +10,10 @@ private import XestiTools
 
 // MARK: Internal Functions
 
+internal func convertToDynamic(_ keyVelocity: MIDI.KeyVelocity) -> Dynamic? {
+    Dynamic(numberValue: Number(Double(keyVelocity.uintValue) / 127.0))
+}
+
 internal func convertToMIDIEventTime(_ beatTime: BeatTime,
                                      _ tickRate: MIDI.TickRate) -> MIDI.EventTime? {
     MIDI.EventTime(uintValue: UInt((beatTime.doubleValue * Double(tickRate.uintValue)).rounded()))
@@ -33,6 +37,20 @@ internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {
 
 internal func convertToMIDIText(_ text: String) -> MIDI.Text? {
     MIDI.Text(stringValue: text)
+}
+
+internal func convertToNoteNumber(_ noteNumber: MIDI.NoteNumber) -> NoteNumber {
+    NoteNumber(noteNumber.uintValue)
+}
+
+internal func convertToPan(_ panValue: MIDI.PanValue) -> Pan? {
+    Pan(numberValue: Number(((Double(panValue.uintValue) / 127.0) * 2.0) - 1.0))
+}
+
+internal func convertToTempo(_ tempo: MIDI.Tempo,
+                             _ factor: MIDI.BeatMap.Factor) -> Tempo {
+    Tempo(round(factor * Number(numerator: 60_000_000,
+                                denominator: tempo.uintValue)).exact.uintValue)
 }
 
 internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {

@@ -52,7 +52,7 @@ extension MIDI.Importer.Context {
         else { return }
 
         let attackTime = pendingNotes[idx].attackTime
-        let velocity = pendingNotes[idx].velocity
+        let keyVelocity = pendingNotes[idx].velocity
 
         pendingNotes.remove(at: idx)
 
@@ -61,9 +61,9 @@ extension MIDI.Importer.Context {
 
         noteTable.insert(attack: attack,
                          duration: release - attack,
-                         pitch: NoteNumber(note.uintValue))
+                         pitch: convertToNoteNumber(note))
 
-        if let dynamic = Dynamic(numberValue: Number(Double(velocity.uintValue) / 127.0)) {
+        if let dynamic = convertToDynamic(keyVelocity) {
             dynamicMap.insert(time: attack,
                               dynamic: dynamic)
         }
@@ -76,10 +76,10 @@ extension MIDI.Importer.Context {
     }
 
     internal mutating func handlePan(_ eventTime: MIDI.EventTime,
-                                     _ value: MIDI.PanValue) {
+                                     _ panValue: MIDI.PanValue) {
         let (beatTime, _) = beatMap[eventTime]
 
-        if let pan = Pan(numberValue: Number(((Double(value.uintValue) / 127.0) * 2.0) - 1.0)) {
+        if let pan = convertToPan(panValue) {
             panMap.insert(time: beatTime,
                           pan: pan)
         }

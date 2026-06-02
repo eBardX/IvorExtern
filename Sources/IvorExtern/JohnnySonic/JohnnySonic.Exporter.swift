@@ -73,12 +73,12 @@ extension JohnnySonic.Exporter {
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, sfreq, efreq, _ in
-            let startBeat  = convertToBeat(btime)
-            let duration   = convertToDuration(bdur)
-            let volume     = convertToVolume(part.dynamicMap[btime])
-            let location   = convertToLocation(part.panMap[btime])
-            let startPitch = convertToPitch(sfreq)
-            let endPitch   = convertToPitch(efreq)
+            let startBeat  = convertToJohnnySonicBeat(btime)
+            let duration   = convertToJohnnySonicDuration(bdur)
+            let volume     = convertToJohnnySonicVolume(part.dynamicMap[btime])
+            let location   = convertToJohnnySonicLocation(part.panMap[btime])
+            let startPitch = convertToJohnnySonicPitch(sfreq)
+            let endPitch   = convertToJohnnySonicPitch(efreq)
             let instrument = part.instrumentMap[btime].stringValue
 
             if duration > 0 {
@@ -106,12 +106,12 @@ extension JohnnySonic.Exporter {
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
 
         part.noteTable.forEach { btime, bdur, snnum, ennum, _ in
-            let startBeat  = convertToBeat(btime)
-            let duration   = convertToDuration(bdur)
-            let volume     = convertToVolume(part.dynamicMap[btime])
-            let location   = convertToLocation(part.panMap[btime])
-            let startPitch = convertToPitch(snnum)
-            let endPitch   = convertToPitch(ennum)
+            let startBeat  = convertToJohnnySonicBeat(btime)
+            let duration   = convertToJohnnySonicDuration(bdur)
+            let volume     = convertToJohnnySonicVolume(part.dynamicMap[btime])
+            let location   = convertToJohnnySonicLocation(part.panMap[btime])
+            let startPitch = convertToJohnnySonicPitch(snnum)
+            let endPitch   = convertToJohnnySonicPitch(ennum)
             let instrument = part.instrumentMap[btime].stringValue
 
             if duration > 0 {
@@ -152,7 +152,7 @@ extension JohnnySonic.Exporter {
 
     private static func _convert(tempoMap: TempoMap) throws -> [DKMCommand] {
         if tempoMap.isEmpty {
-            let tempo = convertToTempo(tempoMap.defaultTempo)
+            let tempo = convertToJohnnySonicTempo(tempoMap.defaultTempo)
 
             return [.tempoLine(startBeat: 0,
                                duration: 1,
@@ -168,11 +168,11 @@ extension JohnnySonic.Exporter {
 
         return zip(tmpSeq.dropLast(),
                    tmpSeq.dropFirst()).compactMap { elt in
-            let startBeat  = convertToBeat(elt.0.0)
-            let endBeat    = convertToBeat(elt.1.0)
+            let startBeat  = convertToJohnnySonicBeat(elt.0.0)
+            let endBeat    = convertToJohnnySonicBeat(elt.1.0)
             let duration   = endBeat - startBeat
-            let startTempo = convertToTempo(elt.0.1)
-            let endTempo   = convertToTempo(elt.1.1)
+            let startTempo = convertToJohnnySonicTempo(elt.0.1)
+            let endTempo   = convertToJohnnySonicTempo(elt.1.1)
 
             if duration > 0 {
                 return .tempoLine(startBeat: startBeat,
@@ -236,12 +236,12 @@ extension JohnnySonic.Exporter {
     private static func _makeTrailer(work: Work) throws -> [DKMCommand] {
         var commands: [DKMCommand] = [.comment("")]
 
-        let startBeat: Double
-        let endBeat: Double
+        let startBeat: JohnnySonic.Beat
+        let endBeat: JohnnySonic.Beat
 
         if let timeRange = work.beatTimeRange {
-            startBeat = convertToBeat(timeRange.lowerBound)
-            endBeat   = convertToBeat(timeRange.upperBound)
+            startBeat = convertToJohnnySonicBeat(timeRange.lowerBound)
+            endBeat   = convertToJohnnySonicBeat(timeRange.upperBound)
         } else {
             startBeat = 0
             endBeat   = 0
