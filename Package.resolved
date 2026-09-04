@@ -1,5 +1,5 @@
 {
-  "originHash" : "55051b6119cf6c30da0696e3b5353edfa2cac6dbb79a9d5b763e74a6ffcad98e",
+  "originHash" : "3997eacc6d0eea1189e0b7ff628d890a76365a0bfbe029888033db772592e9ab",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorABC.git",
       "state" : {
-        "revision" : "fce7ef5655849f836a178686f52f09c5e57badc2",
-        "version" : "1.0.0"
+        "branch" : "v2-main",
+        "revision" : "26f93e8fd5e3ca4e51caec3a1991930679ae0b5a"
       }
     },
     {
@@ -24,8 +24,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorGuido.git",
       "state" : {
-        "revision" : "8f8abe9edb08cf3f41f16a99e552f3e26974900a",
-        "version" : "1.0.0"
+        "branch" : "v2-main",
+        "revision" : "abe00a874502bc428ee9ceab5fdc2e52545b7d25"
       }
     },
     {
@@ -33,8 +33,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorJohnnySonic.git",
       "state" : {
-        "revision" : "f9dba34b8816076c536451ece0c817e6d309c522",
-        "version" : "2.0.0"
+        "branch" : "v3-main",
+        "revision" : "5226401184d50a80a1b58a6959476891dcb5e1b6"
       }
     },
     {
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMIDI.git",
       "state" : {
-        "revision" : "a62b5eda6fcce4f18f895caba0a947921c1a8b29",
-        "version" : "1.1.0"
+        "branch" : "v2-main",
+        "revision" : "420802a6134d0b3ff3d7900476d0885f0ed7dad3"
       }
     },
     {
@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "61ba874e023253b2d7fbc56f49edabbb1c85c2b7",
-        "version" : "0.2.0"
+        "branch" : "develop",
+        "revision" : "8139a57d84ac00c8cab29aab1f16fb68435a46b0"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMusicXML.git",
       "state" : {
-        "revision" : "f64f8f18673ddf8a96eaaa52e5f994d06b930c61",
-        "version" : "1.0.0"
+        "branch" : "v2-main",
+        "revision" : "8dc7e63d73d189c1c498d7287d83fab9c2f7fa78"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
-        "revision" : "202009e1792f5d5194b31fbe7862bef7b7a052a3",
-        "version" : "0.2.1"
+        "branch" : "develop",
+        "revision" : "5d2d26e8023fc88ffa4a5616dc2da9327e170f92"
       }
     },
     {
@@ -78,17 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTuning.git",
       "state" : {
-        "revision" : "e51189e3467c97d5e9d4c64e1c7c467537ce6145",
-        "version" : "0.5.1"
-      }
-    },
-    {
-      "identity" : "swift-argument-parser",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/apple/swift-argument-parser.git",
-      "state" : {
-        "revision" : "ca37474853a4b5f59a22c74bfdd449b1f6bc4cc2",
-        "version" : "1.8.1"
+        "branch" : "develop",
+        "revision" : "4b10326bacac6d1e5f7870e221ba2688bfe314b4"
       }
     },
     {
@@ -101,12 +92,21 @@
       }
     },
     {
+      "identity" : "xestiarchive",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/XestiArchive.git",
+      "state" : {
+        "revision" : "77a427524083b50d1664b053ad5b7bc070356330",
+        "version" : "1.1.0"
+      }
+    },
+    {
       "identity" : "xestimarkov",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiMarkov.git",
       "state" : {
-        "revision" : "b3bc27d2132a855b23c195016c026c471ba734a5",
-        "version" : "3.0.0"
+        "revision" : "4513d568a47e8afc4c4d264644d0363b9833d75e",
+        "version" : "3.0.1"
       }
     },
     {
@@ -114,17 +114,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiNumbers.git",
       "state" : {
-        "revision" : "979384115f21e178c0dbdad6c92645ba9cc28001",
-        "version" : "1.0.1"
+        "revision" : "96eeaff8b89f5d9ff094d1a8555f3303918d8022",
+        "version" : "1.1.2"
       }
     },
     {
       "identity" : "xestisexp",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eBardX/XestiSexp.git",
+      "location" : "https://github.com/eBardX/XestiSexp",
       "state" : {
-        "revision" : "8be516e1751a39a4f39964a324aa4aa76abe80b0",
-        "version" : "4.1.3"
+        "revision" : "c42d317d38206f2e34d7b3f5d313a31db9909ca3",
+        "version" : "5.0.1"
       }
     },
     {
@@ -132,8 +132,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiText.git",
       "state" : {
-        "revision" : "a7eb4d59c0309e91e3a4680c9e7f87765b003217",
-        "version" : "4.0.4"
+        "revision" : "b29e91eb2e8f46f696baa6bea1ee5bcf6fe963f1",
+        "version" : "4.0.5"
       }
     },
     {
@@ -141,8 +141,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiTokens.git",
       "state" : {
-        "revision" : "23c56250fb90b3f4255f7745d8fa7232335d5b44",
-        "version" : "1.1.1"
+        "revision" : "d6f12aeaa4547f416de3dfaae5e14f37e3e5b169",
+        "version" : "2.0.0"
       }
     },
     {
@@ -150,8 +150,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiTools.git",
       "state" : {
-        "revision" : "1a1417690e7e2d0b33c4def0c601c6adcb2b98ed",
-        "version" : "7.4.2"
+        "revision" : "05991497b8c7cb5ccfd4c9440c5b8548f6989ab3",
+        "version" : "9.1.0"
       }
     },
     {
@@ -159,8 +159,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiXML.git",
       "state" : {
-        "revision" : "e53542addf43c3849f4afafcdd16994270c11c26",
-        "version" : "4.0.4"
+        "revision" : "2e832e01237c622a95a89def0d2223de9ceff310",
+        "version" : "5.0.0"
       }
     },
     {

@@ -39,9 +39,13 @@ extension ExportFileFormatTests {
 
     @Test
     func exportFileFormat_knownExtension() {
+        #expect(ExportFileFormat.exportFileFormat(for: "abc") != nil)
         #expect(ExportFileFormat.exportFileFormat(for: "dkm") != nil)
+        #expect(ExportFileFormat.exportFileFormat(for: "gmn") != nil)
         #expect(ExportFileFormat.exportFileFormat(for: "midi") != nil)
         #expect(ExportFileFormat.exportFileFormat(for: "mid") != nil)
+        #expect(ExportFileFormat.exportFileFormat(for: "musicxml") != nil)
+        #expect(ExportFileFormat.exportFileFormat(for: "mxl") != nil)
     }
 
     @Test

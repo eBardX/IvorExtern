@@ -3,14 +3,13 @@
 internal import Foundation
 internal import IvorModel
 
-internal protocol Exportable<Exporter>: Sendable {
-    associatedtype Exporter: ExporterProtocol
-
-    var exporter: Exporter { get }
-}
-
 internal protocol ExporterProtocol: Sendable {
+
+    // MARK: Internal Instance Properties
+
     var writableFileFormats: [FileFormat] { get }
+
+    // MARK: Internal Instance Methods
 
     func write(works: [Work],
                as fileFormat: FileFormat) throws -> FileWrapper

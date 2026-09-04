@@ -4,7 +4,7 @@ internal import IvorMIDI
 
 internal struct MIDI {
 
-    // MARK: Internal Nested Types
+    // MARK: Internal Type Aliases
 
     internal typealias BaseFormatter = SMFFormatter
     internal typealias BaseParser    = SMFParser
@@ -13,14 +13,18 @@ internal struct MIDI {
     internal typealias Event         = SMFEvent
     internal typealias EventTime     = SMFEventTime
     internal typealias KeyVelocity   = MIDIData1Value
+    internal typealias Normalizer    = SMFNormalizer
     internal typealias NoteNumber    = MIDIData1Value
     internal typealias PanValue      = MIDIData1Value
+    internal typealias ProgramNumber = MIDIData1Value
     internal typealias Sequence      = SMFSequence
     internal typealias Tempo         = SMFTempo
     internal typealias Text          = SMFText
     internal typealias TickRate      = SMFTickRate
+    internal typealias TimelineEvent = SMFEvent
     internal typealias TimeSignature = SMFTimeSignature
     internal typealias Track         = SMFTrack
+    internal typealias Validator     = SMFValidator
 
     // MARK: Internal Instance Properties
 

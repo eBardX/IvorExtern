@@ -1,14 +1,16 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+// MARK: Internal Constants
+
 internal let exporters: [any ExporterProtocol] = candidates.compactMap { _validExporter(for: $0) }
 internal let importers: [any ImporterProtocol] = candidates.compactMap { _validImporter(for: $0) }
 
-// MARK: - Private Type Aliases
+// MARK: Private Type Aliases
 
 private typealias Candidate       = Exportable & Importable
 private typealias ValidFileFormat = (fileFormat: FileFormat, import: Bool, export: Bool)
 
-// MARK: - Private Constants
+// MARK: Private Constants
 
 private let candidates: [any Candidate] = [ABC(), Guido(), JohnnySonic(), MusicXML(), MIDI()]
 private let validFileFormats: [ValidFileFormat] = candidates.flatMap {
@@ -17,7 +19,7 @@ private let validFileFormats: [ValidFileFormat] = candidates.flatMap {
     $0.fileFormat.displayName < $1.fileFormat.displayName
 }
 
-// MARK: - Private Functions
+// MARK: Private Functions
 
 private func _validExporter<C: Candidate>(for candidate: C) -> C.Exporter? {
     let exporter = candidate.exporter

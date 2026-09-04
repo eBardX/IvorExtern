@@ -13,6 +13,118 @@ extension Guido {
     }
 }
 
+// MARK: -
+
+extension Guido.Importer {
+
+    // MARK: Internal Instance Methods
+
+    internal func convert(_ score: Guido.Score) throws(Guido.Error) -> Work {
+        do {
+            return try Self._convert(score)
+        } catch let error as any EnhancedError {
+            throw Guido.Error.convertFailure(error)
+        } catch {
+            throw Guido.Error.convertFailure(nil)
+        }
+    }
+
+    // MARK: Private Type Methods
+
+    private static func _convert(_ score: Guido.Score) throws -> Work {
+        let (normalized, _) = Guido.Normalizer().normalize(score)
+        let (validated, issues) = try Guido.Validator().validate(normalized)
+
+        guard issues.isEmpty
+        else { throw Guido.Error.validationFailure(issues) }
+
+        let variables = Dictionary(validated.variables.map { ($0.name, $0) }) { _, latest in latest }
+        let walker = Walker(variables: variables)
+        let contexts = try validated.voices.map { try walker.walk($0) }
+        let parts = zip(validated.voices, contexts).map { voice, context in
+            Part(name: determinePartName(voice),
+                 noteTable: context.noteTable,
+                 dynamicMap: _makeDynamicMap(context.dynamicEvents),
+                 instrumentMap: _makeInstrumentMap(context.instrumentEvents))
+        }
+
+        return Work(name: determineWorkName(validated),
+                    content: .standardBeat(parts,
+                                           _makeTempoMap(contexts.flatMap(\.tempoEvents))))
+    }
+
+    // Unlike `_makeTempoMap`, this isn't a uniform reassert-then-insert step
+    // builder: a `.step` event (an `\intensity` mark) still gets that
+    // treatment, since it is an instant change, but a `.rampBoundary` event
+    // (one endpoint of a `\crescendo`/`\diminuendo`) is inserted plainly and
+    // left for `DynamicMap`'s own linear interpolation to glide across —
+    // reasserting it first would turn the glide back into a step. Dynamics
+    // are per-voice, unlike tempo, so this runs once per voice rather than
+    // once for the whole score.
+    private static func _makeDynamicMap(_ events: [Guido.Importer.Context.DynamicEvent]) -> DynamicMap<BeatTime> {
+        var dynamicMap = DynamicMap<BeatTime>()
+        var prevDynamic: Dynamic = .mp
+
+        for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
+            switch event.kind {
+            case .rampBoundary:
+                dynamicMap.insert(time: event.beatTime,
+                                  dynamic: event.dynamic)
+
+            case .step:
+                if event.beatTime != .zero {
+                    dynamicMap.insert(time: event.beatTime,
+                                      dynamic: prevDynamic)
+                }
+
+                dynamicMap.insert(time: event.beatTime,
+                                  dynamic: event.dynamic)
+            }
+
+            prevDynamic = event.dynamic
+        }
+
+        return dynamicMap
+    }
+
+    // Unlike `_makeDynamicMap`/`_makeTempoMap`, no reassert-then-insert step
+    // is needed: `InstrumentMap`'s own subscript already reads as a step
+    // function — the entry in effect at or before a queried time, with no
+    // interpolation — so one plain insert per `\instrument` tag is enough.
+    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument)]) -> InstrumentMap<BeatTime> {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
+            instrumentMap.insert(time: event.beatTime, instrument: event.instrument)
+        }
+
+        return instrumentMap
+    }
+
+    // Mirrors `MIDI.Importer`'s own `TempoMap` builder: inserting both the
+    // previous tempo and the new one at the same beat time turns what would
+    // otherwise interpolate into a step, since a `\tempo` tag is an instant
+    // change, not a curve.
+    private static func _makeTempoMap(_ events: [(beatTime: BeatTime, tempo: Tempo)]) -> TempoMap {
+        var tempoMap = TempoMap()
+        var prevTempo: Tempo = .default
+
+        for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
+            if event.beatTime != .zero {
+                tempoMap.insert(beatTime: event.beatTime,
+                                tempo: prevTempo)
+            }
+
+            tempoMap.insert(beatTime: event.beatTime,
+                            tempo: event.tempo)
+
+            prevTempo = event.tempo
+        }
+
+        return tempoMap
+    }
+}
+
 // MARK: - ImporterProtocol
 
 extension Guido.Importer: ImporterProtocol {
@@ -26,7 +138,7 @@ extension Guido.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat) throws(Guido.Error) -> [Work] {
         switch fileFormat {
         case .gmn:
             guard let data = file.regularFileContents
@@ -40,121 +152,6 @@ extension Guido.Importer: ImporterProtocol {
         default:
             throw Guido.Error.unsupportedFileFormat(fileFormat.displayName)
         }
-    }
-}
-
-// MARK: -
-
-extension Guido.Importer {
-
-    // MARK: Internal Instance Methods
-
-    internal func convert(_ score: Guido.Score) throws -> Work {
-        do {
-            return try Self._convert(score: score)
-        } catch let error as any EnhancedError {
-            throw Guido.Error.convertFailure(error)
-        }
-    }
-
-    // MARK: Private Type Methods
-
-    private static func _convert(score: Guido.Score) throws -> Work {
-        try Work(name: determineWorkName(score),
-                 content: .standardBeat(_convert(voices: score.voices),
-                                        TempoMap()))
-    }
-
-    private static func _convert(voice: Guido.Voice) throws -> Part<BeatTime, Pitch> {
-        var context = Self.Context()
-
-        try _update(voice, &context)
-
-        return Part(name: determinePartName(voice),
-                    noteTable: context.noteTable)
-    }
-
-    private static func _convert(voices: [Guido.Voice]) throws -> [Part<BeatTime, Pitch>] {
-        try voices.map { try _convert(voice: $0) }
-    }
-
-    private static func _update(_ chord: Guido.Chord,
-                                _ context: inout Self.Context) throws {
-        guard !context.inChord
-        else { throw Guido.Error.nestedChord }
-
-        context.beginChord()
-
-        for segment in chord.segments {
-            try _update(segment.symbols, &context)
-        }
-
-        context.endChord()
-    }
-
-    private static func _update(_ note: Guido.Note,
-                                _ context: inout Self.Context) throws {
-        let bdur = try convertToBeatDuration(note.duration)
-
-        if note.pitch.name != .empty {
-            let pit = try convertToStandardPitch(note.pitch)
-
-            context.noteTable.insert(attack: context.currentBeatTime,
-                                     duration: bdur,
-                                     pitch: pit)
-        }
-
-        context.advance(bdur)
-    }
-
-    private static func _update(_ rest: Guido.Rest,
-                                _ context: inout Self.Context) throws {
-        let bdur = try convertToBeatDuration(rest.duration)
-
-        context.advance(bdur)
-    }
-
-    private static func _update(_ symbol: Guido.Symbol,
-                                _ context: inout Self.Context) throws {
-        switch symbol {
-        case let .chord(chord):
-            try _update(chord, &context)
-
-        case let .note(note):
-            try _update(note, &context)
-
-        case let .rest(rest):
-            try _update(rest, &context)
-
-        case .tablature:
-            throw Guido.Error.unsupportedSymbol(symbol)
-
-        case let .tag(tag):
-            try _update(tag, &context)
-
-        case .variable:
-            throw Guido.Error.unsupportedSymbol(symbol)
-        }
-    }
-
-    private static func _update(_ symbols: [Guido.Symbol],
-                                _ context: inout Self.Context) throws {
-        for symbol in symbols {
-            try _update(symbol, &context)
-        }
-    }
-
-    private static func _update(_ tag: Guido.Tag,
-                                _ context: inout Self.Context) throws {
-        guard !tag.symbols.isEmpty
-        else { return }
-
-        try _update(tag.symbols, &context)
-    }
-
-    private static func _update(_ voice: Guido.Voice,
-                                _ context: inout Self.Context) throws {
-        try _update(voice.symbols, &context)
     }
 }
 

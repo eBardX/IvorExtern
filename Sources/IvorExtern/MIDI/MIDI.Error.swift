@@ -1,5 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import IvorMIDI
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
@@ -13,12 +14,17 @@ extension MIDI {
         case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
         case invalidNoteNumber(IvorTuning.NoteNumber)
-        case parseFailure((any EnhancedError)?)
         case multipleWorksNotSupported
-        case unsupportedFileFormat(String)
+        case noWorksToExport
+        case parseFailure((any EnhancedError)?)
+        case tooManyParts(Int)
+        case unexpectedNoteOff(channel: Channel, key: NoteNumber, time: EventTime)
+        case unpairedNoteOn(channel: Channel, key: NoteNumber, time: EventTime)
         case unsupportedDivision(Division)
+        case unsupportedFileFormat(String)
         case unsupportedPitchNotation(PitchNotation)
         case unsupportedTimeBasis(TimeBasis)
+        case validationFailure([MIDI.Validator.Issue])
     }
 }
 
@@ -64,23 +70,38 @@ extension MIDI.Error: EnhancedError {
         case let .invalidNoteNumber(noteNumber):
             "Invalid note number: \(noteNumber)"
 
-        case .parseFailure:
-            "Unable to parse SMF sequence"
-
         case .multipleWorksNotSupported:
             "Multiple works are not supported"
 
-        case let .unsupportedFileFormat(fileFormat):
-            "Unsupported file format: ‘\(fileFormat)’"
+        case .noWorksToExport:
+            "No works to export"
+
+        case .parseFailure:
+            "Unable to parse SMF sequence"
+
+        case let .tooManyParts(count):
+            "Too many parts to export: \(count) (MIDI supports a maximum of 16 channels)"
+
+        case let .unexpectedNoteOff(channel, key, time):
+            "Unexpected note-off on channel \(channel.uintValue) for key \(key.uintValue) at time \(time.uintValue) with no matching note-on"
+
+        case let .unpairedNoteOn(channel, key, time):
+            "Unpaired note-on on channel \(channel.uintValue) for key \(key.uintValue) at time \(time.uintValue) with no matching note-off"
 
         case let .unsupportedDivision(division):
             "Unsupported SMF division: ‘\(division)’"
+
+        case let .unsupportedFileFormat(fileFormat):
+            "Unsupported file format: ‘\(fileFormat)’"
 
         case let .unsupportedPitchNotation(pitchNotation):
             "Unsupported pitch notation: \(pitchNotation)"
 
         case let .unsupportedTimeBasis(timeBasis):
             "Unsupported time basis: \(timeBasis)"
+
+        case let .validationFailure(issues):
+            "SMF sequence failed validation: \(issues.map(\.message).joined(separator: "; "))"
         }
     }
 }

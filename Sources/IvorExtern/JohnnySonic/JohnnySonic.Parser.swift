@@ -16,11 +16,15 @@ extension JohnnySonic.Parser {
 
     // MARK: Internal Instance Methods
 
-    internal func parse(_ data: Data) throws -> JohnnySonic.Score {
+    internal func parse(_ data: Data) throws(JohnnySonic.Error) -> JohnnySonic.Score {
         do {
-            return try JohnnySonic.BaseParser().parse(data)
+            let (score, _) = try JohnnySonic.BaseParser().parse(data)
+
+            return score
         } catch let error as any EnhancedError {
             throw JohnnySonic.Error.parseFailure(error)
+        } catch {
+            throw JohnnySonic.Error.parseFailure(nil)
         }
     }
 }

@@ -4,7 +4,7 @@ internal import IvorJohnnySonic
 
 internal struct JohnnySonic {
 
-    // MARK: Internal Nested Types
+    // MARK: Internal Type Aliases
 
     internal typealias BaseFormatter = DKMFormatter
     internal typealias BaseParser    = DKMParser
@@ -12,9 +12,11 @@ internal struct JohnnySonic {
     internal typealias Command       = DKMCommand
     internal typealias Duration      = Double
     internal typealias Location      = Double
+    internal typealias Normalizer    = DKMNormalizer
     internal typealias Pitch         = Double
     internal typealias Score         = DKMScore
     internal typealias Tempo         = Double
+    internal typealias Validator     = DKMValidator
     internal typealias Volume        = Double
 
     // MARK: Internal Instance Properties

@@ -17,6 +17,150 @@ struct MIDIExporterTests {
 
 extension MIDIExporterTests {
     @Test
+    func convert_channelIdentity_duplicateClaim_fallsBackToLowestUnclaimed() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+
+        let parts = [Part(name: "Channel 3", noteTable: table),
+                     Part(name: "Channel 3", noteTable: table)]
+        let work = Work(name: "Dup", content: .keyboardBeat(parts, TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        let channels = sequence.tracks[1...].map { track in
+            track.events.compactMap { event -> MIDIChannel? in
+                guard case let .midi(_, message) = event
+                else { return nil }
+
+                return message.channel
+            }.first
+        }
+
+        #expect(channels[0]?.uintValue == 3)
+        #expect(channels[1]?.uintValue == 1)
+    }
+
+    @Test
+    func convert_channelIdentity_nonContiguousChannels_roundTrips() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+
+        let parts = [Part(name: "Channel 1", noteTable: table),
+                     Part(name: "Channel 5", noteTable: table),
+                     Part(name: "Channel 9", noteTable: table)]
+        let work = Work(name: "NonContiguous", content: .keyboardBeat(parts, TempoMap()))
+
+        let sequence = try MIDI.Exporter().convert(work)
+        let recovered = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(recoveredParts, _) = recovered.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        let recoveredChannels = Set(recoveredParts.map(\.name)).sorted()
+
+        #expect(recoveredChannels == ["Channel 1", "Channel 5", "Channel 9"])
+    }
+
+    @Test
+    func convert_channelIdentity_renamedPart_fallsBackToLowestUnclaimed() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+
+        let parts = [Part(name: "Renamed", noteTable: table),
+                     Part(name: "Channel 1", noteTable: table)]
+        let work = Work(name: "Renamed", content: .keyboardBeat(parts, TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        let channels = sequence.tracks[1...].map { track in
+            track.events.compactMap { event -> MIDIChannel? in
+                guard case let .midi(_, message) = event
+                else { return nil }
+
+                return message.channel
+            }.first
+        }
+
+        // "Channel 1" claims channel 1, so the unnamed-match part falls
+        // back to the lowest unclaimed channel, 2.
+        #expect(channels[0]?.uintValue == 2)
+        #expect(channels[1]?.uintValue == 1)
+    }
+
+    @Test
+    func convert_instrumentMap_changesMidPart_emitTwoProgramChanges() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+        table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: NoteNumber(62))
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentMap.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Vibraphone")))
+
+        let part = Part(name: "Piano",
+                        noteTable: table,
+                        instrumentMap: instrumentMap)
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.ProgramNumber? in
+            guard case let .midi(_, .programChange(_, program)) = event
+            else { return nil }
+
+            return program
+        }
+
+        #expect(programChanges == [MIDI.ProgramNumber(0), MIDI.ProgramNumber(11)])
+    }
+
+    @Test
+    func convert_instrumentMap_present_emitsProgramChange() throws {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Vibraphone")))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        instrumentMap: instrumentMap)
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.ProgramNumber? in
+            guard case let .midi(_, .programChange(_, program)) = event
+            else { return nil }
+
+            return program
+        }
+
+        #expect(programChanges == [MIDI.ProgramNumber(11)])
+    }
+
+    @Test
+    func convert_instrumentMap_unrecognizedName_omitsDirective() throws {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Not A Real Instrument")))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        instrumentMap: instrumentMap)
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        let hasProgramChange = sequence.tracks[1].events.contains {
+            if case .midi(_, .programChange) = $0 {
+                return true
+            }
+            return false
+        }
+
+        #expect(!hasProgramChange)
+    }
+
+    @Test
     func convert_keyboardBeat_empty() throws {
         let work = Work(name: "Test",
                         content: .keyboardBeat([],
@@ -114,6 +258,43 @@ extension MIDIExporterTests {
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.tracks.count == 3)
+
+        let channels = sequence.tracks[1...].map { track in
+            track.events.compactMap { event -> MIDIChannel? in
+                guard case let .midi(_, message) = event
+                else { return nil }
+
+                return message.channel
+            }.first
+        }
+
+        #expect(Set(channels.compactMap { $0 }).count == 2)
+    }
+
+    @Test
+    func convert_sixteenParts_succeeds() throws {
+        let parts = (1...16).map {
+            Part(name: "P\($0)", noteTable: NoteTable<BeatTime, NoteNumber>())
+        }
+        let work = Work(name: "Sixteen", content: .keyboardBeat(parts, TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        #expect(sequence.tracks.count == 17)
+    }
+
+    @Test
+    func convert_tooManyParts_throws() {
+        let parts = (1...17).map {
+            Part(name: "P\($0)",
+                 noteTable: NoteTable<BeatTime, NoteNumber>())
+        }
+        let work = Work(name: "TooMany",
+                        content: .keyboardBeat(parts,
+                                               TempoMap()))
+
+        #expect(throws: (any Error).self) {
+            try MIDI.Exporter().convert(work)
+        }
     }
 
     @Test
@@ -144,6 +325,52 @@ extension MIDIExporterTests {
 
     // MIDI can only represent instantaneous tempo changes; after the first pass, further roundtrips must not alter the TempoMap.
     @Test
+    func roundtrip_dynamicRamp_survivesExportReimport() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(4), pitch: NoteNumber(60))
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        try dynamicMap.insert(time: BeatTime(0), dynamic: #require(Dynamic(numberValue: Number(0.2))))
+        try dynamicMap.insert(time: BeatTime(4), dynamic: #require(Dynamic(numberValue: Number(0.9))))
+
+        let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
+        let work = Work(name: "Ramp", content: .keyboardBeat([part], TempoMap()))
+
+        let sequence = try MIDI.Exporter().convert(work)
+        let recovered = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = recovered.content,
+              let recoveredPart = parts.first
+        else { Issue.record("Expected a recovered part"); return }
+
+        #expect(recoveredPart.noteTable.timeRange != nil)
+    }
+
+    @Test
+    func roundtrip_panRamp_survivesExportReimport() throws {
+        var panMap = PanMap<BeatTime>()
+
+        try panMap.insert(time: BeatTime(0), pan: #require(Pan(numberValue: Number(-1.0))))
+        try panMap.insert(time: BeatTime(4), pan: #require(Pan(numberValue: Number(1.0))))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        panMap: panMap)
+        let work = Work(name: "PanRamp", content: .keyboardBeat([part], TempoMap()))
+
+        let sequence = try MIDI.Exporter().convert(work)
+        let recovered = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = recovered.content,
+              let recoveredPart = parts.first
+        else { Issue.record("Expected a recovered part"); return }
+
+        #expect(!recoveredPart.panMap.isEmpty)
+    }
+
+    @Test
     func roundtrip_tempoMap_accelerando_isStableAfterFirstPass() throws {
         var smoothTempoMap = TempoMap()
 
@@ -160,7 +387,7 @@ extension MIDIExporterTests {
 
         var entries1: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        tempoMap1.forEach { beatTime, tempo, _ in
+        tempoMap1.forEach { _, beatTime, tempo, _ in
             entries1.append((beatTime, tempo))
         }
 
@@ -171,7 +398,7 @@ extension MIDIExporterTests {
 
         var entries2: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        tempoMap2.forEach { beatTime, tempo, _ in
+        tempoMap2.forEach { _, beatTime, tempo, _ in
             entries2.append((beatTime, tempo))
         }
 
@@ -200,7 +427,7 @@ extension MIDIExporterTests {
 
         var originalEntries: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        canonicalTempoMap.forEach { beatTime, tempo, _ in
+        canonicalTempoMap.forEach { _, beatTime, tempo, _ in
             originalEntries.append((beatTime, tempo))
         }
 
@@ -211,7 +438,7 @@ extension MIDIExporterTests {
 
         var recoveredEntries: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        recoveredTempoMap.forEach { beatTime, tempo, _ in
+        recoveredTempoMap.forEach { _, beatTime, tempo, _ in
             recoveredEntries.append((beatTime, tempo))
         }
 
@@ -228,6 +455,21 @@ extension MIDIExporterTests {
     @Test
     func writableFileFormats_containsMIDI() {
         #expect(MIDI.Exporter().writableFileFormats.contains(.midi))
+    }
+
+    @Test
+    func write_emptyWorks_throwsNoWorksToExport() {
+        #expect {
+            try MIDI.Exporter().write(works: [], as: .midi)
+        } throws: { error in
+            guard let midiError = error as? MIDI.Error
+            else { return false }
+
+            if case .noWorksToExport = midiError {
+                return true
+            }
+            return false
+        }
     }
 
     @Test

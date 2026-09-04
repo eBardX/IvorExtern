@@ -4,20 +4,15 @@ internal import IvorABC
 
 internal struct ABC {
 
-    // MARK: Internal Nested Types
+    // MARK: Internal Type Aliases
 
-    internal typealias BaseParser = ABCParser
-    internal typealias Duration   = ABCDuration
-    internal typealias Entry      = ABCEntry
-    internal typealias Field      = ABCField
-    internal typealias Header     = ABCHeader
-    internal typealias Note       = ABCNote
-    internal typealias Pitch      = ABCPitch
-    internal typealias Rest       = ABCRest
-    internal typealias Symbol     = ABCSymbol
-    internal typealias Tune       = ABCTune
-    internal typealias Tunebook   = ABCTunebook
-    internal typealias Voice      = ABCVoice
+    internal typealias BaseFormatter = ABCFormatter
+    internal typealias BaseParser    = ABCParser
+    internal typealias Normalizer    = ABCNormalizer
+    internal typealias Pitch         = ABCPitch
+    internal typealias Tunebook      = ABCTunebook
+    internal typealias Validator     = ABCValidator
+    internal typealias Voice         = ABCVoice
 
     // MARK: Internal Instance Properties
 

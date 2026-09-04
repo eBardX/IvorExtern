@@ -1,10 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorTiming
+internal import XestiNumbers
 
 private import IvorMIDI
 private import IvorModel
-private import XestiNumbers
 private import XestiTools
 
 extension MIDI {
@@ -15,13 +15,13 @@ extension MIDI {
 
         // MARK: Internal Initializers
 
-        internal init(division: MIDI.Division) throws {
+        internal init(division: MIDI.Division) throws(MIDI.Error) {
             switch division {
             case let .metrical(tickRate):
                 self.tickRate = tickRate.uintValue
 
             default:
-                throw Error.unsupportedDivision(division)
+                throw MIDI.Error.unsupportedDivision(division)
             }
 
             self.entries = [Entry(eventTime: .zero,
@@ -40,6 +40,10 @@ extension MIDI {
 // MARK: -
 
 extension MIDI.BeatMap {
+
+    // MARK: Internal Type Aliases
+
+    internal typealias Factor = Number
 
     // MARK: Internal Instance Subscripts
 
@@ -68,7 +72,7 @@ extension MIDI.BeatMap {
     // MARK: Internal Instance Methods
 
     internal mutating func append(eventTime: MIDI.EventTime,
-                                  clockRate: UInt) throws {
+                                  clockRate: UInt) throws(MIDI.Error) {
         guard eventTime >= 0
         else { throw MIDI.Error.invalidEventTime(eventTime) }
 

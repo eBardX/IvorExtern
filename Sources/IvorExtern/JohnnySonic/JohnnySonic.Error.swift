@@ -1,5 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import IvorJohnnySonic
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
@@ -10,10 +11,12 @@ extension JohnnySonic {
         case formatFailure((any EnhancedError)?)
         case inconsistentPitchNotation
         case multipleWorksNotSupported
+        case noWorksToExport
         case parseFailure((any EnhancedError)?)
         case unsupportedFileFormat(String)
         case unsupportedPitchNotation(PitchNotation)
         case unsupportedTimeBasis(TimeBasis)
+        case validationFailure([JohnnySonic.Validator.Issue])
     }
 }
 
@@ -50,6 +53,9 @@ extension JohnnySonic.Error: EnhancedError {
         case .multipleWorksNotSupported:
             "Multiple works are not supported"
 
+        case .noWorksToExport:
+            "No works to export"
+
         case .parseFailure:
             "Unable to parse JohnnySonic score"
 
@@ -61,6 +67,9 @@ extension JohnnySonic.Error: EnhancedError {
 
         case let .unsupportedTimeBasis(timeBasis):
             "Unsupported time basis: \(timeBasis)"
+
+        case let .validationFailure(issues):
+            "JohnnySonic score failed validation: \(issues.map(\.message).joined(separator: "; "))"
         }
     }
 }

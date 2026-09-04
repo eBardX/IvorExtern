@@ -4,19 +4,17 @@ internal import IvorGuido
 
 internal struct Guido {
 
-    // MARK: Internal Nested Types
+    // MARK: Internal Type Aliases
 
-    internal typealias BaseParser = GMNParser
-    internal typealias Chord      = GMNChord
-    internal typealias Duration   = GMNDuration
-    internal typealias Note       = GMNNote
-    internal typealias Pitch      = GMNPitch
-    internal typealias Rest       = GMNRest
-    internal typealias Score      = GMNScore
-    internal typealias Symbol     = GMNSymbol
-    internal typealias Tag        = GMNTag
-    internal typealias Variable   = GMNVariable
-    internal typealias Voice      = GMNVoice
+    internal typealias BaseFormatter = GMNFormatter
+    internal typealias BaseParser    = GMNParser
+    internal typealias Event         = GMNSymbol
+    internal typealias Normalizer    = GMNNormalizer
+    internal typealias Score         = GMNScore
+    internal typealias Symbol        = GMNSymbol
+    internal typealias Tag           = GMNTag
+    internal typealias Validator     = GMNValidator
+    internal typealias Voice         = GMNVoice
 
     // MARK: Internal Instance Properties
 

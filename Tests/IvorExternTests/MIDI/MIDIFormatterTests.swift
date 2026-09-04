@@ -52,7 +52,7 @@ extension MIDIFormatterTests {
         var totalNotes = 0
 
         recoveredParts.forEach { part in
-            part.noteTable.forEach { _, _, _, _, _ in
+            part.noteTable.forEach { _, _, _, _, _, _ in
                 totalNotes += 1
             }
         }

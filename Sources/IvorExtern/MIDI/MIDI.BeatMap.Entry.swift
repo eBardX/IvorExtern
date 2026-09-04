@@ -7,8 +7,6 @@ extension MIDI.BeatMap {
 
     // MARK: Internal Nested Types
 
-    internal typealias Factor = Number
-
     internal struct Entry {
 
         // MARK: Internal Initializers

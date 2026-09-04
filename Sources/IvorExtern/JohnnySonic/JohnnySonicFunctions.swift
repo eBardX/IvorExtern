@@ -21,8 +21,15 @@ internal func convertToDynamic(_ volume: Double) -> Dynamic? {
     Dynamic(numberValue: Number(volume / 10.0))
 }
 
-internal func convertToFrequency(_ pitch: Double) -> Frequency? {
-    Frequency(numberValue: Number(-pitch))
+// Takes a frequency already in Hz — `JohnnySonic.Importer.Tuning`, not this
+// function, is what turns a raw JohnnySonic pitch (positive = pitch number,
+// negative = frequency in Hz) into Hz.
+internal func convertToFrequency(_ hertz: Double) -> Frequency? {
+    Frequency(numberValue: Number(hertz))
+}
+
+internal func convertToInstrument(_ name: String) -> Instrument? {
+    Instrument(stringValue: name)
 }
 
 internal func convertToJohnnySonicBeat(_ beatTime: BeatTime) -> JohnnySonic.Beat {

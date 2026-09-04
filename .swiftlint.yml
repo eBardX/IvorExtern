@@ -166,5 +166,7 @@ line_length:
   ignores_comments: true
   ignores_function_declarations: false
   ignores_urls: true
+type_name:
+  max_length: 50
 vertical_whitespace:
   max_empty_lines: 1

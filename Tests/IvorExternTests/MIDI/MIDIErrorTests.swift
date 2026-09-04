@@ -72,10 +72,42 @@ extension MIDIErrorTests {
     }
 
     @Test
+    func noWorksToExport_message() {
+        let error = MIDI.Error.noWorksToExport
+
+        #expect(error.message == "No works to export")
+    }
+
+    @Test
     func parseFailure_message() {
         let error = MIDI.Error.parseFailure(nil)
 
         #expect(error.message == "Unable to parse SMF sequence")
+    }
+
+    @Test
+    func tooManyParts_message() {
+        let error = MIDI.Error.tooManyParts(17)
+
+        #expect(error.message == "Too many parts to export: 17 (MIDI supports a maximum of 16 channels)")
+    }
+
+    @Test
+    func unexpectedNoteOff_message() throws {
+        let channel = try #require(MIDIChannel(uintValue: 1))
+        let key = try #require(MIDIData1Value(uintValue: 60))
+        let error = MIDI.Error.unexpectedNoteOff(channel: channel, key: key, time: SMFEventTime(0))
+
+        #expect(error.message == "Unexpected note-off on channel 1 for key 60 at time 0 with no matching note-on")
+    }
+
+    @Test
+    func unpairedNoteOn_message() throws {
+        let channel = try #require(MIDIChannel(uintValue: 1))
+        let key = try #require(MIDIData1Value(uintValue: 60))
+        let error = MIDI.Error.unpairedNoteOn(channel: channel, key: key, time: SMFEventTime(0))
+
+        #expect(error.message == "Unpaired note-on on channel 1 for key 60 at time 0 with no matching note-off")
     }
 
     @Test
@@ -105,5 +137,13 @@ extension MIDIErrorTests {
         let error = MIDI.Error.unsupportedTimeBasis(.beat)
 
         #expect(error.message == "Unsupported time basis: beat")
+    }
+
+    @Test
+    func validationFailure_message() {
+        let error = MIDI.Error.validationFailure([.invalidTrackCount(trackCount: 0,
+                                                                     format: .format1)])
+
+        #expect(error.message == "SMF sequence failed validation: The sequence has 0 track(s), which is not valid for format 1")
     }
 }

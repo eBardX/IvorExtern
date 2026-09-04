@@ -16,11 +16,15 @@ extension MIDI.Parser {
 
     // MARK: Internal Instance Methods
 
-    internal func parse(_ data: Data) throws -> MIDI.Sequence {
+    internal func parse(_ data: Data) throws(MIDI.Error) -> MIDI.Sequence {
         do {
-            return try MIDI.BaseParser().parse(data)
+            let (sequence, _) = try MIDI.BaseParser().parse(data)
+
+            return sequence
         } catch let error as any EnhancedError {
             throw MIDI.Error.parseFailure(error)
+        } catch {
+            throw MIDI.Error.parseFailure(nil)
         }
     }
 }

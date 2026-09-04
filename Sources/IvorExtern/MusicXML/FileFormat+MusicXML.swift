@@ -4,6 +4,9 @@ private import IvorTiming
 private import IvorTuning
 
 extension FileFormat {
+
+    // MARK: Internal Type Properties
+
     internal static let musicXML = Self(displayName: "MusicXML Document",
                                         filenameExtensions: ["musicxml",                        // preferred goes 1st
                                                              "xml"],

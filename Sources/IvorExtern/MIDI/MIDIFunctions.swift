@@ -14,6 +14,10 @@ internal func convertToDynamic(_ keyVelocity: MIDI.KeyVelocity) -> Dynamic? {
     Dynamic(numberValue: Number(Double(keyVelocity.uintValue) / 127.0))
 }
 
+internal func convertToInstrument(_ program: MIDI.ProgramNumber) -> Instrument {
+    Instrument(stringValue: generalMIDIInstrumentName(program: Int(program.uintValue))) ?? .vanilla
+}
+
 internal func convertToMIDIEventTime(_ beatTime: BeatTime,
                                      _ tickRate: MIDI.TickRate) -> MIDI.EventTime? {
     MIDI.EventTime(uintValue: UInt((beatTime.doubleValue * Double(tickRate.uintValue)).rounded()))
@@ -29,6 +33,13 @@ internal func convertToMIDINoteNumber(_ pitch: NoteNumber) -> MIDI.NoteNumber? {
 
 internal func convertToMIDIPanValue(_ pan: Pan) -> MIDI.PanValue? {
     MIDI.PanValue(uintValue: UInt((((pan.doubleValue + 1.0) / 2.0) * 127.0).rounded()))
+}
+
+internal func convertToMIDIProgramNumber(_ instrument: Instrument) -> MIDI.ProgramNumber? {
+    guard let program = generalMIDIProgramNumber(name: instrument.stringValue)
+    else { return nil }
+
+    return MIDI.ProgramNumber(uintValue: UInt(program))
 }
 
 internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {
@@ -53,25 +64,24 @@ internal func convertToTempo(_ tempo: MIDI.Tempo,
                                 denominator: tempo.uintValue)).exact.uintValue)
 }
 
+// Scans one track's own events for its `sequenceTrackName` meta event
+// text, or `nil` if it never declared one. `determineWorkName` reads
+// track 0's name as the work's name; `MIDI.Importer` reads every other
+// track's own name as its `Part`'s name.
+internal func determineTrackName(_ track: MIDI.Track) -> String? {
+    for event in track.events {
+        guard case let .meta(_, .sequenceTrackName(name)) = event
+        else { continue }
+
+        return name.stringValue
+    }
+
+    return nil
+}
+
 internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {
     guard let track0 = sequence.tracks.first
     else { return "" }
 
-    for event in track0.events {
-        switch event {
-        case let .meta(_, message):
-            switch message {
-            case let .sequenceTrackName(name):
-                return name.stringValue
-
-            default:
-                break
-            }
-
-        default:
-            break
-        }
-    }
-
-    return ""
+    return determineTrackName(track0) ?? ""
 }

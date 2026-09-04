@@ -27,5 +27,13 @@ extension ABCImporterContextTests {
 
         #expect(context.currentBeatTime == .zero)
         #expect(context.noteTable.isEmpty)
+        #expect(context.unitNoteLength == (1, 8))
+    }
+
+    @Test
+    func init_unitNoteLength_usesProvidedValue() {
+        let context = ABC.Importer.Context(unitNoteLength: (1, 4))
+
+        #expect(context.unitNoteLength == (1, 4))
     }
 }

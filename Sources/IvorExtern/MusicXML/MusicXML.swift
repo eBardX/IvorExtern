@@ -4,25 +4,19 @@ internal import IvorMusicXML
 
 internal struct MusicXML {
 
-    // MARK: Internal Nested Types
+    // MARK: Internal Type Aliases
 
+    internal typealias BaseFormatter = MXLFormatter
     internal typealias BaseParser    = MXLParser
-    internal typealias Container     = MXLContainer
-    internal typealias Entity        = MXLEntity
-    internal typealias MeasurePW     = MXLMeasurePW
-    internal typealias MeasureTW     = MXLMeasureTW
-    internal typealias MusicItem     = MXLMusicItem
-    internal typealias Note          = MXLNote
-    internal typealias Opus          = MXLOpus
-    internal typealias PartList      = MXLPartList
-    internal typealias PartPW        = MXLPartPW
-    internal typealias PartTW        = MXLPartTW
+    internal typealias Document      = MXLDocument
+    internal typealias Normalizer    = MXLNormalizer
+    internal typealias Octave        = MXLOctave
     internal typealias Pitch         = MXLPitch
+    internal typealias Score         = MXLScorePartwise
     internal typealias ScorePart     = MXLScorePart
-    internal typealias ScorePW       = MXLScorePW
-    internal typealias ScoreTW       = MXLScoreTW
-    internal typealias StandardSound = MXLStandardSound
-    internal typealias Work          = MXLWork
+    internal typealias Semitones     = MXLSemitones
+    internal typealias Step          = MXLStep
+    internal typealias Validator     = MXLValidator
 
     // MARK: Internal Instance Properties
 

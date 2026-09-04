@@ -16,11 +16,19 @@ extension JohnnySonic.Formatter {
 
     // MARK: Internal Instance Methods
 
-    internal func format(_ score: JohnnySonic.Score) throws -> Data {
+    internal func format(_ score: JohnnySonic.Score) throws(JohnnySonic.Error) -> Data {
         do {
-            return try JohnnySonic.BaseFormatter().format(score)
+            let (normalized, _) = DKMNormalizer().normalize(score)
+            let (validated, issues) = try DKMValidator().validate(normalized)
+
+            guard issues.isEmpty
+            else { throw JohnnySonic.Error.validationFailure(issues) }
+
+            return try JohnnySonic.BaseFormatter().format(validated)
         } catch let error as any EnhancedError {
             throw JohnnySonic.Error.formatFailure(error)
+        } catch {
+            throw JohnnySonic.Error.formatFailure(nil)
         }
     }
 }

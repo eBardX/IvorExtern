@@ -5,8 +5,20 @@ public import IvorModel
 public import IvorTiming
 public import IvorTuning
 
+internal import XestiTools
+
 /// A value that encapsulates a file format supported for importing works.
 public struct ImportFileFormat {
+
+    // MARK: Private Instance Properties
+
+    private let fileFormat: FileFormat
+    private let importer: any ImporterProtocol
+}
+
+// MARK: -
+
+extension ImportFileFormat {
 
     // MARK: Public Type Properties
 
@@ -93,10 +105,17 @@ public struct ImportFileFormat {
     ///
     /// - Returns:  The array of works decoded from the file.
     ///
-    /// - Throws:   Any error encountered while importing works from the file.
-    public func read(from file: FileWrapper) throws -> [Work] {
-        try importer.read(from: file,
-                          as: fileFormat)
+    /// - Throws:   ``Error/readFailure(_:)`` if the works cannot be read from
+    ///             the file.
+    public func read(from file: FileWrapper) throws(Error) -> [Work] {
+        do {
+            return try importer.read(from: file,
+                                     as: fileFormat)
+        } catch let error as any EnhancedError {
+            throw Error.readFailure(error)
+        } catch {
+            throw Error.readFailure(nil)
+        }
     }
 
     // MARK: Private Type Properties
@@ -106,8 +125,8 @@ public struct ImportFileFormat {
 
         for importer in importers {
             for fileFormat in importer.readableFileFormats {
-                let importFileFormat = Self(importer: importer,
-                                            fileFormat: fileFormat)
+                let importFileFormat = Self(fileFormat: fileFormat,
+                                            importer: importer)
 
                 for tag in importFileFormat.filenameExtensions {
                     dict[tag] = importFileFormat
@@ -121,19 +140,6 @@ public struct ImportFileFormat {
 
         return dict
     }()
-
-    // MARK: Private Initializers
-
-    private init(importer: any ImporterProtocol,
-                 fileFormat: FileFormat) {
-        self.fileFormat = fileFormat
-        self.importer = importer
-    }
-
-    // MARK: Private Instance Properties
-
-    private let fileFormat: FileFormat
-    private let importer: any ImporterProtocol
 }
 
 // MARK: - Sendable

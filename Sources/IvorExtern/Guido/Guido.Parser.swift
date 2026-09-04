@@ -16,11 +16,16 @@ extension Guido.Parser {
 
     // MARK: Internal Instance Methods
 
-    internal func parse(_ data: Data) throws -> Guido.Score {
+    internal func parse(_ data: Data) throws(Guido.Error) -> Guido.Score {
         do {
-            return try Guido.BaseParser().parse(data)
+            let (score, _) = try Guido.BaseParser().parse(data)
+            let (normalized, _) = GMNNormalizer().normalize(score)
+
+            return normalized
         } catch let error as any EnhancedError {
             throw Guido.Error.parseFailure(error)
+        } catch {
+            throw Guido.Error.parseFailure(nil)
         }
     }
 }

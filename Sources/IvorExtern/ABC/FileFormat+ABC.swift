@@ -4,6 +4,9 @@ private import IvorTiming
 private import IvorTuning
 
 extension FileFormat {
+
+    // MARK: Internal Type Properties
+
     internal static let abc = Self(displayName: "ABC File",
                                    filenameExtensions: ["abc"],
                                    mimeTypes: ["text/vnd.abc"],

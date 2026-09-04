@@ -16,11 +16,15 @@ extension ABC.Parser {
 
     // MARK: Internal Instance Methods
 
-    internal func parse(_ data: Data) throws -> ABC.Tunebook {
+    internal func parse(_ data: Data) throws(ABC.Error) -> ABC.Tunebook {
         do {
-            return try ABC.BaseParser().parse(data)
+            let (tunebook, _) = try ABC.BaseParser().parse(data)
+
+            return tunebook
         } catch let error as any EnhancedError {
             throw ABC.Error.parseFailure(error)
+        } catch {
+            throw ABC.Error.parseFailure(nil)
         }
     }
 }

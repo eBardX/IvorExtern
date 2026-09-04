@@ -1,6 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorABC
+internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
 
@@ -8,187 +9,312 @@ private import XestiNumbers
 
 // MARK: Internal Functions
 
-internal func convertToBeatDuration(_ duration: ABC.Duration) throws -> BeatDuration {
-    BeatDuration(Number(numerator: duration.numerator,
-                        denominator: duration.denominator))
-}
+// Reverse of `convertToDynamic(_:)`: only the ten standard dynamic levels
+// have a discrete ABC decoration name. A `Dynamic` produced by ramp
+// interpolation — an intermediate rational that doesn't exactly match one
+// of the ten levels — has no name to convert to and is omitted rather than
+// rounded to the nearest one.
+internal func convertToABCDecorationName(_ dynamic: Dynamic) -> ABCDecoration.Name? {
+    let name: String? = switch dynamic {
+    case .pppp:
+        "pppp"
 
-internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws -> Pitch {
-    try Pitch(pitchClass: _convertToStandardPitchClass(pitch.letter,
-                                                       pitch.accidental),
-              octave: _convertToStandardPitchOctave(pitch.octave))
-}
+    case .ppp:
+        "ppp"
 
-internal func determineVoices(_ tune: ABC.Tune) -> [ABC.Voice] {
-    var voices: [ABC.Voice] = []
+    case .pp:
+        "pp"
 
-    for entry in tune.entries {
-        switch entry {
-        case let .field(field):
-            voices += _determineVoices(field)
+    case .p:
+        "p"
 
-        case let .symbols(symbols):
-            voices += _determineVoices(symbols)
+    case .mp:
+        "mp"
 
-        default:
-            break
-        }
-    }
+    case .mf:
+        "mf"
 
-    return _uniquify(voices)
-}
+    case .f:
+        "f"
 
-internal func determineWorkName(_ tune: ABC.Tune) -> String {
-    for entry in tune.entries {
-        switch entry {
-        case let .field(field):
-            if let name = _determineWorkName(field) {
-                return name
-            }
+    case .ff:
+        "ff"
 
-        default:
-            break
-        }
-    }
+    case .fff:
+        "fff"
 
-    return ""
-}
-
-internal func filterEntries(_ voice: ABC.Voice,
-                            _ tune: ABC.Tune) throws -> [ABC.Entry] {
-    var filteredEntries: [ABC.Entry] = []
-    var currentVoice = ABC.Voice(id: "",
-                                 properties: [:])
-
-    for entry in tune.entries {
-        switch entry {
-        case let .field(field):
-            if case let .voice(voice) = field {
-                currentVoice = voice
-            }
-
-            fallthrough // swiftlint:disable:this fallthrough
-
-        case .directive:
-            if currentVoice.id == voice.id {
-                filteredEntries.append(entry)
-            }
-
-        case let .symbols(symbols):
-            let filteredSymbols = _filterSymbols(voice, symbols, &currentVoice)
-
-            if currentVoice.id == voice.id {
-                filteredEntries.append(.symbols(filteredSymbols))
-            }
-        }
-    }
-
-    return filteredEntries
-}
-
-// MARK: Private Properties
-
-private let accidentalMap: [ABC.Pitch.Accidental: Pitch.Accidental] = [.doubleFlat: .doubleFlat,
-                                                                       .flat: .flat,
-                                                                       .natural: .natural,
-                                                                       .sharp: .sharp,
-                                                                       .doubleSharp: .doubleSharp]
-
-private let letterMap: [ABC.Pitch.Letter: Pitch.Letter] = [.a: .a,
-                                                           .b: .b,
-                                                           .c: .c,
-                                                           .d: .d,
-                                                           .e: .e,
-                                                           .f: .f,
-                                                           .g: .g]
-
-// MARK: Private Functions
-
-private func _convertToStandardPitchClass(_ apLetter: ABC.Pitch.Letter,
-                                          _ apaccidental: ABC.Pitch.Accidental) throws -> PitchClass {
-    guard let letter = letterMap[apLetter]
-    else { throw ABC.Error.unrecognizedPitchLetter(apLetter) }
-
-    guard let accidental = accidentalMap[apaccidental]
-    else { throw ABC.Error.unrecognizedPitchAccidental(apaccidental) }
-
-    return PitchClass(letter: letter,
-                      accidental: accidental)
-}
-
-private func _convertToStandardPitchOctave(_ apOctave: ABC.Pitch.Octave) throws -> Pitch.Octave {
-    guard let octave = Pitch.Octave(intValue: apOctave)
-    else { throw ABC.Error.unrecognizedPitchOctave(apOctave) }
-
-    return octave
-}
-
-private func _determineVoices(_ field: ABC.Field) -> [ABC.Voice] {
-    switch field {
-    case let .voice(voice):
-        [voice]
+    case .ffff:
+        "ffff"
 
     default:
-        []
-    }
-}
-
-private func _determineVoices(_ symbols: [ABC.Symbol]) -> [ABC.Voice] {
-    var voices: [ABC.Voice] = []
-
-    for symbol in symbols {
-        switch symbol {
-        case let .inlineField(field):
-            voices += _determineVoices(field)
-
-        default:
-            break
-        }
+        nil
     }
 
-    return voices
+    guard let name
+    else { return nil }
+
+    return ABCDecoration.Name(stringValue: name)
 }
 
-private func _determineWorkName(_ field: ABC.Field) -> String? {
-    switch field {
-    case let .title(title):
-        title
+// Converts an absolute duration (in beats, i.e. a multiplier of the unit
+// note length `L:1/4` this exporter always writes) into an `ABCLength`, or
+// `nil` if the reduced fraction's denominator isn't a power of 2 in
+// 1...512 — the caller is responsible for tuplet-scaling a duration first
+// when its plain reduced form doesn't qualify.
+internal func convertToABCLength(_ duration: BeatDuration) -> ABCLength? {
+    let numberValue = duration.numberValue
+
+    guard numberValue.isRational
+    else { return nil }
+
+    let numerator = numberValue.numerator.uintValue
+
+    guard numerator > 0
+    else { return nil }
+
+    return ABCLength(numerator: numerator,
+                     denominator: numberValue.denominator.uintValue)
+}
+
+// The model carries no octave below C0, but `ABCPitch.Octave` only spans
+// C0...C9 (§4.1), so a `Pitch` at octave −1 has no ABC representation.
+internal func convertToABCPitch(_ pitch: Pitch) throws(ABC.Error) -> ABCPitch {
+    guard pitch.octave.intValue >= 0,
+          let octave = ABCPitch.Octave(uintValue: UInt(pitch.octave.intValue))
+    else { throw ABC.Error.unrepresentablePitch(pitch.description) }
+
+    return ABCPitch(letter: _convertToABCPitchLetter(pitch.letter),
+                    accidental: _convertToABCPitchAccidental(pitch.accidental),
+                    octave: octave)
+}
+
+// The inverse of `convertToTempo(_:)`. Always anchors the beat to a quarter
+// note (`Q:1/4=rate`), matching the `L:1/4` unit note length this exporter
+// always writes, so the two fields stay mutually consistent and round-trip
+// exactly through `convertToTempo(_:)`'s own quarter-note resolution.
+internal func convertToABCTempo(_ tempo: Tempo) -> ABCTempo? {
+    guard let quarterLength = ABCLength(numerator: 1, denominator: 4)
+    else { return nil }
+
+    return ABCTempo(lengths: [quarterLength],
+                    rate: tempo.uintValue,
+                    text: nil)
+}
+
+internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) -> BeatDuration {
+    BeatDuration(duration.numberValue * 4)
+}
+
+// A decoration's `name` is open, matched against a rendering program's own
+// symbol table only when the score is played (see `ABCDecoration.Name`'s
+// doc comment), so only the ten standard dynamic names — matched
+// case-insensitively — convert; anything else (an ornament, an articulation,
+// a dialect this vocabulary doesn't cover) is left unrecognized rather than
+// guessed at.
+internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
+    switch name.stringValue.lowercased() {
+    case "pppp":
+        .pppp
+
+    case "ppp":
+        .ppp
+
+    case "pp":
+        .pp
+
+    case "p":
+        .p
+
+    case "mp":
+        .mp
+
+    case "mf":
+        .mf
+
+    case "f":
+        .f
+
+    case "ff":
+        .ff
+
+    case "fff":
+        .fff
+
+    case "ffff":
+        .ffff
 
     default:
         nil
     }
 }
 
-private func _filterSymbols(_ voice: ABC.Voice,
-                            _ symbols: [ABC.Symbol],
-                            _ currentVoice: inout ABC.Voice) -> [ABC.Symbol] {
-    var outSymbols: [ABC.Symbol] = []
+// abc2midi's `%%MIDI program [channel] program-number` directive is the only
+// mechanism this format gives for instrument assignment — ABC itself has no
+// built-in instrument concept. `ABCDirective.Name` only recognizes a
+// handful of standard directive names with typed payloads (see its doc
+// comment), so a `MIDI` directive's own `program`/channel/program-number
+// sub-syntax is never parsed upstream; this hand-parses it out of the raw
+// value text instead. The optional leading MIDI channel number, when
+// written, is simply the token this skips past to reach the trailing
+// program number — the one that always matters for instrument choice.
+internal func convertToInstrument(_ directive: ABCDirective) -> Instrument? {
+    guard directive.name.stringValue.lowercased() == "midi"
+    else { return nil }
 
-    for symbol in symbols {
-        switch symbol {
-        case let .inlineField(field):
-            if case let .voice(voice) = field {
-                currentVoice = voice
-            }
+    let tokens = directive.value.split(whereSeparator: \.isWhitespace)
 
-            fallthrough // swiftlint:disable:this fallthrough
+    guard let keyword = tokens.first,
+          keyword.lowercased() == "program",
+          let programToken = tokens.last,
+          let program = Int(programToken)
+    else { return nil }
 
-        default:
-            if currentVoice.id == voice.id {
-                outSymbols.append(symbol)
-            }
+    return Instrument(stringValue: generalMIDIInstrumentName(program: program))
+}
+
+internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {
+    try Pitch(pitchClass: _convertToStandardPitchClass(pitch.letter,
+                                                       pitch.accidental),
+              octave: _convertToStandardPitchOctave(pitch.octave))
+}
+
+// The `Q:` field's rate, resolved to quarter-note beats per minute. Per
+// §3.1.8 of the ABC 2.1 standard, a compound beat (more than one entry in
+// `lengths`, e.g. `Q:1/4 3/8 1/4 3/8=40`) means "play as if the summed
+// length were the beat" — `ABCNormalizer` only resolves the deprecated
+// `Q:Cn=rate`/bare `Q:rate` forms to a single `lengths` entry, not this
+// valid modern compound-beat form, so summing here is still necessary. A
+// `Q:` with no `rate` (text only, e.g. `Q:"Allegro"`) has an empty
+// `lengths` and returns `nil`.
+internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
+    guard let rate = tempo.rate,
+          !tempo.lengths.isEmpty
+    else { return nil }
+
+    let beatFraction = tempo.lengths.reduce(0.0) { $0 + Double($1.numerator) / Double($1.denominator) }
+    let quarterBPM = (Double(rate) * beatFraction * 4).rounded()
+
+    guard let uintValue = UInt(exactly: quarterBPM)
+    else { return nil }
+
+    return Tempo(uintValue: uintValue)
+}
+
+internal func determinePartName(_ voice: ABC.Voice?) -> String {
+    guard let voice
+    else { return "" }
+
+    return voice.name ?? voice.subname ?? voice.id.stringValue
+}
+
+internal func determineWorkName(_ tune: ABCTune) -> String {
+    for entry in tune.header {
+        if case let .field(.tuneTitle(title)) = entry {
+            return title.stringValue
         }
     }
 
-    return outSymbols
+    return ""
 }
 
-private func _uniquify(_ voices: [ABC.Voice]) -> [ABC.Voice] {
-    var outVoices: [ABC.Voice] = []
+// MARK: Private Functions
 
-    for voice in voices where !outVoices.contains(where: { $0.id == voice.id }) {
-        outVoices.append(voice)
+private func _convertToABCPitchAccidental(_ accidental: Pitch.Accidental) -> ABCPitch.Accidental {
+    switch accidental {
+    case .doubleFlat:
+        .doubleFlat
+
+    case .doubleSharp:
+        .doubleSharp
+
+    case .flat:
+        .flat
+
+    case .natural:
+        .natural
+
+    case .sharp:
+        .sharp
+    }
+}
+
+private func _convertToABCPitchLetter(_ letter: Pitch.Letter) -> ABCPitch.Letter {
+    switch letter {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
+    }
+}
+
+private func _convertToStandardPitchClass(_ apLetter: ABC.Pitch.Letter,
+                                          _ apAccidental: ABC.Pitch.Accidental) throws(ABC.Error) -> PitchClass {
+    let letter: Pitch.Letter = switch apLetter {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
     }
 
-    return outVoices
+    let accidental: Pitch.Accidental = switch apAccidental {
+    case .doubleFlat:
+        .doubleFlat
+
+    case .doubleSharp:
+        .doubleSharp
+
+    case .flat:
+        .flat
+
+    case .natural:
+        .natural
+
+    case .omitted:
+        throw ABC.Error.unrecognizedPitchAccidental(apAccidental)
+
+    case .sharp:
+        .sharp
+    }
+
+    return PitchClass(letter: letter,
+                      accidental: accidental)
+}
+
+private func _convertToStandardPitchOctave(_ apOctave: ABC.Pitch.Octave) throws(ABC.Error) -> Pitch.Octave {
+    guard let octave = Pitch.Octave(intValue: Int(apOctave.uintValue))
+    else { throw ABC.Error.unrecognizedPitchOctave(apOctave) }
+
+    return octave
 }

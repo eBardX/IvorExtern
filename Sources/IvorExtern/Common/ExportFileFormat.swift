@@ -5,10 +5,22 @@ public import IvorModel
 public import IvorTiming
 public import IvorTuning
 
+internal import XestiTools
+
 /// A value that encapsulates a file format supported for exporting works.
 public struct ExportFileFormat {
 
-    // MARK: Public Type Methods
+    // MARK: Private Instance Properties
+
+    private let exporter: any ExporterProtocol
+    private let fileFormat: FileFormat
+}
+
+// MARK: -
+
+extension ExportFileFormat {
+
+    // MARK: Public Type Properties
 
     /// The sorted array of preferred filename extensions across all supported export formats.
     public static let preferredFilenameExtensions = Set(exportFileFormats.compactMap { $0.value.preferredFilenameExtension }).sorted()
@@ -93,10 +105,17 @@ public struct ExportFileFormat {
     ///
     /// - Returns:  A `FileWrapper` containing the exported data.
     ///
-    /// - Throws:   Any error encountered while exporting the works.
-    public func write(works: [Work]) throws -> FileWrapper {
-        try exporter.write(works: works,
-                           as: fileFormat)
+    /// - Throws:   ``Error/writeFailure(_:)`` if the works cannot be written
+    ///             to a file.
+    public func write(works: [Work]) throws(Error) -> FileWrapper {
+        do {
+            return try exporter.write(works: works,
+                                      as: fileFormat)
+        } catch let error as any EnhancedError {
+            throw Error.writeFailure(error)
+        } catch {
+            throw Error.writeFailure(nil)
+        }
     }
 
     // MARK: Private Type Properties
@@ -121,19 +140,6 @@ public struct ExportFileFormat {
 
         return dict
     }()
-
-    // MARK: Private Initializers
-
-    private init(exporter: any ExporterProtocol,
-                 fileFormat: FileFormat) {
-        self.fileFormat = fileFormat
-        self.exporter = exporter
-    }
-
-    // MARK: Private Instance Properties
-
-    private let fileFormat: FileFormat
-    private let exporter: any ExporterProtocol
 }
 
 // MARK: - Sendable

@@ -1,7 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+import Foundation
 @testable import IvorExtern
 import IvorGuido
+import IvorTiming
+import IvorTuning
 import Testing
 import XestiTools
 
@@ -19,18 +22,24 @@ extension GuidoErrorTests {
     }
 
     @Test
-    func incompleteDuration_message() throws {
-        let duration = try #require(GMNDuration(numerator: 1, denominator: 4))
-        let error = Guido.Error.incompleteDuration(duration)
+    func formatFailure_message() {
+        let error = Guido.Error.formatFailure(nil)
 
-        #expect(error.message.hasPrefix("Incomplete Guido duration:"))
+        #expect(error.message == "Unable to format Guido score")
     }
 
     @Test
-    func nestedChord_message() {
-        let error = Guido.Error.nestedChord
+    func multipleWorksNotSupported_message() {
+        let error = Guido.Error.multipleWorksNotSupported
 
-        #expect(error.message == "Nested chords are disallowed")
+        #expect(error.message == "Multiple works are not supported")
+    }
+
+    @Test
+    func noWorksToExport_message() {
+        let error = Guido.Error.noWorksToExport
+
+        #expect(error.message == "No works to export")
     }
 
     @Test
@@ -62,6 +71,17 @@ extension GuidoErrorTests {
     }
 
     @Test
+    func unsupportedEvent_message() throws {
+        let score = try Guido.Parser().parse(Data("[ s1:0: ]".utf8))
+        let voice = try #require(score.voices.first)
+        let event = try #require(voice.symbols.first { if case .tablature = $0 { true } else { false } })
+
+        let error = Guido.Error.unsupportedEvent(event)
+
+        #expect(error.message.hasPrefix("Unsupported event:"))
+    }
+
+    @Test
     func unsupportedFileFormat_message() {
         let error = Guido.Error.unsupportedFileFormat("gmn")
 
@@ -69,9 +89,24 @@ extension GuidoErrorTests {
     }
 
     @Test
-    func unsupportedSymbol_message() {
-        let error = Guido.Error.unsupportedSymbol(.variable("test"))
+    func unsupportedPitchNotation_message() {
+        let error = Guido.Error.unsupportedPitchNotation(.keyboard)
 
-        #expect(error.message.hasPrefix("Unsupported symbol:"))
+        #expect(error.message == "Unsupported pitch notation: keyboard")
+    }
+
+    @Test
+    func unsupportedTimeBasis_message() {
+        let error = Guido.Error.unsupportedTimeBasis(.wall)
+
+        #expect(error.message == "Unsupported time basis: wall")
+    }
+
+    @Test
+    func validationFailure_message() {
+        let error = Guido.Error.validationFailure([.missingTagBody(GMNTag.Name("slur")),
+                                                   .unexpectedTagBody(GMNTag.Name("title"))])
+
+        #expect(error.message == "Guido score failed validation: Tag ‘\\slur’ requires a body; Tag ‘\\title’ takes no body")
     }
 }

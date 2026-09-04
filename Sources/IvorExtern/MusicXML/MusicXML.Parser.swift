@@ -17,12 +17,16 @@ extension MusicXML.Parser {
     // MARK: Internal Instance Methods
 
     internal func parse(_ data: Data,
-                        compressed: Bool) throws -> MusicXML.Entity {
+                        compressed: Bool) throws(MusicXML.Error) -> MusicXML.Document {
         do {
-            return try MusicXML.BaseParser().parse(data,
-                                                   compressed: compressed)
+            let (document, _) = try MusicXML.BaseParser().parse(data,
+                                                                compressed: compressed)
+
+            return document
         } catch let error as any EnhancedError {
             throw MusicXML.Error.parseFailure(error)
+        } catch {
+            throw MusicXML.Error.parseFailure(nil)
         }
     }
 }
