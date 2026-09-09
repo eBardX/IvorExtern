@@ -1,5 +1,5 @@
 {
-  "originHash" : "3997eacc6d0eea1189e0b7ff628d890a76365a0bfbe029888033db772592e9ab",
+  "originHash" : "f7963bbb77585c7a82803e39ea9bb824ce49b48aabef1bdcc3f15a9dd340879f",
   "pins" : [
     {
       "identity" : "bigint",
@@ -52,7 +52,7 @@
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "8139a57d84ac00c8cab29aab1f16fb68435a46b0"
+        "revision" : "a73db6519681d183c4814dac205603e775d3b898"
       }
     },
     {
@@ -70,7 +70,7 @@
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "5d2d26e8023fc88ffa4a5616dc2da9327e170f92"
+        "revision" : "f44bfeac78347c59a863022a4d28af1007345010"
       }
     },
     {
@@ -79,7 +79,7 @@
       "location" : "https://github.com/eBardX/IvorTuning.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "4b10326bacac6d1e5f7870e221ba2688bfe314b4"
+        "revision" : "f7a8b8c568a1563430855014f6370e127fe8cb90"
       }
     },
     {
@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiNumbers.git",
       "state" : {
-        "revision" : "96eeaff8b89f5d9ff094d1a8555f3303918d8022",
-        "version" : "1.1.2"
+        "revision" : "be06956ab8435ea8257ff038eec7a0bb65a3878d",
+        "version" : "1.3.0"
       }
     },
     {
@@ -123,8 +123,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/XestiSexp",
       "state" : {
-        "revision" : "c42d317d38206f2e34d7b3f5d313a31db9909ca3",
-        "version" : "5.0.1"
+        "revision" : "6f565450b29224d042201679916b968d896781dc",
+        "version" : "5.0.3"
       }
     },
     {
