@@ -5,6 +5,8 @@ internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
 
+internal import XestiTools
+
 private import XestiNumbers
 
 // MARK: Internal Functions
@@ -92,13 +94,13 @@ internal func convertToABCPitch(_ pitch: Pitch) throws(ABC.Error) -> ABCPitch {
 // note (`Q:1/4=rate`), matching the `L:1/4` unit note length this exporter
 // always writes, so the two fields stay mutually consistent and round-trip
 // exactly through `convertToTempo(_:)`'s own quarter-note resolution.
-internal func convertToABCTempo(_ tempo: Tempo) -> ABCTempo? {
+internal func convertToABCTempo(_ tempo: Tempo, text: String? = nil) -> ABCTempo? {
     guard let quarterLength = ABCLength(numerator: 1, denominator: 4)
     else { return nil }
 
     return ABCTempo(lengths: [quarterLength],
                     rate: tempo.uintValue,
-                    text: nil)
+                    text: text)
 }
 
 internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) -> BeatDuration {
@@ -148,6 +150,122 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
     }
 }
 
+// The Tier 1 bare-flag articulation/ornament names shared with Guido's
+// closed `Kind` enums and MusicXML's plain articulation/ornament/technical
+// cases — see the "Tier 1 — closed, shared-name bare flags" list in
+// `EXTRAS_CANDIDATES.md`. Matched case-insensitively against ABC's own
+// recommended decoration vocabulary (ABC 2.1 §4.16.1); anything outside
+// this set (a genuine off-scale dynamic mark like `sfz`, or an articulation
+// word this list doesn't cover) is left for the caller to route elsewhere.
+internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
+    switch name.stringValue.lowercased() {
+    case "accent",
+         "emphasis":
+        .accent
+
+    case "marcato":
+        .marcato
+
+    case "tenuto":
+        .tenuto
+
+    case "staccato":
+        .staccato
+
+    case "fermata",
+         "invertedfermata":
+        .fermata
+
+    case "harmonic",
+         "open":
+        .harmonic
+
+    case "trill":
+        .trill
+
+    case "lowermordent",
+         "mordent",
+         "uppermordent":
+        .mordent
+
+    case "turn":
+        .turn
+
+    case "upbow":
+        .upBow
+
+    case "downbow":
+        .downBow
+
+    case "breath":
+        .breathMark
+
+    case "plus",
+         "snap":
+        .pizzicato
+
+    default:
+        nil
+    }
+}
+
+// The reverse of `convertToArticulationExtra(_:)` — one canonical ABC
+// decoration name per Tier 1 flag. `plus`/`snap` both read as `.pizzicato`
+// on import (ABC has no single generic pizzicato word), so this picks
+// `snap` (the more common of the two markings) as the one write direction;
+// the `plus`/`snap` distinction itself is lost on a `.pizzicato` round
+// trip, an accepted simplification given ABC's own vocabulary split.
+internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? {
+    let name: String? = switch extra.name {
+    case Extra.accent.name:
+        "accent"
+
+    case Extra.marcato.name:
+        "marcato"
+
+    case Extra.tenuto.name:
+        "tenuto"
+
+    case Extra.staccato.name:
+        "staccato"
+
+    case Extra.fermata.name:
+        "fermata"
+
+    case Extra.harmonic.name:
+        "harmonic"
+
+    case Extra.pizzicato.name:
+        "snap"
+
+    case Extra.trill.name:
+        "trill"
+
+    case Extra.mordent.name:
+        "mordent"
+
+    case Extra.turn.name:
+        "turn"
+
+    case Extra.upBow.name:
+        "upbow"
+
+    case Extra.downBow.name:
+        "downbow"
+
+    case Extra.breathMark.name:
+        "breath"
+
+    default:
+        nil
+    }
+
+    guard let name
+    else { return nil }
+
+    return ABCDecoration.Name(stringValue: name)
+}
+
 // abc2midi's `%%MIDI program [channel] program-number` directive is the only
 // mechanism this format gives for instrument assignment — ABC itself has no
 // built-in instrument concept. `ABCDirective.Name` only recognizes a
@@ -155,9 +273,11 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 // comment), so a `MIDI` directive's own `program`/channel/program-number
 // sub-syntax is never parsed upstream; this hand-parses it out of the raw
 // value text instead. The optional leading MIDI channel number, when
-// written, is simply the token this skips past to reach the trailing
-// program number — the one that always matters for instrument choice.
-internal func convertToInstrument(_ directive: ABCDirective) -> Instrument? {
+// written, is the middle token between `program` and the trailing program
+// number — surfaced as `channel` for a `midiChannel` extra (see
+// `Extra+InstrumentMap.swift`); `nil` when the directive omits it (just
+// `program program-number`, no channel token at all).
+internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Instrument, channel: Int?, program: Int)? {
     guard directive.name.stringValue.lowercased() == "midi"
     else { return nil }
 
@@ -169,7 +289,12 @@ internal func convertToInstrument(_ directive: ABCDirective) -> Instrument? {
           let program = Int(programToken)
     else { return nil }
 
-    return Instrument(stringValue: generalMIDIInstrumentName(program: program))
+    guard let instrument = Instrument(stringValue: generalMIDIInstrumentName(program: program))
+    else { return nil }
+
+    let channel = tokens.count == 3 ? Int(tokens[1]) : nil
+
+    return (instrument, channel, program)
 }
 
 internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {

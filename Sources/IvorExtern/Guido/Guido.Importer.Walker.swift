@@ -6,6 +6,7 @@ internal import IvorModel
 internal import IvorTiming
 
 private import XestiNumbers
+private import XestiTools
 
 // One pass per voice over its `GMNSymbol`s, walking the note/chord/rest
 // cases directly against the AST: duration resolution (sticky base,
@@ -151,7 +152,9 @@ extension Guido.Importer.Walker {
 
             context.tieArmed = false
 
-            context.instrumentEvents.append((beatTime: context.currentBeatTime, instrument: convertToInstrument(instrument)))
+            context.instrumentEvents.append((beatTime: context.currentBeatTime,
+                                             instrument: convertToInstrument(instrument),
+                                             midi: instrument.midi))
 
         case let .intensity(intensity):
             try Self._flushPendingNote(&context)
@@ -167,17 +170,145 @@ extension Guido.Importer.Walker {
 
             if let metronome = tempo.metronome,
                let tempoValue = convertToTempo(metronome) {
-                context.tempoEvents.append((beatTime: context.currentBeatTime, tempo: tempoValue))
+                context.tempoEvents.append((beatTime: context.currentBeatTime,
+                                            tempo: tempoValue,
+                                            text: tempo.tempo.nilIfEmpty))
             }
 
         case let .tie(tie) where tie.span == .end:
             context.tieArmed = true
+
+        // `\accent<...>{C}`-style tags scope their mark over a `body:` of
+        // note symbols (guidolib's own template shape for every kind but
+        // `\stacc` — see `convertToGuidoTag(_:body:)` on the export side),
+        // so the tag's own body has to be walked right here rather than
+        // just staging the flag and falling through to `default:`'s flush
+        // — a real gap fixed after the export side first exposed it via a
+        // round-trip crash: without this, a body-wrapped note was never
+        // reached at all.
+        case let .articulation(articulation):
+            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
+
+            try _walk(articulation.body, &context, &inProgressVariableNames)
+
+        case let .ornament(ornament):
+            context.pendingNoteExtras.append(Self._ornamentExtra(ornament))
+
+            try _walk(ornament.body, &context, &inProgressVariableNames)
+
+        case let .fingering(fingering):
+            context.pendingNoteExtras.append(Extra(name: Extra.fingering.name, values: [.string(fingering.text)]))
+
+            try _walk(fingering.body, &context, &inProgressVariableNames)
+
+        case let .breathMark(breathMark):
+            context.pendingNoteExtras.append(.breathMark)
+
+            try _walk(breathMark.body, &context, &inProgressVariableNames)
+
+        // The whole-tag `\slur<...>{...}` bracket form — as opposed to the
+        // open-span `Begin`/`End` pair the two cases below handle — needs
+        // no id: `body` alone unambiguously delimits the span, so the
+        // first note walked from it is marked as the start and whichever
+        // note is left pending once the whole body has been walked (the
+        // last one) is marked as the end, the same "mutate the current
+        // pending note" pattern the `.end`-span case below uses. Only
+        // wired on import — `Guido.Exporter` always writes the open-span
+        // ident form instead, so this direction is read-only, matching
+        // how `dynamicMark`'s own MusicXML `otherDynamics`-vs-fixed-case
+        // split reads a wider vocabulary than it writes.
+        case let .slur(slur) where slur.span == .whole:
+            context.pendingNoteExtras.append(.slurStart)
+
+            try _walk(slur.body, &context, &inProgressVariableNames)
+
+            if let pending = context.pendingNote {
+                context.pendingNote = (attackTime: pending.attackTime,
+                                       notes: pending.notes,
+                                       extras: pending.extras + [.slurEnd])
+            }
+
+        case let .slur(slur) where slur.span == .begin:
+            context.pendingNoteExtras.append(Self._slurExtra(.slurStart, ident: slur.ident))
+
+        case let .slur(slur) where slur.span == .end:
+            // The note this closes is still `pendingNote` (mirrors ABC's own
+            // slur-end handling) — appended directly rather than staged for
+            // the next note.
+            if let pending = context.pendingNote {
+                context.pendingNote = (attackTime: pending.attackTime,
+                                       notes: pending.notes,
+                                       extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
+            }
 
         default:
             try Self._flushPendingNote(&context)
 
             context.tieArmed = false
         }
+    }
+
+    // A `.whole`-span `\slur`/`\articulation`/etc. (its own `body:` bracket
+    // rather than the `Begin`/`End` open-span form) isn't specially handled
+    // here — it falls to the `default:` no-op above, same as before this
+    // stage. Only the open-span `Begin`/`End` form (the common case for a
+    // multi-note slur) and articulation/ornament/fingering/breathMark's own
+    // single-note-preceding convention are wired.
+    private static func _articulationExtra(_ articulation: GMNArticulation) -> Extra {
+        switch articulation.kind {
+        case .accent:
+            .accent
+
+        case .bow:
+            switch articulation.type?.lowercased() {
+            case "up":
+                .upBow
+
+            case "down":
+                .downBow
+
+            default:
+                Extra(name: Extra.articulation.name, values: [.string("bow")])
+            }
+
+        case .fermata:
+            .fermata
+
+        case .harmonic:
+            .harmonic
+
+        case .marcato:
+            .marcato
+
+        case .pizzicato:
+            .pizzicato
+
+        case .staccato:
+            .staccato
+
+        case .tenuto:
+            .tenuto
+        }
+    }
+
+    private static func _ornamentExtra(_ ornament: GMNOrnament) -> Extra {
+        switch ornament.kind {
+        case .mordent:
+            .mordent
+
+        case .trill:
+            .trill
+
+        case .turn:
+            .turn
+        }
+    }
+
+    private static func _slurExtra(_ extra: Extra, ident: GMNTag.Ident?) -> Extra {
+        guard let ident
+        else { return extra }
+
+        return Extra(name: extra.name, values: [.string("\(ident.uintValue)")])
     }
 
     private func _walk(_ symbols: [GMNSymbol],
@@ -272,10 +403,12 @@ extension Guido.Importer.Walker {
                                    notes: zip(pending.notes, notes).map {
                                        Guido.Note(duration: Guido.Duration(numberValue: $0.duration.numberValue + $1.duration.numberValue),
                                                   pitch: $0.pitch)
-                                   })
+                                   },
+                                   extras: pending.extras)
         } else {
             try _flushPendingNote(&context)
-            context.pendingNote = (attackTime: attackTime, notes: notes)
+            context.pendingNote = (attackTime: attackTime, notes: notes, extras: context.pendingNoteExtras)
+            context.pendingNoteExtras = []
         }
 
         context.tieArmed = false
@@ -309,12 +442,15 @@ extension Guido.Importer.Walker {
         guard let pending = context.pendingNote
         else { return }
 
+        let extras: Extras? = pending.extras.isEmpty ? nil : Extras(elements: pending.extras)
+
         for note in pending.notes where note.pitch.name != .empty {
             let pit = try convertToStandardPitch(note.pitch)
 
             context.noteTable.insert(attack: pending.attackTime,
                                      duration: convertToBeatDuration(note.duration),
-                                     pitch: pit)
+                                     pitch: pit,
+                                     extras: extras)
         }
 
         context.pendingNote = nil
@@ -333,8 +469,14 @@ extension Guido.Importer.Walker {
 
     private static func _handleIntensity(_ intensity: GMNIntensity,
                                          _ context: inout Guido.Importer.Context) {
-        guard let dynamic = convertToDynamic(intensity.type)
-        else { return }
+        guard let dynamic = convertToDynamic(intensity.type) else {
+            context.dynamicEvents.append(Guido.Importer.Context.DynamicEvent(beatTime: context.currentBeatTime,
+                                                                             dynamic: context.lastDynamic,
+                                                                             kind: .step,
+                                                                             mark: intensity.type))
+
+            return
+        }
 
         context.dynamicEvents.append(Guido.Importer.Context.DynamicEvent(beatTime: context.currentBeatTime,
                                                                          dynamic: dynamic,

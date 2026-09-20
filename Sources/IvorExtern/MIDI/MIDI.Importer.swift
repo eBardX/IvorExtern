@@ -71,7 +71,9 @@ extension MIDI.Importer {
             }
 
             tempoMap.insert(beatTime: beatTime,
-                            tempo: currTempo)
+                            tempo: currTempo,
+                            extras: Extras(elements: [Extra(name: Extra.exactMicrosecondsPerQuarter.name,
+                                                            values: [.int(Int(tempo.uintValue))])]))
 
             prevTempo = currTempo
         }
@@ -87,14 +89,49 @@ extension MIDI.Importer {
             context.handleNote(note)
         }
 
-        for case let .midi(eventTime, .controlChange(_, _, value)) in voice.panEvents {
-            context.handlePan(eventTime, value)
+        var panLSB: UInt?
+
+        for case let .midi(eventTime, message) in voice.panEvents.sorted(by: { $0.eventTime < $1.eventTime }) {
+            switch message {
+            case let .controlChange(_, .panLSB, value):
+                panLSB = value.uintValue
+
+            case let .controlChange(_, .panMSB, value):
+                context.handlePan(eventTime, value, panLSB)
+
+            default:
+                continue
+            }
+        }
+
+        var exprMSB: UInt?
+        var exprLSB: UInt?
+
+        for case let .midi(eventTime, message) in voice.expressionEvents.sorted(by: { $0.eventTime < $1.eventTime }) {
+            switch message {
+            case let .controlChange(_, .expressionControllerMSB, value):
+                exprMSB = value.uintValue
+
+            case let .controlChange(_, .expressionControllerLSB, value):
+                exprLSB = value.uintValue
+
+            default:
+                continue
+            }
+
+            if let exprMSB {
+                context.handleExpression(eventTime, Int((exprMSB << 7) | (exprLSB ?? 0)))
+            }
         }
 
         return Part(name: voice.name,
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
-                    instrumentMap: _makeInstrumentMap(voice.programChangeEvents, beatMap),
+                    instrumentMap: _makeInstrumentMap(voice.programChangeEvents,
+                                                      voice.bankSelectEvents,
+                                                      voice.volumeEvents,
+                                                      channel: voice.channel,
+                                                      beatMap),
                     panMap: context.panMap)
     }
 
@@ -118,15 +155,65 @@ extension MIDI.Importer {
         return beatMap
     }
 
-    private static func _makeInstrumentMap(_ events: [SMFEvent],
+    // Program Change events carry every `InstrumentMap` entry's own time and
+    // instrument; Bank Select (CC 0 MSB / CC 32 LSB) events are stateful,
+    // not tied to any one entry, so they're merged in tick order alongside
+    // the program changes and the most recently seen MSB/LSB pair (if any)
+    // is combined into a 14-bit `midiBank` extra at each entry — see
+    // `Extra+InstrumentMap.swift`. Bank Select is placed ahead of Program
+    // Change in the merge so a coincident pair (same tick) resolves in MIDI
+    // convention order.
+    private static func _makeInstrumentMap(_ programChangeEvents: [SMFEvent],
+                                           _ bankSelectEvents: [SMFEvent],
+                                           _ volumeEvents: [SMFEvent],
+                                           channel: MIDI.Channel,
                                            _ beatMap: MIDI.BeatMap) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
+        var bankMSB: UInt?
+        var bankLSB: UInt?
+        var volume: UInt?
 
-        for case let .midi(eventTime, .programChange(_, program)) in events {
-            let (beatTime, _) = beatMap[eventTime]
+        let events = (bankSelectEvents + volumeEvents + programChangeEvents).sorted {
+            guard case let .midi(lhsTime, _) = $0,
+                  case let .midi(rhsTime, _) = $1
+            else { return false }
 
-            instrumentMap.insert(time: beatTime,
-                                 instrument: convertToInstrument(program))
+            return lhsTime < rhsTime
+        }
+
+        for case let .midi(eventTime, message) in events {
+            switch message {
+            case let .controlChange(_, .bankSelectMSB, value):
+                bankMSB = value.uintValue
+
+            case let .controlChange(_, .bankSelectLSB, value):
+                bankLSB = value.uintValue
+
+            case let .controlChange(_, .channelVolumeMSB, value):
+                volume = value.uintValue
+
+            case let .programChange(_, program):
+                let (beatTime, _) = beatMap[eventTime]
+                var elements = [Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]),
+                                Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue) + 1)])]
+
+                if let volume {
+                    elements.append(Extra(name: Extra.midiVolume.name,
+                                          values: [.double(Double(volume) / 127.0 * 100.0)]))
+                }
+
+                if let bankMSB, let bankLSB {
+                    elements.append(Extra(name: Extra.midiBank.name,
+                                          values: [.int(Int((bankMSB << 7) | bankLSB) + 1)]))
+                }
+
+                instrumentMap.insert(time: beatTime,
+                                     instrument: convertToInstrument(program),
+                                     extras: Extras(elements: elements))
+
+            default:
+                break
+            }
         }
 
         return instrumentMap

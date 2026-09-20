@@ -72,13 +72,17 @@ extension Guido.Importer {
                                   dynamic: event.dynamic)
 
             case .step:
-                if event.beatTime != .zero {
+                if event.mark == nil, event.beatTime != .zero {
                     dynamicMap.insert(time: event.beatTime,
                                       dynamic: prevDynamic)
                 }
 
                 dynamicMap.insert(time: event.beatTime,
-                                  dynamic: event.dynamic)
+                                  dynamic: event.dynamic,
+                                  extras: event.mark.map {
+                                      Extras(elements: [Extra(name: Extra.dynamicMark.name,
+                                                              values: [.string($0)])])
+                                  })
             }
 
             prevDynamic = event.dynamic
@@ -91,11 +95,15 @@ extension Guido.Importer {
     // is needed: `InstrumentMap`'s own subscript already reads as a step
     // function — the entry in effect at or before a queried time, with no
     // interpolation — so one plain insert per `\instrument` tag is enough.
-    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument)]) -> InstrumentMap<BeatTime> {
+    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, midi: Int?)]) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
 
         for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
-            instrumentMap.insert(time: event.beatTime, instrument: event.instrument)
+            let extras = event.midi.map {
+                Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int($0 + 1)])])
+            }
+
+            instrumentMap.insert(time: event.beatTime, instrument: event.instrument, extras: extras)
         }
 
         return instrumentMap
@@ -105,7 +113,7 @@ extension Guido.Importer {
     // previous tempo and the new one at the same beat time turns what would
     // otherwise interpolate into a step, since a `\tempo` tag is an instant
     // change, not a curve.
-    private static func _makeTempoMap(_ events: [(beatTime: BeatTime, tempo: Tempo)]) -> TempoMap {
+    private static func _makeTempoMap(_ events: [(beatTime: BeatTime, tempo: Tempo, text: String?)]) -> TempoMap {
         var tempoMap = TempoMap()
         var prevTempo: Tempo = .default
 
@@ -115,8 +123,13 @@ extension Guido.Importer {
                                 tempo: prevTempo)
             }
 
+            let extras = event.text.map {
+                Extras(elements: [Extra(name: Extra.tempoText.name, values: [.string($0)])])
+            }
+
             tempoMap.insert(beatTime: event.beatTime,
-                            tempo: event.tempo)
+                            tempo: event.tempo,
+                            extras: extras)
 
             prevTempo = event.tempo
         }

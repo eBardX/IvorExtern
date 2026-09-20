@@ -205,4 +205,50 @@ extension JohnnySonicRoundTripTests {
         #expect(recoveredTempoMap[BeatTime(0)] == Tempo(120))
         #expect(recoveredTempoMap[BeatTime(1)] == Tempo(120))
     }
+
+    // Ramp extras bypass the lossy resample-then-redetect reconstruction
+    // `roundTrip_tempo_preservesFlatValue` is limited by: when present on a
+    // `TempoMap` entry, the exporter writes the ramp's own anchor values
+    // directly into `DKMTempoLine`, and the importer recovers them exactly
+    // the same way — the whole point of these three keys.
+    @Test
+    func roundTrip_tempoRamp_preservesRampExtras() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: BeatTime(0),
+                        tempo: Tempo(120),
+                        extras: Extras(elements: [Extra(name: Extra.rampInitialTempo.name, values: [.double(120)]),
+                                                  Extra(name: Extra.rampFinalTempo.name, values: [.double(160)]),
+                                                  Extra(name: Extra.rampDuration.name, values: [.double(4)])]))
+        tempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(160))
+
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "TempoRamp", content: .keyboardBeat([part], tempoMap))
+
+        let recovered = try roundTrip(work,
+                                      exporter: JohnnySonic.Exporter(),
+                                      importer: JohnnySonic.Importer(),
+                                      fileFormat: .dkm)
+        let recoveredTempoMap = try #require(recovered.tempoMap)
+
+        var foundInitial: Double?
+        var foundFinal: Double?
+        var foundDuration: Double?
+
+        recoveredTempoMap.forEach { _, time, _, extras in
+            if time == BeatTime(0) {
+                foundInitial = doubleValue(extras, .rampInitialTempo)
+                foundFinal = doubleValue(extras, .rampFinalTempo)
+                foundDuration = doubleValue(extras, .rampDuration)
+            }
+        }
+
+        #expect(foundInitial == 120)
+        #expect(foundFinal == 160)
+        #expect(foundDuration == 4)
+    }
 }

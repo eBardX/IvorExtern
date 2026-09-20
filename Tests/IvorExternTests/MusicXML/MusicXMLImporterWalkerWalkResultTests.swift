@@ -27,7 +27,7 @@ extension MusicXMLImporterWalkerWalkResultTests {
                                                                   kind: .step)
 
         let result = MusicXML.Importer.Walker.WalkResult(directionDynamicEvents: [dynamicEvent],
-                                                         panEvents: [(beatTime: .zero, pan: .center)],
+                                                         panEvents: [(beatTime: .zero, pan: .center, degree: nil)],
                                                          part: part,
                                                          tempoEvents: [(beatTime: .zero, tempo: .default)])
 

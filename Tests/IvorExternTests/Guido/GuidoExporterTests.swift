@@ -91,6 +91,25 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func convert_dynamicMarkExtra_emitsLiteralIntensityText() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0),
+                          dynamic: .mp,
+                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("sfz")])]))
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let score = try Guido.Exporter().convert(standardBeatWork(parts: [part]))
+        let intensities = intensities(in: score)
+
+        #expect(intensities.contains { $0.type == "sfz" })
+    }
+
+    @Test
     func convert_distinctTimeDynamicPair_emitsDynamicRamp() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

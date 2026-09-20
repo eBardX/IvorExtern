@@ -101,6 +101,57 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_programChangeEvent_populatesMidiChannelExtra() throws {
+        let channel = MIDIChannel(3)
+        let programChange = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let track = SMFTrack(events: [.midi(.zero, programChange),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        var foundChannel: Int?
+
+        parts.first?.instrumentMap.forEach { _, _, _, extras in
+            foundChannel = intValue(extras, .midiChannel)
+        }
+
+        #expect(foundChannel == 3)
+    }
+
+    @Test
+    func convert_bankSelectPrecedingProgramChange_populatesMidiBankExtra() throws {
+        let channel = MIDIChannel(1)
+        let bankSelectMSB = MIDIChannelMessage.controlChange(channel, .bankSelectMSB, MIDIData1Value(1))
+        let bankSelectLSB = MIDIChannelMessage.controlChange(channel, .bankSelectLSB, MIDIData1Value(2))
+        let programChange = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let track = SMFTrack(events: [.midi(.zero, bankSelectMSB),
+                                      .midi(.zero, bankSelectLSB),
+                                      .midi(.zero, programChange),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        var foundBank: Int?
+
+        parts.first?.instrumentMap.forEach { _, _, _, extras in
+            foundBank = intValue(extras, .midiBank)
+        }
+
+        // MSB 1, LSB 2 -> (1 << 7) | 2 == 130, plus the 1-based convention.
+        #expect(foundBank == 131)
+    }
+
+    @Test
     func convert_tempoMetaEvent_populatesTempoMap() throws {
         let track = SMFTrack(events: [.meta(.zero, .tempo(SMFTempo(500_000))),
                                       .meta(.zero, .endOfTrack)])

@@ -17,12 +17,14 @@ extension MIDINoteTests {
                              key: MIDIData1Value(0x3c),
                              offVelocity: MIDIData1Value(64),
                              onVelocity: MIDIData1Value(100),
+                             peakKeyPressure: MIDIData1Value(80),
                              startTime: SMFEventTime(0))
 
         #expect(note.duration == 96)
         #expect(note.key == MIDIData1Value(0x3c))
         #expect(note.offVelocity == MIDIData1Value(64))
         #expect(note.onVelocity == MIDIData1Value(100))
+        #expect(note.peakKeyPressure == MIDIData1Value(80))
         #expect(note.startTime == SMFEventTime(0))
     }
 }

@@ -38,27 +38,32 @@ extension MIDI.Exporter {
     // MARK: Private Type Methods
 
     // Assigns each part a distinct MIDI channel in 1...16, preserving the
-    // origin channel encoded in an unrenamed importer-produced part name
-    // (`Part(name: "Channel \(voice.channel.uintValue)", …)`,
-    // `MIDI.Importer.swift`) so that, for example, a file using channels
-    // {1, 5, 9} round-trips back to {1, 5, 9} rather than collapsing to
-    // {1, 2, 3} and corrupting the GM channel-10-is-percussion convention.
+    // origin channel a part's own `instrumentMap` (a `midiChannel` extra —
+    // see `Extra+InstrumentMap.swift`) or, failing that, an unrenamed
+    // importer-produced part name (`Part(name: "Channel \(voice.channel.
+    // uintValue)", …)`, `MIDI.Importer.swift`) already names, so that, for
+    // example, a file using channels {1, 5, 9} round-trips back to
+    // {1, 5, 9} rather than collapsing to {1, 2, 3} and corrupting the GM
+    // channel-10-is-percussion convention.
     //
-    // Pass 1: a name matching `^Channel (\d+)$` with N in 1...16 claims
-    // channel N; on a duplicate claim the first part in array order keeps
-    // it, and later claimants fall through to pass 2. Pass 2: every
-    // unclaimed part takes the lowest unclaimed channel, in array order.
-    // More than 16 parts, or an exhausted pool, throws `tooManyParts`.
+    // Pass 1: a part whose `instrumentMap`'s first entry carries a
+    // `midiChannel` extra in 1...16, or — failing that — a name matching
+    // `^Channel (\d+)$` with N in 1...16, claims channel N; on a duplicate
+    // claim the first part in array order keeps it, and later claimants
+    // fall through to pass 2. Pass 2: every unclaimed part takes the
+    // lowest unclaimed channel, in array order. More than 16 parts, or an
+    // exhausted pool, throws `tooManyParts`.
     //
     // This is inherently fragile: `Part` has no identity field, so
-    // renaming a part silently changes its export channel. Worth
-    // revisiting if `IvorModel` ever gains one.
+    // renaming a part (or clearing its `midiChannel` extra) silently
+    // changes its export channel. Worth revisiting if `IvorModel` ever
+    // gains one.
     private static func _assignChannels(_ parts: [Part<BeatTime, NoteNumber>]) throws(MIDI.Error) -> [MIDI.Channel] {
         var claimedChannels: [Int: Int] = [:] // part index -> channel number
         var usedChannels: Set<Int> = []
 
         for (index, part) in parts.enumerated() {
-            guard let number = _parseChannelName(part.name),
+            guard let number = _preferredChannel(part),
                   (1...16).contains(number),
                   !usedChannels.contains(number)
             else { continue }
@@ -130,23 +135,13 @@ extension MIDI.Exporter {
             events.append(.meta(.zero, .sequenceTrackName(trackName)))
         }
 
-        part.panMap.forEach { _, beatTime, pan, _ in
-            if let eventTime = convertToMIDIEventTime(beatTime, exportTickRate),
-               let panValue = convertToMIDIPanValue(pan) {
-                events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
-            }
-        }
+        events += _panEvents(part.panMap, channel: channel)
 
-        // Emit a Program Change at the part's initial instrument and at
-        // every subsequent `instrumentMap` change point. A lookup miss
-        // against the General MIDI table omits the directive entirely
-        // rather than defaulting to program 0.
-        part.instrumentMap.forEach { _, beatTime, instrument, _ in
-            if let eventTime = convertToMIDIEventTime(beatTime, exportTickRate),
-               let program = convertToMIDIProgramNumber(instrument) {
-                events.append(.midi(eventTime, .programChange(channel, program)))
-            }
-        }
+        events += _instrumentEvents(part.instrumentMap, channel: channel)
+
+        let exactVelocityByBeatTime = _exactVelocityByBeatTime(part.dynamicMap)
+
+        events += _expressionEvents(part.dynamicMap, channel: channel)
 
         var noteError: MIDI.Error?
 
@@ -157,7 +152,7 @@ extension MIDI.Exporter {
         // (see `Context.handleNote`) and stored nowhere in the model.
         // Harmless for most playback, but semantically odd; not fixable
         // here without a model change.
-        part.noteTable.forEach { _, beatTime, beatDuration, startPitch, _, _ in
+        part.noteTable.forEach { _, beatTime, beatDuration, startPitch, _, extras in
             guard noteError == nil
             else { return }
 
@@ -172,10 +167,20 @@ extension MIDI.Exporter {
 
             if let attEventTime = convertToMIDIEventTime(beatTime, exportTickRate),
                let relEventTime = convertToMIDIEventTime(beatTime + beatDuration, exportTickRate) {
-                let attKeyVelocity = convertToMIDIKeyVelocity(part.dynamicMap[attBeatTime]) ?? defaultKeyVelocity
-                let relKeyVelocity = convertToMIDIKeyVelocity(part.dynamicMap[relBeatTime]) ?? defaultKeyVelocity
+                let attKeyVelocity = exactVelocityByBeatTime[attBeatTime]
+                    ?? convertToMIDIKeyVelocity(part.dynamicMap[attBeatTime])
+                    ?? defaultKeyVelocity
+                let relKeyVelocity = exactVelocityByBeatTime[relBeatTime]
+                    ?? convertToMIDIKeyVelocity(part.dynamicMap[relBeatTime])
+                    ?? defaultKeyVelocity
 
                 events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
+
+                if let pressure = intValue(extras, .midiKeyPressure),
+                   let value = MIDIData1Value(uintValue: UInt(pressure)) {
+                    events.append(.midi(attEventTime, .polyphonicPressure(channel, noteNumber, value)))
+                }
+
                 events.append(.midi(relEventTime, .noteOff(channel, noteNumber, relKeyVelocity)))
             }
         }
@@ -236,6 +241,134 @@ extension MIDI.Exporter {
         return Int(name.dropFirst(prefix.count))
     }
 
+    // A part's preferred export channel: its `instrumentMap`'s first
+    // entry's `midiChannel` extra, if any, otherwise the "Channel N" name
+    // convention `_parseChannelName(_:)` reads.
+    private static func _preferredChannel(_ part: Part<BeatTime, NoteNumber>) -> Int? {
+        var firstExtras: Extras?
+        var seen = false
+
+        part.instrumentMap.forEach { _, _, _, extras in
+            if !seen {
+                firstExtras = extras
+                seen = true
+            }
+        }
+
+        return intValue(firstExtras, .midiChannel) ?? _parseChannelName(part.name)
+    }
+
+    // `midiPan`, when present, is the exact combined 14-bit value — split
+    // back into an LSB/MSB pair, rather than re-deriving a 7-bit-only value
+    // from `Pan`. LSB is emitted first (unlike Bank Select's MSB-then-LSB
+    // convention) so `MIDI.Importer`'s same-tick merge — which reads events
+    // in emission order, not MIDI-standard byte order — already knows the
+    // LSB by the time it processes the MSB that actually creates the
+    // `PanMap` entry.
+    private static func _panEvents(_ panMap: PanMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+        var events: [MIDI.Event] = []
+
+        panMap.forEach { _, beatTime, pan, extras in
+            guard let eventTime = convertToMIDIEventTime(beatTime, exportTickRate)
+            else { return }
+
+            if let midiPan = intValue(extras, .midiPan) {
+                let raw = UInt(midiPan)
+
+                if let msb = MIDIData1Value(uintValue: raw >> 7),
+                   let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
+                    events.append(.midi(eventTime, .controlChange(channel, .panLSB, lsb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .panMSB, msb)))
+                }
+            } else if let panValue = convertToMIDIPanValue(pan) {
+                events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
+            }
+        }
+
+        return events
+    }
+
+    // Emits a Program Change at the part's initial instrument and at every
+    // subsequent `instrumentMap` change point. A lookup miss against the
+    // General MIDI table omits the directive entirely rather than
+    // defaulting to program 0. A `midiProgram` extra overrides the derived
+    // program number when present (see `Extra+InstrumentMap.swift`); a
+    // `midiBank`/`midiVolume` extra on the entry emits a Bank Select MSB/
+    // LSB pair / Channel Volume event immediately before the Program
+    // Change, MIDI convention order — the reverse of the combine
+    // `MIDI.Importer._makeInstrumentMap` does on the way in.
+    private static func _instrumentEvents(_ instrumentMap: InstrumentMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+        var events: [MIDI.Event] = []
+
+        instrumentMap.forEach { _, beatTime, instrument, extras in
+            let exactProgram = intValue(extras, .midiProgram).flatMap {
+                $0 >= 1 ? MIDI.ProgramNumber(uintValue: UInt($0 - 1)) : nil
+            }
+
+            if let eventTime = convertToMIDIEventTime(beatTime, exportTickRate),
+               let program = exactProgram ?? convertToMIDIProgramNumber(instrument) {
+                if let bank = intValue(extras, .midiBank), bank >= 1 {
+                    let raw = UInt(bank - 1)
+
+                    if let msb = MIDIData1Value(uintValue: raw >> 7),
+                       let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
+                        events.append(.midi(eventTime, .controlChange(channel, .bankSelectMSB, msb)))
+                        events.append(.midi(eventTime, .controlChange(channel, .bankSelectLSB, lsb)))
+                    }
+                }
+
+                if let volume = doubleValue(extras, .midiVolume),
+                   let value = MIDIData1Value(uintValue: UInt((volume / 100.0 * 127.0).rounded())) {
+                    events.append(.midi(eventTime, .controlChange(channel, .channelVolumeMSB, value)))
+                }
+
+                events.append(.midi(eventTime, .programChange(channel, program)))
+            }
+        }
+
+        return events
+    }
+
+    // The exact pre-quantization velocity (see `velocity` in
+    // `Extra+DynamicMap.swift`) held at each `DynamicMap` entry that carries
+    // one, keyed by beat time so the note-emission loop can prefer it over
+    // `convertToMIDIKeyVelocity(_:)`'s re-derivation from `Dynamic`.
+    private static func _exactVelocityByBeatTime(_ dynamicMap: DynamicMap<BeatTime>) -> [BeatTime: MIDI.KeyVelocity] {
+        var result: [BeatTime: MIDI.KeyVelocity] = [:]
+
+        dynamicMap.forEach { _, beatTime, _, extras in
+            if let velocity = intValue(extras, .velocity),
+               let value = MIDI.KeyVelocity(uintValue: UInt(velocity)) {
+                result[beatTime] = value
+            }
+        }
+
+        return result
+    }
+
+    // `expressionValue` is additive expressive data with no rounding
+    // counterpart to fall back to (unlike `velocity`, which always has
+    // `Dynamic`'s own re-derivation to fall back to) — emitted only when
+    // present, never synthesized.
+    private static func _expressionEvents(_ dynamicMap: DynamicMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+        var events: [MIDI.Event] = []
+
+        dynamicMap.forEach { _, beatTime, _, extras in
+            if let expression = intValue(extras, .expressionValue),
+               let eventTime = convertToMIDIEventTime(beatTime, exportTickRate) {
+                let raw = UInt(expression)
+
+                if let msb = MIDIData1Value(uintValue: raw >> 7),
+                   let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
+                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerMSB, msb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerLSB, lsb)))
+                }
+            }
+        }
+
+        return events
+    }
+
     private static func _tempoEvents(from tempoMap: TempoMap) -> [MIDI.Event] {
         var events: [SMFEvent] = []
 
@@ -249,13 +382,17 @@ extension MIDI.Exporter {
         }
 
         // Collect the distinct beat times (last entry wins at any given
-        // beat time, per the step-change convention).
+        // beat time, per the step-change convention), along with the exact
+        // microseconds-per-quarter value (if any) held at each one.
         var anchorBeatTimes: [BeatTime] = []
+        var exactMicrosecondsByBeatTime: [BeatTime: Int] = [:]
 
-        tempoMap.forEach { _, beatTime, _, _ in
+        tempoMap.forEach { _, beatTime, _, extras in
             if anchorBeatTimes.last != beatTime {
                 anchorBeatTimes.append(beatTime)
             }
+
+            exactMicrosecondsByBeatTime[beatTime] = intValue(extras, .exactMicrosecondsPerQuarter)
         }
 
         // Build the ordered list of beat times to sample: the anchors
@@ -290,8 +427,10 @@ extension MIDI.Exporter {
             guard tempo != lastEmittedTempo
             else { continue }
 
+            let exactMidiTempo = exactMicrosecondsByBeatTime[sampleBeatTime].flatMap { MIDI.Tempo(uintValue: UInt($0)) }
+
             if let eventTime = convertToMIDIEventTime(sampleBeatTime, exportTickRate),
-               let midiTempo = convertToMIDITempo(tempo) {
+               let midiTempo = exactMidiTempo ?? convertToMIDITempo(tempo) {
                 events.append(.meta(eventTime, .tempo(midiTempo)))
 
                 lastEmittedTempo = tempo

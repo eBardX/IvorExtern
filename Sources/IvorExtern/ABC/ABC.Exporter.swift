@@ -23,6 +23,7 @@ extension ABC {
 
             fileprivate let attack: BeatTime
             fileprivate let duration: BeatDuration
+            fileprivate var extrasList: [Extras?]
             fileprivate var pitches: [IvorTuning.Pitch]
 
             fileprivate var end: BeatTime {
@@ -86,26 +87,28 @@ extension ABC.Exporter {
         guard !dynamicMap.isEmpty
         else { return [:] }
 
-        var entries: [(BeatTime, Dynamic)] = []
+        var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, _ in entries.append((time, dynamic)) }
+        dynamicMap.forEach { _, time, dynamic, extras in
+            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        }
 
         var annotations: [BeatTime: [ABCDecoration.Name]] = [:]
         var index = 0
 
         while index < entries.count {
-            let (time, dynamic) = entries[index]
+            let (time, dynamic, mark) = entries[index]
 
-            if index + 1 < entries.count, entries[index + 1].0 == time {
-                let (_, nextDynamic) = entries[index + 1]
+            if index + 1 < entries.count, entries[index + 1].time == time {
+                let (_, nextDynamic, nextMark) = entries[index + 1]
 
-                if let name = convertToABCDecorationName(nextDynamic) {
+                if let name = nextMark.flatMap({ ABCDecoration.Name(stringValue: $0) }) ?? convertToABCDecorationName(nextDynamic) {
                     annotations[time, default: []].append(name)
                 }
 
                 index += 2
             } else if index + 1 < entries.count {
-                let (endTime, endDynamic) = entries[index + 1]
+                let (endTime, endDynamic, _) = entries[index + 1]
                 let direction = endDynamic > dynamic ? "crescendo" : "diminuendo"
 
                 if let openName = ABCDecoration.Name(stringValue: direction + "("),
@@ -116,7 +119,7 @@ extension ABC.Exporter {
 
                 index += 2
             } else {
-                if let name = convertToABCDecorationName(dynamic) {
+                if let name = mark.flatMap({ ABCDecoration.Name(stringValue: $0) }) ?? convertToABCDecorationName(dynamic) {
                     annotations[time, default: []].append(name)
                 }
 
@@ -134,14 +137,16 @@ extension ABC.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, _ in
+        noteTable.forEach { _, attack, duration, startPitch, _, extras in
             if let last = events.last,
                last.attack == attack,
                last.duration == duration {
                 events[events.count - 1].pitches.append(startPitch)
+                events[events.count - 1].extrasList.append(extras)
             } else {
                 events.append(Event(attack: attack,
                                     duration: duration,
+                                    extrasList: [extras],
                                     pitches: [startPitch]))
             }
         }
@@ -149,16 +154,79 @@ extension ABC.Exporter {
         return events
     }
 
+    // A chord's decoration/slur markers apply to the whole group in ABC's
+    // own grammar (there's no per-note-within-a-chord decoration syntax),
+    // so a chord's markers are the union across every member pitch's own
+    // extras — a documented simplification for chords carrying different
+    // per-note articulations, not a bug: a single-note event (the common
+    // case) is unaffected.
+    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
+        extrasList.compactMap { $0?.elements }.flatMap { $0 }
+    }
+
+    // Decoration symbols (Tier 1 flags + the `articulation` catch-all) plus
+    // a `(` slur-start marker, both written immediately before a note/
+    // chord's own symbol(s) — only called for an event's *first* segment,
+    // never a tie-continuation.
+    private static func _leadingArticulationSymbols(_ extrasList: [Extras?]) -> [ABCSymbol] {
+        let elements = _unionElements(extrasList)
+        var symbols: [ABCSymbol] = []
+
+        for name in _decorationNames(elements) {
+            if let decoration = ABCDecoration(name: name) {
+                symbols.append(.decoration(decoration))
+            }
+        }
+
+        if elements.contains(where: { $0.name == Extra.slurStart.name }) {
+            symbols.append(.slur(.startRegular))
+        }
+
+        return symbols
+    }
+
+    // A `)` slur-end marker, written immediately after a note/chord's own
+    // symbol(s) — only called for an event's *last* segment.
+    private static func _trailingSlurEndSymbol(_ extrasList: [Extras?]) -> [ABCSymbol] {
+        _unionElements(extrasList).contains { $0.name == Extra.slurEnd.name } ? [.slur(.endRegular)] : []
+    }
+
+    // Tier 1 flags convert through `convertToABCDecorationName(_:)`; the
+    // `articulation` catch-all writes its own literal text back out
+    // verbatim (the same free-text round trip its own import side reads).
+    // `fingering` has no ABC representation to write to at all — per the
+    // candidates doc's own finding, ABC has no native fingering decoration
+    // — so a `fingering` extra is silently dropped on export, same as
+    // today.
+    private static func _decorationNames(_ elements: [Extra]) -> [ABCDecoration.Name] {
+        elements.compactMap { element in
+            if element.name == Extra.articulation.name,
+               case let .string(text)? = element.values.first {
+                return ABCDecoration.Name(stringValue: text)
+            }
+
+            return convertToABCDecorationName(element)
+        }
+    }
+
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, ABCDirective)] {
         var directives: [(BeatTime, ABCDirective)] = []
         let name = ABCDirective.Name(stringValue: "MIDI").require()
 
-        instrumentMap.forEach { _, time, instrument, _ in
-            guard let program = generalMIDIProgramNumber(name: instrument.stringValue)
+        instrumentMap.forEach { _, time, instrument, extras in
+            let exactProgram = intValue(extras, .midiProgram).map { $0 - 1 }
+
+            guard let program = exactProgram ?? generalMIDIProgramNumber(name: instrument.stringValue)
             else { return }
 
+            let value = if let channel = intValue(extras, .midiChannel) {
+                "program \(channel) \(program)"
+            } else {
+                "program \(program)"
+            }
+
             directives.append((time, ABCDirective(name: name,
-                                                  value: "program \(program)")))
+                                                  value: value)))
         }
 
         return directives
@@ -253,7 +321,15 @@ extension ABC.Exporter {
                                         .field(.unitNoteLength(ABCLength(numerator: 1,
                                                                          denominator: 4).require()))]
 
-        if let tempo = convertToABCTempo(tempoMap[.zero]) {
+        var tempoTextAtZero: String?
+
+        tempoMap.forEach { _, time, _, extras in
+            if time == .zero {
+                tempoTextAtZero = stringValue(extras, .tempoText)
+            }
+        }
+
+        if let tempo = convertToABCTempo(tempoMap[.zero], text: tempoTextAtZero) {
             header.append(.field(.tempo(tempo)))
         }
 
@@ -280,13 +356,7 @@ extension ABC.Exporter {
     // tuplet-scaled), gaps become rests, and every measure sums to exactly
     // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
     // duration becomes a tuplet-marked segment instead.
-    private static func _makePartBody(part: Part<BeatTime, Pitch>,
-                                      measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
-        let events = _events(part.noteTable)
-        let annotations = _dynamicAnnotations(part.dynamicMap)
-        let directives = _instrumentDirectives(part.instrumentMap)
-        let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
-
+    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
         var barTimes: [BeatTime] = []
         var barBeat: UInt = 4
 
@@ -295,6 +365,10 @@ extension ABC.Exporter {
             barBeat += 4
         }
 
+        return barTimes
+    }
+
+    private static func _boundaries(events: [Event], barTimes: [BeatTime], endTime: BeatTime) -> [BeatTime] {
         var boundaries: Set<BeatTime> = [.zero, endTime]
 
         for barTime in barTimes {
@@ -306,7 +380,17 @@ extension ABC.Exporter {
             boundaries.insert(event.end)
         }
 
-        let sortedBoundaries = boundaries.sorted()
+        return boundaries.sorted()
+    }
+
+    private static func _makePartBody(part: Part<BeatTime, Pitch>,
+                                      measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
+        let events = _events(part.noteTable)
+        let annotations = _dynamicAnnotations(part.dynamicMap)
+        let directives = _instrumentDirectives(part.instrumentMap)
+        let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
+        let barTimes = _barTimes(measureCount: measureCount)
+        let sortedBoundaries = _boundaries(events: events, barTimes: barTimes, endTime: endTime)
         var entries: [ABCBodyEntry] = []
         var pending: [ABCSymbol] = []
         var directiveIndex = 0
@@ -343,11 +427,20 @@ extension ABC.Exporter {
             let segmentDuration = BeatDuration(end.numberValue - start.numberValue)
 
             if let event = events.first(where: { $0.attack <= start && $0.end >= end }) {
+                let isFirstSegment = event.attack == start
                 let isLastSegment = event.end == end
+
+                if isFirstSegment {
+                    pending += _leadingArticulationSymbols(event.extrasList)
+                }
 
                 pending += try _makeSymbols(pitches: event.pitches,
                                             duration: segmentDuration,
                                             tie: !isLastSegment)
+
+                if isLastSegment {
+                    pending += _trailingSlurEndSymbol(event.extrasList)
+                }
             } else {
                 pending += try _makeRestSymbols(duration: segmentDuration)
             }

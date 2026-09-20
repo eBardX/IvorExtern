@@ -4,6 +4,7 @@ internal import IvorABC
 internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
+internal import XestiTools
 
 // The running resolution state threaded through one voice's walk, replacing
 // upstream's own resolution scope (macros, key/bar accidentals, meter, unit
@@ -60,9 +61,10 @@ extension ABC.Importer {
         internal var pendingBrokenRhythmRight: (numerator: UInt, denominator: UInt)?
         internal var pendingCrescendo: (beatTime: BeatTime, dynamic: Dynamic)?
         internal var pendingDiminuendo: (beatTime: BeatTime, dynamic: Dynamic)?
-        internal var pendingEvent: (attack: BeatTime, event: ABC.Event)?
+        internal var pendingEvent: (attack: BeatTime, event: ABC.Event, extras: [Extra])?
+        internal var pendingNoteExtras: [Extra] = []
         internal var pendingTuplet: (beatCount: UInt, noteCount: UInt, remainingCount: UInt)?
-        internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []
+        internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false
         internal var unitNoteLength: (numerator: UInt, denominator: UInt)
     }

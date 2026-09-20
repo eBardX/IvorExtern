@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-private import IvorMIDI
+internal import IvorMIDI
 
 extension MIDI {
 
@@ -16,6 +16,7 @@ extension MIDI {
         internal let key: MIDI.NoteNumber
         internal let offVelocity: MIDI.KeyVelocity
         internal let onVelocity: MIDI.KeyVelocity
+        internal let peakKeyPressure: MIDIData1Value?
         internal let startTime: MIDI.EventTime
     }
 }

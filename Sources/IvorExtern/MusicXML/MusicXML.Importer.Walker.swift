@@ -4,6 +4,7 @@ internal import IvorModel
 internal import IvorMusicXML
 internal import IvorTiming
 internal import IvorTuning
+internal import XestiTools
 
 // The `<backup>` / `<forward>` / `<chord>` time-cursor walk, one pass per
 // part, over the measures the `Plan` selects — ported from the resolving
@@ -99,7 +100,8 @@ extension MusicXML.Importer.Walker {
             for (pitch, entry) in pending {
                 table.insert(attack: entry.attack,
                              duration: entry.duration,
-                             pitch: pitch)
+                             pitch: pitch,
+                             extras: entry.extras)
             }
 
             context.noteTables[voiceID] = table
@@ -151,10 +153,14 @@ extension MusicXML.Importer.Walker {
 
     private static func _recordDirectionDynamic(_ dynamic: Dynamic,
                                                 at beatTime: BeatTime,
+                                                mark: String? = nil,
+                                                velocity: Int? = nil,
                                                 _ context: inout MusicXML.Importer.Context) {
         context.directionDynamicEvents.append(MusicXML.Importer.Context.DynamicEvent(beatTime: beatTime,
                                                                                      dynamic: dynamic,
-                                                                                     kind: .step))
+                                                                                     kind: .step,
+                                                                                     mark: mark,
+                                                                                     velocity: velocity))
 
         context.lastDirectionDynamic = dynamic
     }
@@ -169,7 +175,9 @@ extension MusicXML.Importer.Walker {
         guard let dynamic = convertToDynamic(note)
         else { return }
 
-        context.noteDynamicEvents[voiceID, default: []].append((beatTime: attack, dynamic: dynamic))
+        context.noteDynamicEvents[voiceID, default: []].append((beatTime: attack,
+                                                                dynamic: dynamic,
+                                                                velocity: convertToVelocity(note)))
     }
 
     private static func _scorePartsByID(_ score: MusicXML.Score) -> [String: MXLScorePart] {
@@ -229,14 +237,170 @@ extension MusicXML.Importer.Walker {
 
     // MARK: Private Instance Methods
 
+    // Unions two (optional) extras bags element-wise — used to accumulate
+    // articulation/ornament/fingering/slur markers across every leg of a
+    // tied note, previously lost on every leg but the one where the note
+    // table entry actually got inserted (see `EXTRAS_CANDIDATES.md`'s own
+    // note on this gap). A mark written on the middle leg of a three-note
+    // tie now survives to the final, single `NoteTable` entry the whole
+    // tie collapses into, same as one written on the first or last leg
+    // already did.
+    private static func _mergedExtras(_ lhs: Extras?, _ rhs: Extras?) -> Extras? {
+        switch (lhs, rhs) {
+        case (nil, nil):
+            nil
+
+        case let (lhs?, nil):
+            lhs
+
+        case let (nil, rhs?):
+            rhs
+
+        case let (lhs?, rhs?):
+            Extras(elements: lhs.elements + rhs.elements)
+        }
+    }
+
     // Folds a chord tone into the pitch table using its lead note's onset and
     // duration, or inserts (or defers, via `pendingTies`) a standalone note
     // or the lead note of a new chord.
+    // The Tier 1/catch-all articulation/ornament/technical vocabulary (see
+    // "Tier 1 — closed, shared-name bare flags" in `EXTRAS_CANDIDATES.md`),
+    // plus `fingering` and `slurStart`/`slurEnd`, read from one note's
+    // `<notations>`. Every item outside this closed set — the bulk of
+    // MusicXML's own ~60-case vocabulary, per the candidates doc's own
+    // finding — is left unattached rather than guessed at; only the
+    // `other…` free-text escape-hatch cases fall through to the
+    // `articulation` catch-all, matching how ABC's open decoration names do.
+    private static func _noteExtras(_ notations: [MXLNotations]) -> Extras? {
+        var elements: [Extra] = []
+
+        for notation in notations {
+            for item in notation.items {
+                switch item {
+                case let .articulations(articulations):
+                    elements += Self._articulationExtras(articulations.items)
+
+                case let .ornaments(ornaments):
+                    if let extra = Self._ornamentExtra(ornaments.content) {
+                        elements.append(extra)
+                    }
+
+                case let .technical(technical):
+                    elements += Self._technicalExtras(technical.items)
+
+                case .fermata:
+                    elements.append(.fermata)
+
+                case let .slur(slur):
+                    if let extra = Self._slurExtra(slur) {
+                        elements.append(extra)
+                    }
+
+                default:
+                    break
+                }
+            }
+        }
+
+        return elements.isEmpty ? nil : Extras(elements: elements)
+    }
+
+    private static func _articulationExtras(_ items: [MXLArticulations.Item]) -> [Extra] {
+        items.compactMap { item in
+            switch item {
+            case .accent:
+                .accent
+
+            case .breathMark:
+                .breathMark
+
+            case .staccato:
+                .staccato
+
+            case .strongAccent:
+                .marcato
+
+            case .tenuto:
+                .tenuto
+
+            case let .otherArticulation(text):
+                Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+            default:
+                nil
+            }
+        }
+    }
+
+    private static func _ornamentExtra(_ content: MXLOrnaments.Content) -> Extra? {
+        switch content {
+        case .invertedMordent,
+             .mordent:
+            .mordent
+
+        case .trillMark:
+            .trill
+
+        case .delayedInvertedTurn,
+             .delayedTurn,
+             .invertedTurn,
+             .turn:
+            .turn
+
+        case let .otherOrnament(text):
+            Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+        default:
+            nil
+        }
+    }
+
+    private static func _technicalExtras(_ items: [MXLTechnical.Item]) -> [Extra] {
+        items.compactMap { item in
+            switch item {
+            case .upBow:
+                .upBow
+
+            case .downBow:
+                .downBow
+
+            case .harmonic:
+                .harmonic
+
+            case let .fingering(fingering):
+                Extra(name: Extra.fingering.name, values: [.string(fingering.value)])
+
+            case let .otherTechnical(text):
+                Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+            default:
+                nil
+            }
+        }
+    }
+
+    private static func _slurExtra(_ slur: MXLSlur) -> Extra? {
+        let id = "\(slur.number.uintValue)"
+
+        return switch slur.kind {
+        case .start:
+            Extra(name: Extra.slurStart.name, values: [.string(id)])
+
+        case .stop:
+            Extra(name: Extra.slurEnd.name, values: [.string(id)])
+
+        case .continue:
+            nil
+        }
+    }
+
     private func _insert(_ pitch: IvorTuning.Pitch,
                          attack: BeatTime,
                          duration: BeatDuration,
                          tie: [MXLTie],
                          voiceID: String?,
+                         extras: Extras?,
                          _ context: inout MusicXML.Importer.Context) {
         let hasStart = tie.contains { $0.kind == .start }
         let hasStop = tie.contains { $0.kind == .stop }
@@ -244,6 +408,7 @@ extension MusicXML.Importer.Walker {
         if hasStop,
            var pending = context.pendingTies[voiceID]?[pitch] {
             pending.duration += duration
+            pending.extras = Self._mergedExtras(pending.extras, extras)
 
             if hasStart {
                 context.pendingTies[voiceID, default: [:]][pitch] = pending
@@ -252,7 +417,8 @@ extension MusicXML.Importer.Walker {
 
                 table.insert(attack: pending.attack,
                              duration: pending.duration,
-                             pitch: pitch)
+                             pitch: pitch,
+                             extras: pending.extras)
 
                 context.noteTables[voiceID] = table
                 context.pendingTies[voiceID]?[pitch] = nil
@@ -264,7 +430,7 @@ extension MusicXML.Importer.Walker {
         _ = context.noteTable(forVoice: voiceID)  // registers the voice even when deferred or folded
 
         if hasStart {
-            context.pendingTies[voiceID, default: [:]][pitch] = (attack, duration)
+            context.pendingTies[voiceID, default: [:]][pitch] = (attack, duration, extras)
 
             return
         }
@@ -273,7 +439,8 @@ extension MusicXML.Importer.Walker {
 
         table.insert(attack: attack,
                      duration: duration,
-                     pitch: pitch)
+                     pitch: pitch,
+                     extras: extras)
 
         context.noteTables[voiceID] = table
     }
@@ -310,7 +477,7 @@ extension MusicXML.Importer.Walker {
 
             if let sound = direction.sound,
                let pan = convertToPan(sound) {
-                context.panEvents.append((beatTime: beatTime, pan: pan))
+                context.panEvents.append((beatTime: beatTime, pan: pan, degree: convertToPanDegree(sound)))
             }
 
             // A `<sound>`'s own `tempo` — a MIDI-style playback hint — takes
@@ -326,7 +493,12 @@ extension MusicXML.Importer.Walker {
             // elsewhere — takes priority over this same direction's
             // visual-only `<dynamics>` mark.
             if let dynamic = direction.sound.flatMap(convertToDynamic) ?? convertToDynamic(direction) {
-                Self._recordDirectionDynamic(dynamic, at: beatTime, &context)
+                Self._recordDirectionDynamic(dynamic,
+                                             at: beatTime,
+                                             velocity: direction.sound.flatMap(convertToVelocity),
+                                             &context)
+            } else if let mark = dynamicMarkText(direction) {
+                Self._recordDirectionDynamic(context.lastDirectionDynamic, at: beatTime, mark: mark, &context)
             }
 
             if let wedge = extractWedge(direction) {
@@ -352,11 +524,11 @@ extension MusicXML.Importer.Walker {
             }
 
             if let pan = convertToPan(sound) {
-                context.panEvents.append((beatTime: beatTime, pan: pan))
+                context.panEvents.append((beatTime: beatTime, pan: pan, degree: convertToPanDegree(sound)))
             }
 
             if let dynamic = convertToDynamic(sound) {
-                Self._recordDirectionDynamic(dynamic, at: beatTime, &context)
+                Self._recordDirectionDynamic(dynamic, at: beatTime, velocity: convertToVelocity(sound), &context)
             }
         }
     }
@@ -438,6 +610,7 @@ extension MusicXML.Importer.Walker {
                         duration: convertToBeatDuration(context.lastDuration),
                         tie: tie,
                         voiceID: voiceID,
+                        extras: Self._noteExtras(note.notations),
                         &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)
@@ -455,6 +628,7 @@ extension MusicXML.Importer.Walker {
                         duration: convertToBeatDuration(duration),
                         tie: tie,
                         voiceID: voiceID,
+                        extras: Self._noteExtras(note.notations),
                         &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)

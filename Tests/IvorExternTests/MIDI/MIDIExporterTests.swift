@@ -139,6 +139,44 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_midiBankExtra_emitsBankSelectBeforeProgramChange() throws {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Vibraphone")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(131)])]))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        instrumentMap: instrumentMap)
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+        let events = sequence.tracks[1].events
+
+        let bankMSB = events.compactMap { event -> MIDIData1Value? in
+            guard case let .midi(_, .controlChange(_, .bankSelectMSB, value)) = event
+            else { return nil }
+
+            return value
+        }
+        let bankLSB = events.compactMap { event -> MIDIData1Value? in
+            guard case let .midi(_, .controlChange(_, .bankSelectLSB, value)) = event
+            else { return nil }
+
+            return value
+        }
+
+        // Bank 131, 1-based -> raw 130 -> MSB 1, LSB 2.
+        #expect(bankMSB == [MIDIData1Value(1)])
+        #expect(bankLSB == [MIDIData1Value(2)])
+
+        let bankIndex = events.firstIndex { if case .midi(_, .controlChange(_, .bankSelectMSB, _)) = $0 { true } else { false } }
+        let programIndex = events.firstIndex { if case .midi(_, .programChange) = $0 { true } else { false } }
+
+        #expect(try #require(bankIndex) < #require(programIndex))
+    }
+
+    @Test
     func convert_instrumentMap_unrecognizedName_omitsDirective() throws {
         var instrumentMap = InstrumentMap<BeatTime>()
 

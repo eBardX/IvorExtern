@@ -67,6 +67,44 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_dynamicMarkExtra_emitsFixedCaseItem() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0),
+                          dynamic: .mp,
+                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("sfz")])]))
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let marks = dynamicsItems(in: score)
+
+        #expect(marks.contains(.sfz))
+    }
+
+    @Test
+    func convert_dynamicMarkExtra_freeText_emitsOtherDynamics() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0),
+                          dynamic: .mp,
+                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("poco f")])]))
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let marks = dynamicsItems(in: score)
+
+        #expect(marks.contains(.otherDynamics(MXLOtherText(value: "poco f"))))
+    }
+
+    @Test
     func convert_distinctTimeDynamicPair_emitsWedge() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -155,6 +193,32 @@ extension MusicXMLExporterTests {
 
         #expect(scorePart.instrument.first?.name == "Acoustic Grand Piano")
         #expect(scorePart.group2.first?.midiInstrument?.midiProgram?.uintValue == 1)
+    }
+
+    @Test
+    func convert_instrumentMap_midiChannelAndBankExtras_emitMidiChannelAndBank() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(3)]),
+                                                           Extra(name: Extra.midiBank.name, values: [.int(131)])]))
+
+        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
+            guard case let .scorePart(scorePart) = item
+            else { return nil }
+
+            return scorePart
+        }.first)
+
+        #expect(scorePart.group2.first?.midiInstrument?.midiChannel?.uintValue == 3)
+        #expect(scorePart.group2.first?.midiInstrument?.midiBank?.uintValue == 131)
     }
 
     @Test

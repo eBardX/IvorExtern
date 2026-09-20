@@ -142,7 +142,9 @@ extension JohnnySonic.Importer {
 
             if let dynamic = convertToDynamic(note.volume) {
                 dynamicMap.insert(time: attackTime,
-                                  dynamic: dynamic)
+                                  dynamic: dynamic,
+                                  extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                                                                  values: [.int(min(127, max(0, Int((note.volume * 12.7).rounded()))))])]))
             }
 
             if let pan = convertToPan(note.location) {
@@ -189,7 +191,9 @@ extension JohnnySonic.Importer {
 
             if let dynamic = convertToDynamic(note.volume) {
                 dynamicMap.insert(time: attackTime,
-                                  dynamic: dynamic)
+                                  dynamic: dynamic,
+                                  extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                                                                  values: [.int(min(127, max(0, Int((note.volume * 12.7).rounded()))))])]))
             }
 
             if let pan = convertToPan(note.location) {
@@ -249,6 +253,15 @@ extension JohnnySonic.Importer {
         guard let lastBeat = beatTempos.keys.max()
         else { return TempoMap() }
 
+        var rampsByStartBeat: [Int: (initial: Double, final: Double, duration: Double)] = [:]
+
+        for command in commands {
+            guard case let .tempoLine(line) = command
+            else { continue }
+
+            rampsByStartBeat[Int(line.startBeat.rounded())] = (line.initialTempo, line.finalTempo, line.duration)
+        }
+
         var tempoMap = TempoMap()
         var heldTempo = Tempo.default
 
@@ -263,8 +276,18 @@ extension JohnnySonic.Importer {
 
             tempoMap.insert(beatTime: convertToBeatTime(Double(beat)),
                             tempo: heldTempo)
+
+            var extras: Extras?
+
+            if let ramp = rampsByStartBeat[beat] {
+                extras = Extras(elements: [Extra(name: Extra.rampInitialTempo.name, values: [.double(ramp.initial)]),
+                                           Extra(name: Extra.rampFinalTempo.name, values: [.double(ramp.final)]),
+                                           Extra(name: Extra.rampDuration.name, values: [.double(ramp.duration)])])
+            }
+
             tempoMap.insert(beatTime: convertToBeatTime(Double(beat)),
-                            tempo: tempo)
+                            tempo: tempo,
+                            extras: extras)
 
             heldTempo = tempo
         }

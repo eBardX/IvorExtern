@@ -71,6 +71,25 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_dynamicMarkExtra_emitsLiteralDecorationText() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0),
+                          dynamic: .mp,
+                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("sfz")])]))
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let decorations = decorations(in: tune)
+
+        #expect(decorations.contains { $0.name.stringValue == "sfz" })
+    }
+
+    @Test
     func convert_distinctTimeDynamicPair_emitsHairpin() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -138,6 +157,30 @@ extension ABCExporterTests {
 
         #expect(directive.name.stringValue.lowercased() == "midi")
         #expect(directive.value == "program 0")
+    }
+
+    @Test
+    func convert_instrumentMap_midiChannelExtra_emitsChannelToken() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(5)])]))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
+            guard case let .directive(directive) = entry
+            else { return nil }
+
+            return directive
+        }.first)
+
+        #expect(directive.value == "program 5 0")
     }
 
     @Test

@@ -41,16 +41,20 @@ extension ABCFunctionsTests {
     func convertToInstrument_programWithChannel_usesTrailingProgramNumber() throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "program 1 40")
+        let resolved = convertToInstrument(directive)
 
-        #expect(convertToInstrument(directive) == Instrument("Violin"))
+        #expect(resolved?.instrument == Instrument("Violin"))
+        #expect(resolved?.channel == 1)
     }
 
     @Test
     func convertToInstrument_programWithoutChannel_looksUpGeneralMIDIName() throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "program 40")
+        let resolved = convertToInstrument(directive)
 
-        #expect(convertToInstrument(directive) == Instrument("Violin"))
+        #expect(resolved?.instrument == Instrument("Violin"))
+        #expect(resolved?.channel == nil)
     }
 
     @Test

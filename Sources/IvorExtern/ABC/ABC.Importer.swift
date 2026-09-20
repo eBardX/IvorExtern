@@ -122,13 +122,17 @@ extension ABC.Importer {
                                   dynamic: event.dynamic)
 
             case .step:
-                if event.beatTime != .zero {
+                if event.mark == nil, event.beatTime != .zero {
                     dynamicMap.insert(time: event.beatTime,
                                       dynamic: prevDynamic)
                 }
 
                 dynamicMap.insert(time: event.beatTime,
-                                  dynamic: event.dynamic)
+                                  dynamic: event.dynamic,
+                                  extras: event.mark.map {
+                                      Extras(elements: [Extra(name: Extra.dynamicMark.name,
+                                                              values: [.string($0)])])
+                                  })
             }
 
             prevDynamic = event.dynamic
@@ -140,8 +144,14 @@ extension ABC.Importer {
     private static func _makeInstrumentMap(_ directive: ABCDirective?) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
 
-        if let directive, let instrument = convertToInstrument(directive) {
-            instrumentMap.insert(time: .zero, instrument: instrument)
+        if let directive, let resolved = convertToInstrument(directive) {
+            var elements = [Extra(name: Extra.midiProgram.name, values: [.int(resolved.program + 1)])]
+
+            if let channel = resolved.channel {
+                elements.append(Extra(name: Extra.midiChannel.name, values: [.int(channel)]))
+            }
+
+            instrumentMap.insert(time: .zero, instrument: resolved.instrument, extras: Extras(elements: elements))
         }
 
         return instrumentMap
@@ -153,7 +163,7 @@ extension ABC.Importer {
     // has to be reasserted at the change's own beat position before the new
     // tempo is inserted there too — otherwise the lookup would report the
     // new tempo one instant too early.
-    private static func _makeTempoMap(_ events: [(beatTime: BeatTime, tempo: Tempo)]) -> TempoMap {
+    private static func _makeTempoMap(_ events: [(beatTime: BeatTime, tempo: Tempo, text: String?)]) -> TempoMap {
         var tempoMap = TempoMap()
         var previousTempo: Tempo = .default
 
@@ -162,7 +172,11 @@ extension ABC.Importer {
                 tempoMap.insert(beatTime: event.beatTime, tempo: previousTempo)
             }
 
-            tempoMap.insert(beatTime: event.beatTime, tempo: event.tempo)
+            let extras = event.text.map {
+                Extras(elements: [Extra(name: Extra.tempoText.name, values: [.string($0)])])
+            }
+
+            tempoMap.insert(beatTime: event.beatTime, tempo: event.tempo, extras: extras)
             previousTempo = event.tempo
         }
 

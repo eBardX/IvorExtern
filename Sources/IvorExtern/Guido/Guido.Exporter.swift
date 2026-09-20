@@ -18,7 +18,7 @@ extension Guido {
         // MARK: Private Nested Types
 
         private enum DynamicAnnotation {
-            case mark(time: BeatTime, dynamic: Dynamic)
+            case mark(time: BeatTime, dynamic: Dynamic, mark: String?)
             case ramp(start: BeatTime, startDynamic: Dynamic, end: BeatTime, endDynamic: Dynamic, direction: GMNDynamicRamp.Direction)
         }
 
@@ -28,6 +28,7 @@ extension Guido {
 
             fileprivate let attack: BeatTime
             fileprivate let duration: BeatDuration
+            fileprivate var extrasList: [Extras?]
             fileprivate var pitches: [IvorTuning.Pitch]
 
             fileprivate var end: BeatTime {
@@ -110,7 +111,7 @@ extension Guido.Exporter {
 
         for annotation in annotations {
             switch annotation {
-            case let .mark(time, _):
+            case let .mark(time, _, _):
                 boundaries.insert(time)
 
             case let .ramp(start, _, end, _, _):
@@ -149,23 +150,25 @@ extension Guido.Exporter {
         guard !dynamicMap.isEmpty
         else { return [] }
 
-        var entries: [(BeatTime, Dynamic)] = []
+        var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, _ in entries.append((time, dynamic)) }
+        dynamicMap.forEach { _, time, dynamic, extras in
+            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        }
 
         var annotations: [DynamicAnnotation] = []
         var index = 0
 
         while index < entries.count {
-            let (time, dynamic) = entries[index]
+            let (time, dynamic, mark) = entries[index]
 
-            if index + 1 < entries.count, entries[index + 1].0 == time {
-                let (_, nextDynamic) = entries[index + 1]
+            if index + 1 < entries.count, entries[index + 1].time == time {
+                let (_, nextDynamic, nextMark) = entries[index + 1]
 
-                annotations.append(.mark(time: time, dynamic: nextDynamic))
+                annotations.append(.mark(time: time, dynamic: nextDynamic, mark: nextMark))
                 index += 2
             } else if index + 1 < entries.count {
-                let (endTime, endDynamic) = entries[index + 1]
+                let (endTime, endDynamic, _) = entries[index + 1]
                 let direction: GMNDynamicRamp.Direction = endDynamic > dynamic ? .crescendo : .diminuendo
 
                 annotations.append(.ramp(start: time,
@@ -175,7 +178,7 @@ extension Guido.Exporter {
                                          direction: direction))
                 index += 2
             } else {
-                annotations.append(.mark(time: time, dynamic: dynamic))
+                annotations.append(.mark(time: time, dynamic: dynamic, mark: mark))
                 index += 1
             }
         }
@@ -190,14 +193,16 @@ extension Guido.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, _ in
+        noteTable.forEach { _, attack, duration, startPitch, _, extras in
             if let last = events.last,
                last.attack == attack,
                last.duration == duration {
                 events[events.count - 1].pitches.append(startPitch)
+                events[events.count - 1].extrasList.append(extras)
             } else {
                 events.append(Event(attack: attack,
                                     duration: duration,
+                                    extrasList: [extras],
                                     pitches: [startPitch]))
             }
         }
@@ -205,15 +210,113 @@ extension Guido.Exporter {
         return events
     }
 
+    // See `ABC.Exporter._unionElements(_:)` — same chord-wide-union
+    // simplification, for the same reason (Guido's own tags apply to a
+    // whole chord group, not one member note).
+    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
+        extrasList.compactMap { $0?.elements }.flatMap { $0 }
+    }
+
+    // Wraps `symbols` (the event's own note/chord symbol(s)) one layer per
+    // Tier 1/fingering/breathMark extra present, innermost-first — only
+    // called for an event's *first* segment (a tie-continuation's own
+    // segments carry no repeated wrapping). `body:`-form tags are the only
+    // shape guidolib's own template gives most of these kinds — see
+    // `convertToGuidoTag(_:body:)`.
+    private static func _wrapArticulations(_ symbols: [GMNSymbol], _ extrasList: [Extras?]) -> [GMNSymbol] {
+        _unionElements(extrasList).reduce(symbols) { wrapped, element in
+            guard let tag = convertToGuidoTag(element, body: wrapped)
+            else { return wrapped }
+
+            return [.tag(tag)]
+        }
+    }
+
+    // A `\slurBegin:n` marker, written immediately before a note/chord's
+    // own symbol(s) (and any articulation wrapping above) — only called
+    // for an event's *first* segment. A `slurStart` extra with no
+    // parseable `.string` id (e.g. one that originated from ABC's bare-flag
+    // convention, carried across a cross-format conversion) is dropped
+    // rather than guessed at: Guido's own slur pairing is ident-based, not
+    // stack-based, so there's no positional fallback the way ABC's own
+    // export has.
+    private static func _leadingSlurStartSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
+        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurStart.name }),
+              case let .string(text)? = idText.values.first,
+              let uintValue = UInt(text),
+              let ident = GMNTag.Ident(uintValue: uintValue),
+              let slur = GMNSlur(ident: ident, span: .begin)
+        else { return [] }
+
+        return [.tag(.slur(slur))]
+    }
+
+    // A `\slurEnd:n` marker, written immediately after a note/chord's own
+    // symbol(s) — only called for an event's *last* segment. Same id-only
+    // requirement as `_leadingArticulationSymbols(_:)`.
+    private static func _trailingSlurEndSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
+        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurEnd.name }),
+              case let .string(text)? = idText.values.first,
+              let uintValue = UInt(text),
+              let ident = GMNTag.Ident(uintValue: uintValue),
+              let slur = GMNSlur(ident: ident, span: .end)
+        else { return [] }
+
+        return [.tag(.slur(slur))]
+    }
+
+    // One event's own segment symbols: articulation-wrapped note/chord
+    // symbols, with a leading `\slurBegin:n` on the event's first segment
+    // and a trailing `\slurEnd:n` on its last.
+    private static func _segmentSymbols(event: Event,
+                                        start: BeatTime,
+                                        end: BeatTime,
+                                        duration: BeatDuration) throws(Guido.Error) -> [GMNSymbol] {
+        var symbols: [GMNSymbol] = []
+        var noteSymbols = try _makeSymbols(pitches: event.pitches, duration: duration)
+
+        if event.attack == start {
+            noteSymbols = _wrapArticulations(noteSymbols, event.extrasList)
+            symbols += _leadingSlurStartSymbols(event.extrasList)
+        }
+
+        symbols += noteSymbols
+
+        if event.end == end {
+            symbols += _trailingSlurEndSymbols(event.extrasList)
+        }
+
+        return symbols
+    }
+
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, GMNInstrument)] {
         var directives: [(BeatTime, GMNInstrument)] = []
 
-        instrumentMap.forEach { _, time, instrument, _ in
-            directives.append((time, GMNInstrument(name: instrument.stringValue,
-                                                   midi: generalMIDIProgramNumber(name: instrument.stringValue))))
+        instrumentMap.forEach { _, time, instrument, extras in
+            let midi = intValue(extras, .midiProgram).map { $0 - 1 } ?? generalMIDIProgramNumber(name: instrument.stringValue)
+
+            directives.append((time, GMNInstrument(name: instrument.stringValue, midi: midi)))
         }
 
         return directives
+    }
+
+    // The `\intensity` tag one `.mark` annotation at `start` should emit, if
+    // any — a literal `dynamicMark` when the entry carried one, otherwise the
+    // numeric-level conversion. `nil` for a `.ramp` annotation (ramps are
+    // handled by `_wrapDynamicRamps` instead) or a `.mark` at a different
+    // time, and for either a mark or a level with no `GMNIntensity`
+    // equivalent.
+    private static func _intensity(for annotation: DynamicAnnotation, at start: BeatTime) -> GMNIntensity? {
+        guard case let .mark(time, dynamic, mark) = annotation,
+              time == start
+        else { return nil }
+
+        if let mark {
+            return GMNIntensity(type: mark)
+        }
+
+        return convertToGuidoIntensity(dynamic)
     }
 
     private static func _makeBody(work: Work,
@@ -299,9 +402,7 @@ extension Guido.Exporter {
             }
 
             for annotation in annotations {
-                if case let .mark(time, dynamic) = annotation,
-                   time == start,
-                   let intensity = convertToGuidoIntensity(dynamic) {
+                if let intensity = _intensity(for: annotation, at: start) {
                     symbols.append(.tag(.intensity(intensity)))
                 }
             }
@@ -311,7 +412,7 @@ extension Guido.Exporter {
 
             if let event = events.first(where: { $0.attack <= start && $0.end >= end }) {
                 tiedToNext = event.end != end
-                symbols += try _makeSymbols(pitches: event.pitches, duration: segmentDuration)
+                symbols += try _segmentSymbols(event: event, start: start, end: end, duration: segmentDuration)
             } else {
                 symbols += try _makeRestSymbols(duration: segmentDuration)
             }
@@ -407,8 +508,8 @@ extension Guido.Exporter {
     private static func _tempoDirectives(_ tempoMap: TempoMap) -> [(BeatTime, GMNTempo)] {
         var directives: [(BeatTime, GMNTempo)] = []
 
-        tempoMap.forEach { _, time, tempo, _ in
-            if let gTempo = convertToGuidoTempo(tempo) {
+        tempoMap.forEach { _, time, tempo, extras in
+            if let gTempo = convertToGuidoTempo(tempo, text: stringValue(extras, .tempoText)) {
                 directives.append((time, gTempo))
             }
         }

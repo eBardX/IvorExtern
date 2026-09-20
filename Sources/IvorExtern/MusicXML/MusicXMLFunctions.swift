@@ -4,9 +4,9 @@ internal import IvorModel
 internal import IvorMusicXML
 internal import IvorTiming
 internal import IvorTuning
+internal import XestiTools
 
 private import XestiNumbers
-private import XestiTools
 
 // MARK: Internal Functions
 
@@ -37,6 +37,56 @@ internal func convertToDynamic(_ direction: MXLDirection) -> Dynamic? {
     }
 
     return nil
+}
+
+// The literal text of a `<direction>`'s notated dynamics mark, for the case
+// `convertToDynamic(_ direction:)` above finds none of its items recognized
+// — the `dynamicMark` fallback (see `Extra+DynamicMap.swift`). Mirrors that
+// function's own iteration, returning the first unrecognized item's own
+// text instead of giving up entirely.
+internal func dynamicMarkText(_ direction: MXLDirection) -> String? {
+    for kind in direction.kind {
+        guard case let .dynamics(marks) = kind.content
+        else { continue }
+
+        for mark in marks {
+            for item in mark.items {
+                if let text = dynamicMarkText(item) {
+                    return text
+                }
+            }
+        }
+    }
+
+    return nil
+}
+
+// The literal text an unrecognized `MXLDynamics.Item` should carry as a
+// `dynamicMark`. `nil` for every item `convertToDynamic(_ item:)` already
+// converts to a `Dynamic` level.
+internal func dynamicMarkText(_ item: MXLDynamics.Item) -> String? {
+    switch item {
+    case let .otherDynamics(text):
+        text.value
+
+    case .fz:
+        "fz"
+
+    case .rf:
+        "rf"
+
+    case .rfz:
+        "rfz"
+
+    case .sf:
+        "sf"
+
+    case .sfz:
+        "sfz"
+
+    default:
+        nil
+    }
 }
 
 // `Dynamic` only names the ten levels from `pppp` through `ffff`, so a mark
@@ -121,6 +171,20 @@ internal func convertToDynamic(_ sound: MXLSound) -> Dynamic? {
     _convertToDynamic(percent: sound.dynamics)
 }
 
+// The pre-quantization velocity (MIDI-style 0-127 scale) a note's own
+// `dynamics` percent converts to, before `_convertToDynamic(percent:)`
+// compresses it down to one of `Dynamic`'s ten named levels. See `velocity`
+// in `Extra+DynamicMap.swift`.
+internal func convertToVelocity(_ note: MXLNote) -> Int? {
+    _convertToVelocity(percent: note.dynamics)
+}
+
+// The `<sound>` analog of `convertToVelocity(_ note:)` — see that function
+// and `convertToDynamic(_ sound:)`.
+internal func convertToVelocity(_ sound: MXLSound) -> Int? {
+    _convertToVelocity(percent: sound.dynamics)
+}
+
 // A part's own first `<score-instrument>` name wins — the same "first/
 // default instrument only" reading `determinePartName` already gives a
 // multi-instrument part elsewhere — falling back to its first `<midi-
@@ -192,6 +256,33 @@ internal func convertToMusicXMLDynamics(_ dynamic: Dynamic) -> MXLDynamics.Item?
     }
 }
 
+// A `dynamicMark` extra's literal text (see `Extra+DynamicMap.swift`),
+// re-emitted as a `<dynamics>` item: the fixed no-payload cases
+// (`sf`/`sfz`/`fz`/`rf`/`rfz`) round-trip to their exact same case when the
+// text matches one case-insensitively, and anything else becomes
+// `.otherDynamics` — the same free-text catch-all the importer read it from.
+internal func convertToMusicXMLDynamics(mark: String) -> MXLDynamics.Item {
+    switch mark.lowercased() {
+    case "fz":
+        .fz
+
+    case "rf":
+        .rf
+
+    case "rfz":
+        .rfz
+
+    case "sf":
+        .sf
+
+    case "sfz":
+        .sfz
+
+    default:
+        .otherDynamics(MXLOtherText(value: mark))
+    }
+}
+
 // The reverse of `convertToStandardPitch(_:)`. Throws
 // `MusicXML.Error.unrecognizedPitchOctave` for `Pitch.Octave`’s one value
 // (`-1`) that has no `MXLOctave` equivalent (`0...9`) — the same
@@ -207,8 +298,8 @@ internal func convertToMusicXMLPitch(_ pitch: Pitch) throws(MusicXML.Error) -> M
 // `convertToPan(_:)` falls back to reading — writing through the newer
 // midi-instrument `<pan>` element instead would require a `<score-instrument>`
 // identity this call site has no reason to mint just for a pan change.
-internal func convertToMusicXMLSound(pan: Pan) -> MXLSound {
-    MXLSound(pan: pan.numberValue.doubleValue * 90)
+internal func convertToMusicXMLSound(pan: Pan, degree: Double? = nil) -> MXLSound {
+    MXLSound(pan: degree ?? pan.numberValue.doubleValue * 90)
 }
 
 // `<sound tempo>` is already expressed directly in quarter notes per minute,
@@ -225,10 +316,20 @@ internal func convertToMusicXMLSound(tempo: Tempo) -> MXLSound {
 // models the stereo axis, so anything past ±90° clamps to the nearest hard
 // side rather than wrapping.
 internal func convertToPan(_ sound: MXLSound) -> Pan? {
-    guard let degrees = sound.group.lazy.compactMap(\.midiInstrument?.pan).first ?? sound.pan
+    guard let degrees = _convertToPanDegree(sound)
     else { return nil }
 
     return Pan(numberValue: Number(min(1, max(-1, degrees / 90))))
+}
+
+// The unclamped degree `convertToPan(_:)` clamps away — see `panDegree` in
+// `Extra+PanMap.swift`.
+internal func convertToPanDegree(_ sound: MXLSound) -> Double? {
+    _convertToPanDegree(sound)
+}
+
+private func _convertToPanDegree(_ sound: MXLSound) -> Double? {
+    sound.group.lazy.compactMap(\.midiInstrument?.pan).first ?? sound.pan
 }
 
 internal func convertToStandardPitch(_ pitch: MusicXML.Pitch) throws(MusicXML.Error) -> Pitch {
@@ -386,6 +487,16 @@ private func _convertToDynamic(percent: MXLNonNegativeDecimal?) -> Dynamic? {
     let velocity = percent / 100 * 90
 
     return Dynamic(numberValue: Number(min(1, velocity / 127)))
+}
+
+private func _convertToVelocity(percent: MXLNonNegativeDecimal?) -> Int? {
+    guard let percent,
+          percent > 0
+    else { return nil }
+
+    let velocity = percent / 100 * 90
+
+    return min(127, max(1, Int(velocity.rounded())))
 }
 
 // The reverse of `_convertToStandardPitchClass(_:_:)`'s accidental leg.
@@ -559,4 +670,105 @@ private func _quarterNoteFactor(_ beatUnit: MXLBeatUnit) -> Double {
     let dotFactor = 2 - 1 / Double(1 << beatUnit.dot)
 
     return base * dotFactor
+}
+
+// The reverse of `MusicXML.Importer.Walker._noteExtras(_:)`/
+// `_articulationExtras(_:)`/`_ornamentExtra(_:)`/`_technicalExtras(_:)` —
+// one Tier 1 flag/`fingering` converts to one `<notations>` item (position/
+// font/color/placement all default), matching that side's own closed
+// vocabulary case for case. The `articulation` catch-all round-trips
+// through `otherArticulation` — the same free-text escape hatch its
+// import side already reads — rather than being dropped the way Guido's
+// narrower vocabulary has to drop it.
+internal func convertToMusicXMLNotationItems(_ elements: [Extra]) -> [MXLNotations.Item] {
+    elements.compactMap { _convertToMusicXMLNotationItem($0) }
+}
+
+private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.Item? {
+    switch element.name {
+    case Extra.accent.name:
+        .articulations(MXLArticulations(items: [.accent(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.marcato.name:
+        .articulations(MXLArticulations(items: [.strongAccent(MXLStrongAccent())]))
+
+    case Extra.tenuto.name:
+        .articulations(MXLArticulations(items: [.tenuto(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.staccato.name:
+        .articulations(MXLArticulations(items: [.staccato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.breathMark.name:
+        .articulations(MXLArticulations(items: [.breathMark(MXLBreathMark(value: .empty))]))
+
+    case Extra.fermata.name:
+        .fermata(MXLFermata(value: .normal))
+
+    case Extra.harmonic.name:
+        .technical(MXLTechnical(items: [.harmonic(MXLHarmonic())]))
+
+    case Extra.pizzicato.name:
+        .technical(MXLTechnical(items: [.snapPizzicato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.upBow.name:
+        .technical(MXLTechnical(items: [.upBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.downBow.name:
+        .technical(MXLTechnical(items: [.downBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.trill.name:
+        .ornaments(MXLOrnaments(content: .trillMark(MXLEmptyTrillSound())))
+
+    case Extra.mordent.name:
+        .ornaments(MXLOrnaments(content: .mordent(MXLMordent())))
+
+    case Extra.turn.name:
+        .ornaments(MXLOrnaments(content: .turn(MXLHorizontalTurn())))
+
+    case Extra.fingering.name:
+        if case let .string(text)? = element.values.first {
+            .technical(MXLTechnical(items: [.fingering(MXLFingering(value: text))]))
+        } else {
+            nil
+        }
+
+    case Extra.articulation.name:
+        if case let .string(text)? = element.values.first {
+            .articulations(MXLArticulations(items: [.otherArticulation(MXLOtherPlacementText(value: text,
+                                                                                             printStyle: MXLPrintStyle()))]))
+        } else {
+            nil
+        }
+
+    default:
+        nil
+    }
+}
+
+// `slurStart`/`slurEnd` always carry a `.string` id on export (this
+// exporter never emits a bare-flag slur the way ABC's importer can read
+// one), since MusicXML's own `<slur number="n">` always has a number — a
+// missing or unparseable id contributes nothing. Split into a start-only
+// and end-only half (rather than one function emitting both) so the
+// caller can gate each independently by grid segment — see
+// `MusicXML.Exporter._makeNoteItems`'s own first-segment/last-segment
+// split.
+internal func convertToMusicXMLSlurStartItems(_ elements: [Extra]) -> [MXLNotations.Item] {
+    guard let element = elements.first(where: { $0.name == Extra.slurStart.name }),
+          case let .string(text)? = element.values.first,
+          let number = UInt(text),
+          let level = MXLNumberLevel(uintValue: number)
+    else { return [] }
+
+    return [.slur(MXLSlur(kind: .start, number: level))]
+}
+
+internal func convertToMusicXMLSlurEndItems(_ elements: [Extra]) -> [MXLNotations.Item] {
+    guard let element = elements.first(where: { $0.name == Extra.slurEnd.name }),
+          case let .string(text)? = element.values.first,
+          let number = UInt(text),
+          let level = MXLNumberLevel(uintValue: number)
+    else { return [] }
+
+    return [.slur(MXLSlur(kind: .stop, number: level))]
 }

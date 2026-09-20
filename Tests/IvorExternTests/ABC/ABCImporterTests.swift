@@ -117,6 +117,30 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_midiProgramDirectiveWithChannel_populatesMidiChannelExtra() throws {
+        let abc = """
+            X:1
+            T:Instrument Tune
+            L:1/4
+            K:C
+            %%MIDI program 5 40
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        var foundChannel: Int?
+
+        parts.first?.instrumentMap.forEach { _, _, _, extras in
+            foundChannel = intValue(extras, .midiChannel)
+        }
+
+        #expect(foundChannel == 5)
+    }
+
+    @Test
     func read_missingKeyField_throwsValidationFailure() {
         let abc = """
             X:1

@@ -18,7 +18,7 @@ extension MusicXML {
         // MARK: Internal Initializers
 
         internal init(id: String?,
-                      noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic)] = [],
+                      noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)] = [],
                       noteTable: NoteTable<BeatTime, IvorTuning.Pitch>) {
             self.id = id
             self.noteDynamicEvents = noteDynamicEvents
@@ -30,7 +30,7 @@ extension MusicXML {
         // The `<voice>` identifier, or `nil` for the implicit single voice of
         // a part that never declares one.
         internal let id: String?
-        internal let noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic)]
+        internal let noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]
         internal let noteTable: NoteTable<BeatTime, IvorTuning.Pitch>
     }
 }

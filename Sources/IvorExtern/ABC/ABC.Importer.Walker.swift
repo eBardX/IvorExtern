@@ -223,7 +223,9 @@ extension ABC.Importer.Walker {
 
         case let .tempo(tempo):
             if let converted = convertToTempo(tempo) {
-                context.tempoEvents.append((beatTime: context.currentBeatTime, tempo: converted))
+                context.tempoEvents.append((beatTime: context.currentBeatTime,
+                                            tempo: converted,
+                                            text: tempo.text?.nilIfEmpty))
             }
 
         case let .unitNoteLength(length):
@@ -239,6 +241,8 @@ extension ABC.Importer.Walker {
         guard let pending = context.pendingEvent
         else { return }
 
+        let extras: Extras? = pending.extras.isEmpty ? nil : Extras(elements: pending.extras)
+
         switch pending.event {
         case let .chord(chord):
             for note in chord.notes {
@@ -246,7 +250,8 @@ extension ABC.Importer.Walker {
 
                 try context.noteTable.insert(attack: pending.attack,
                                              duration: convertToBeatDuration(note.duration),
-                                             pitch: pitch)
+                                             pitch: pitch,
+                                             extras: extras)
             }
 
         case let .note(note):
@@ -254,7 +259,8 @@ extension ABC.Importer.Walker {
 
             try context.noteTable.insert(attack: pending.attack,
                                          duration: convertToBeatDuration(note.duration),
-                                         pitch: pitch)
+                                         pitch: pitch,
+                                         extras: extras)
 
         case .rest:
             break
@@ -275,10 +281,11 @@ extension ABC.Importer.Walker {
         if context.tieArmed,
            let pending = context.pendingEvent,
            let merged = rhythm.merged(pending.event, event) {
-            context.pendingEvent = (attack: pending.attack, event: merged)
+            context.pendingEvent = (attack: pending.attack, event: merged, extras: pending.extras)
         } else {
             try _commitPending(&context)
-            context.pendingEvent = (attack: context.currentBeatTime, event: event)
+            context.pendingEvent = (attack: context.currentBeatTime, event: event, extras: context.pendingNoteExtras)
+            context.pendingNoteExtras = []
         }
 
         context.tieArmed = event.tie != nil
@@ -314,6 +321,14 @@ extension ABC.Importer.Walker {
     // so `context.currentBeatTime` has to reflect them — but they may still
     // be sitting in `pendingEvent`, undecided until the walk sees whether the
     // next item ties onto them, unless this flushes them itself.
+    // Off-scale-but-still-dynamic accent words MusicXML's own fixed-case
+    // dynamics enumeration also names (`sf`, `sfz`, `fz`, `rf`, `rfz`, and
+    // near-spellings) — these stay on the `dynamicMark` path below rather
+    // than routing to the Tier 1/catch-all articulation vocabulary, since
+    // they genuinely are dynamics markings, just not one of `Dynamic`'s ten
+    // named levels.
+    private static let dynamicMarkWords: Set<String> = ["sf", "sfz", "sfzp", "sffz", "fz", "rf", "rfz", "ffz"]
+
     private func _handleDecoration(_ decoration: ABCDecoration,
                                    _ context: inout ABC.Importer.Context) throws(ABC.Error) {
         try _commitPending(&context)
@@ -324,6 +339,12 @@ extension ABC.Importer.Walker {
                                                                            kind: .step))
 
             context.lastDynamic = dynamic
+
+            return
+        }
+
+        if let articulation = convertToArticulationExtra(decoration.name) {
+            context.pendingNoteExtras.append(articulation)
 
             return
         }
@@ -356,7 +377,15 @@ extension ABC.Importer.Walker {
             context.pendingDiminuendo = nil
 
         default:
-            break
+            if Self.dynamicMarkWords.contains(decoration.name.stringValue.lowercased()) {
+                context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: context.currentBeatTime,
+                                                                               dynamic: context.lastDynamic,
+                                                                               kind: .step,
+                                                                               mark: decoration.name.stringValue))
+            } else {
+                context.pendingNoteExtras.append(Extra(name: Extra.articulation.name,
+                                                       values: [.string(decoration.name.stringValue)]))
+            }
         }
     }
 
@@ -409,11 +438,33 @@ extension ABC.Importer.Walker {
              .graceNotes,
              .inlineField,
              .overlay,
-             .shorthand,
-             .slur,
              .spacer,
              .variantEnding:
             break
+
+        case .shorthand(.dot):
+            context.pendingNoteExtras.append(.staccato)
+
+        case .shorthand:
+            break
+
+        case .slur(.startDotted),
+             .slur(.startRegular):
+            context.pendingNoteExtras.append(.slurStart)
+
+        case .slur(.endDotted),
+             .slur(.endRegular):
+            // The note this slur ends is still sitting in `pendingEvent`
+            // (a `)` is written immediately after it, and neither this case
+            // nor its siblings above flush) — appended directly to the
+            // pending note's own extras, unlike `slurStart`/the shorthand/
+            // decoration cases above, which stage onto `pendingNoteExtras`
+            // for the *next* note since their marker precedes it.
+            if let pending = context.pendingEvent {
+                context.pendingEvent = (attack: pending.attack,
+                                        event: pending.event,
+                                        extras: pending.extras + [.slurEnd])
+            }
 
         case .barLine:
             context.barAccidentals = [:]
@@ -422,7 +473,8 @@ extension ABC.Importer.Walker {
             if let pending = context.pendingEvent {
                 context.pendingEvent = (attack: pending.attack,
                                         event: rhythm.rescaled(pending.event,
-                                                               by: rhythm.brokenRhythmFactor(marker, isLeft: true)))
+                                                               by: rhythm.brokenRhythmFactor(marker, isLeft: true)),
+                                        extras: pending.extras)
             }
 
             context.pendingBrokenRhythmRight = rhythm.brokenRhythmFactor(marker, isLeft: false)

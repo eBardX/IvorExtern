@@ -39,14 +39,15 @@ extension Guido.Importer {
 
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
-        internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument)] = []
+        internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, midi: Int?)] = []
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp
         internal var lastOctave: GMNPitch.Octave = Self.defaultOctave
         internal var noteTable: NoteTable<BeatTime, Pitch> = NoteTable()
         internal var pendingDynamicRamps: [GMNTag.Ident?: (beatTime: BeatTime, dynamic: Dynamic, direction: GMNDynamicRamp.Direction)] = [:]
-        internal var pendingNote: (attackTime: BeatTime, notes: [Guido.Note])?
-        internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []
+        internal var pendingNote: (attackTime: BeatTime, notes: [Guido.Note], extras: [Extra])?
+        internal var pendingNoteExtras: [Extra] = []
+        internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false
     }
 }

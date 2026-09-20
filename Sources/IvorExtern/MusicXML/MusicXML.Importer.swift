@@ -156,11 +156,23 @@ extension MusicXML.Importer {
                 dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic)
 
             case .step:
-                if event.beatTime != .zero {
+                if event.mark == nil, event.beatTime != .zero {
                     dynamicMap.insert(time: event.beatTime, dynamic: previousDynamic)
                 }
 
-                dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic)
+                var elements: [Extra] = []
+
+                if let mark = event.mark {
+                    elements.append(Extra(name: Extra.dynamicMark.name, values: [.string(mark)]))
+                }
+
+                if let velocity = event.velocity {
+                    elements.append(Extra(name: Extra.velocity.name, values: [.int(velocity)]))
+                }
+
+                dynamicMap.insert(time: event.beatTime,
+                                  dynamic: event.dynamic,
+                                  extras: elements.isEmpty ? nil : Extras(elements: elements))
             }
 
             previousDynamic = event.dynamic
@@ -177,7 +189,7 @@ extension MusicXML.Importer {
     // note's own velocity — is a discrete point, not a ramp, so unlike
     // `_makeDirectionDynamicMap` above this one never needs a second,
     // plain-insert code path.
-    private static func _makeDynamicMap(_ events: [(beatTime: BeatTime, dynamic: Dynamic)]) -> DynamicMap<BeatTime> {
+    private static func _makeDynamicMap(_ events: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]) -> DynamicMap<BeatTime> {
         var dynamicMap = DynamicMap<BeatTime>()
         var previousDynamic: Dynamic = .mp
 
@@ -186,7 +198,11 @@ extension MusicXML.Importer {
                 dynamicMap.insert(time: event.beatTime, dynamic: previousDynamic)
             }
 
-            dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic)
+            let extras = event.velocity.map {
+                Extras(elements: [Extra(name: Extra.velocity.name, values: [.int($0)])])
+            }
+
+            dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic, extras: extras)
             previousDynamic = event.dynamic
         }
 
@@ -203,7 +219,39 @@ extension MusicXML.Importer {
         var instrumentMap = InstrumentMap<BeatTime>()
 
         if let instrument = convertToInstrument(scorePart) {
-            instrumentMap.insert(time: .zero, instrument: instrument)
+            var elements: [Extra] = []
+
+            if let channel = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiChannel).first {
+                elements.append(Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]))
+            }
+
+            if let bank = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiBank).first {
+                elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue))]))
+            }
+
+            // `<midi-program>`/`<midi-unpitched>` are already 1-based, per
+            // MusicXML's own convention — stored as declared, no `- 1`. See
+            // `midiProgram`'s "1-128 convention" decision in
+            // `EXTRAS_CANDIDATES.md`.
+            if let program = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiProgram).first {
+                elements.append(Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))]))
+            }
+
+            if let volume = scorePart.group2.lazy.compactMap(\.midiInstrument?.volume).first {
+                elements.append(Extra(name: Extra.midiVolume.name, values: [.double(volume)]))
+            }
+
+            if let elevation = scorePart.group2.lazy.compactMap(\.midiInstrument?.elevation).first {
+                elements.append(Extra(name: Extra.midiElevation.name, values: [.double(elevation)]))
+            }
+
+            if let unpitched = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiUnpitched).first {
+                elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
+            }
+
+            instrumentMap.insert(time: .zero,
+                                 instrument: instrument,
+                                 extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 
         return instrumentMap
@@ -214,7 +262,7 @@ extension MusicXML.Importer {
     // a time, so the pan in effect immediately before a change has to be
     // reasserted at the change's own beat position before the new pan is
     // inserted there too.
-    private static func _makePanMap(_ events: [(beatTime: BeatTime, pan: Pan)]) -> PanMap<BeatTime> {
+    private static func _makePanMap(_ events: [(beatTime: BeatTime, pan: Pan, degree: Double?)]) -> PanMap<BeatTime> {
         var panMap = PanMap<BeatTime>()
         var previousPan: Pan = .center
 
@@ -223,7 +271,11 @@ extension MusicXML.Importer {
                 panMap.insert(time: event.beatTime, pan: previousPan)
             }
 
-            panMap.insert(time: event.beatTime, pan: event.pan)
+            let extras = event.degree.map {
+                Extras(elements: [Extra(name: Extra.panDegree.name, values: [.double($0)])])
+            }
+
+            panMap.insert(time: event.beatTime, pan: event.pan, extras: extras)
             previousPan = event.pan
         }
 

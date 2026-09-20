@@ -49,11 +49,18 @@ extension JohnnySonic.Exporter {
         }
 
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
+        var exactVolumeByBeatTime: [BeatTime: Double] = [:]
+
+        part.dynamicMap.forEach { _, beatTime, _, extras in
+            if let velocity = intValue(extras, .velocity) {
+                exactVolumeByBeatTime[beatTime] = Double(velocity) / 12.7
+            }
+        }
 
         part.noteTable.forEach { _, btime, bdur, sfreq, efreq, _ in
             let startBeat  = convertToJohnnySonicBeat(btime)
             let duration   = convertToJohnnySonicDuration(bdur)
-            let volume     = convertToJohnnySonicVolume(part.dynamicMap[btime])
+            let volume     = exactVolumeByBeatTime[btime] ?? convertToJohnnySonicVolume(part.dynamicMap[btime])
             let location   = convertToJohnnySonicLocation(part.panMap[btime])
             let startPitch = convertToJohnnySonicPitch(sfreq)
             let endPitch   = convertToJohnnySonicPitch(efreq)
@@ -82,11 +89,18 @@ extension JohnnySonic.Exporter {
         }
 
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
+        var exactVolumeByBeatTime: [BeatTime: Double] = [:]
+
+        part.dynamicMap.forEach { _, beatTime, _, extras in
+            if let velocity = intValue(extras, .velocity) {
+                exactVolumeByBeatTime[beatTime] = Double(velocity) / 12.7
+            }
+        }
 
         part.noteTable.forEach { _, btime, bdur, snnum, ennum, _ in
             let startBeat  = convertToJohnnySonicBeat(btime)
             let duration   = convertToJohnnySonicDuration(bdur)
-            let volume     = convertToJohnnySonicVolume(part.dynamicMap[btime])
+            let volume     = exactVolumeByBeatTime[btime] ?? convertToJohnnySonicVolume(part.dynamicMap[btime])
             let location   = convertToJohnnySonicLocation(part.panMap[btime])
             let startPitch = convertToJohnnySonicPitch(snnum)
             let endPitch   = convertToJohnnySonicPitch(ennum)
@@ -139,14 +153,23 @@ extension JohnnySonic.Exporter {
                                             finalTempo: tempo))]
         }
 
-        var tmpSeq: [(BeatTime, Tempo)] = []
+        var tmpSeq: [(BeatTime, Tempo, Extras?)] = []
 
-        tempoMap.forEach { _, btime, tempo, _ in
-            tmpSeq.append((btime, tempo))
+        tempoMap.forEach { _, btime, tempo, extras in
+            tmpSeq.append((btime, tempo, extras))
         }
 
         var commands: [DKMCommand] = zip(tmpSeq.dropLast(),
                                          tmpSeq.dropFirst()).compactMap { elt in
+            if let initial = doubleValue(elt.0.2, .rampInitialTempo),
+               let final = doubleValue(elt.0.2, .rampFinalTempo),
+               let duration = doubleValue(elt.0.2, .rampDuration) {
+                return .tempoLine(DKMTempoLine(startBeat: convertToJohnnySonicBeat(elt.0.0),
+                                               duration: duration,
+                                               initialTempo: initial,
+                                               finalTempo: final))
+            }
+
             let startBeat  = convertToJohnnySonicBeat(elt.0.0)
             let endBeat    = convertToJohnnySonicBeat(elt.1.0)
             let duration   = endBeat - startBeat

@@ -112,6 +112,45 @@ extension CrossFormatRoundTripTests {
         expectNoteTablesMatch(abcPart.noteTable, table)
     }
 
+    // `midiProgram` is stored on the 1-128 convention (see `EXTRAS_CANDIDATES.md`)
+    // regardless of source format — this confirms ABC and Guido, whose
+    // program-number wire conventions are both 0-based, agree on the same
+    // 1-based extra value after import.
+    @Test
+    func crossFormat_midiProgram_consistentAcrossABCAndGuido() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
+
+        let part = Part(name: "Solo", noteTable: table, instrumentMap: instrumentMap)
+        let work = Work(name: "Program", content: .standardBeat([part], TempoMap()))
+
+        let viaABC = try roundTrip(work,
+                                   exporter: ABC.Exporter(),
+                                   importer: ABC.Importer(),
+                                   fileFormat: .abc)
+        let abcPart = try namedStandardPart(viaABC, "Solo")
+
+        let viaGuido = try roundTrip(work,
+                                     exporter: Guido.Exporter(),
+                                     importer: Guido.Importer(),
+                                     fileFormat: .gmn)
+        let guidoPart = try #require(standardBeatParts(of: viaGuido)?.first)
+
+        var abcProgram: Int?
+        var guidoProgram: Int?
+
+        abcPart.instrumentMap.forEach { _, _, _, extras in abcProgram = intValue(extras, .midiProgram) }
+        guidoPart.instrumentMap.forEach { _, _, _, extras in guidoProgram = intValue(extras, .midiProgram) }
+
+        #expect(abcProgram != nil)
+        #expect(abcProgram == guidoProgram)
+    }
+
     @Test
     func crossFormat_musicXMLToMIDI_preservesNotes() throws {
         var table = NoteTable<BeatTime, Pitch>()

@@ -174,6 +174,73 @@ extension ABCRoundTripTests {
     }
 
     @Test
+    func roundTrip_tempoText_preservesLabel() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: BeatTime(0),
+                        tempo: Tempo(120),
+                        extras: Extras(elements: [Extra(name: Extra.tempoText.name, values: [.string("Allegro")])]))
+
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap))
+
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let recoveredTempoMap = try #require(recovered.tempoMap)
+
+        var foundText: String?
+
+        recoveredTempoMap.forEach { _, time, _, extras in
+            if time == BeatTime(0) {
+                foundText = stringValue(extras, .tempoText)
+            }
+        }
+
+        #expect(foundText == "Allegro")
+    }
+
+    @Test
+    func roundTrip_articulationAndSlur_preservesFlags() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: Extras(elements: [Extra(name: Extra.accent.name, values: []),
+                                               Extra(name: Extra.slurStart.name, values: [])]))
+        table.insert(attack: BeatTime(1),
+                     duration: BeatDuration(1),
+                     pitch: "D4",
+                     extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [])]))
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let recoveredPart = try namedStandardPart(recovered, "Piano")
+
+        var flags: [(accent: Bool, slurStart: Bool, slurEnd: Bool)] = []
+
+        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
+            flags.append((hasFlag(extras, .accent), hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0].accent)
+        #expect(flags[0].slurStart)
+        #expect(flags[1].slurEnd)
+    }
+
+    @Test
     func roundTrip_tripletNotes_preservesDurations() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

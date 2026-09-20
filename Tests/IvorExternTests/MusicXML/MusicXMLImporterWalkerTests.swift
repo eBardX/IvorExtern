@@ -123,6 +123,38 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_directionDynamics_unrecognizedMark_recordsMarkedStepAtPreviousLevel() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <direction><direction-type><dynamics><sf/></dynamics></direction-type></direction>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+
+        #expect(results.first?.directionDynamicEvents.count == 1)
+        #expect(results.first?.directionDynamicEvents.first?.beatTime == .zero)
+        #expect(results.first?.directionDynamicEvents.first?.dynamic == .mp)
+        #expect(results.first?.directionDynamicEvents.first?.kind == .step)
+        #expect(results.first?.directionDynamicEvents.first?.mark == "sf")
+    }
+
+    @Test
     func walk_directionSoundDynamics_takesPrecedenceOverNotatedMark() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>

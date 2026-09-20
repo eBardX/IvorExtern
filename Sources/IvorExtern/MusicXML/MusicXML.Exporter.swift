@@ -18,7 +18,7 @@ extension MusicXML {
         // MARK: Private Nested Types
 
         private enum DynamicAnnotation {
-            case mark(time: BeatTime, dynamic: Dynamic)
+            case mark(time: BeatTime, dynamic: Dynamic, mark: String?)
             case ramp(start: BeatTime, startDynamic: Dynamic, end: BeatTime, endDynamic: Dynamic, kind: MXLWedge.Kind)
         }
 
@@ -28,6 +28,7 @@ extension MusicXML {
 
             fileprivate let attack: BeatTime
             fileprivate let duration: BeatDuration
+            fileprivate var extrasList: [Extras?]
             fileprivate var pitches: [IvorTuning.Pitch]
 
             fileprivate var end: BeatTime {
@@ -100,7 +101,7 @@ extension MusicXML.Exporter {
     // line split into per-measure, tied segments.
     private static func _boundaries(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan)],
+                                    pans: [(BeatTime, Pan, Double?)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: [BeatTime],
                                     endTime: BeatTime) -> [BeatTime] {
@@ -119,13 +120,13 @@ extension MusicXML.Exporter {
             boundaries.insert(time)
         }
 
-        for (time, _) in pans {
+        for (time, _, _) in pans {
             boundaries.insert(time)
         }
 
         for annotation in annotations {
             switch annotation {
-            case let .mark(time, _):
+            case let .mark(time, _, _):
                 boundaries.insert(time)
 
             case let .ramp(start, _, end, _, _):
@@ -207,23 +208,25 @@ extension MusicXML.Exporter {
         guard !dynamicMap.isEmpty
         else { return [] }
 
-        var entries: [(BeatTime, Dynamic)] = []
+        var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, _ in entries.append((time, dynamic)) }
+        dynamicMap.forEach { _, time, dynamic, extras in
+            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        }
 
         var annotations: [DynamicAnnotation] = []
         var index = 0
 
         while index < entries.count {
-            let (time, dynamic) = entries[index]
+            let (time, dynamic, mark) = entries[index]
 
-            if index + 1 < entries.count, entries[index + 1].0 == time {
-                let (_, nextDynamic) = entries[index + 1]
+            if index + 1 < entries.count, entries[index + 1].time == time {
+                let (_, nextDynamic, nextMark) = entries[index + 1]
 
-                annotations.append(.mark(time: time, dynamic: nextDynamic))
+                annotations.append(.mark(time: time, dynamic: nextDynamic, mark: nextMark))
                 index += 2
             } else if index + 1 < entries.count {
-                let (endTime, endDynamic) = entries[index + 1]
+                let (endTime, endDynamic, _) = entries[index + 1]
                 let kind: MXLWedge.Kind = endDynamic > dynamic ? .crescendo : .diminuendo
 
                 annotations.append(.ramp(start: time,
@@ -233,7 +236,7 @@ extension MusicXML.Exporter {
                                          kind: kind))
                 index += 2
             } else {
-                annotations.append(.mark(time: time, dynamic: dynamic))
+                annotations.append(.mark(time: time, dynamic: dynamic, mark: mark))
                 index += 1
             }
         }
@@ -248,14 +251,16 @@ extension MusicXML.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, _ in
+        noteTable.forEach { _, attack, duration, startPitch, _, extras in
             if let last = events.last,
                last.attack == attack,
                last.duration == duration {
                 events[events.count - 1].pitches.append(startPitch)
+                events[events.count - 1].extrasList.append(extras)
             } else {
                 events.append(Event(attack: attack,
                                     duration: duration,
+                                    extrasList: [extras],
                                     pitches: [startPitch]))
             }
         }
@@ -269,12 +274,12 @@ extension MusicXML.Exporter {
     // change, all of which have a `<direction>`/`<sound>` home mid-measure)
     // has no lossless home in this exporter and is dropped after the first
     // entry.
-    private static func _firstInstrument(_ instrumentMap: InstrumentMap<BeatTime>) -> Instrument? {
-        var first: Instrument?
+    private static func _firstInstrument(_ instrumentMap: InstrumentMap<BeatTime>) -> (instrument: Instrument, extras: Extras?)? {
+        var first: (instrument: Instrument, extras: Extras?)?
 
-        instrumentMap.forEach { _, _, instrument, _ in
+        instrumentMap.forEach { _, _, instrument, extras in
             if first == nil {
-                first = instrument
+                first = (instrument, extras)
             }
         }
 
@@ -330,7 +335,7 @@ extension MusicXML.Exporter {
     // direction-level mark once any one note carried its own velocity.
     private static func _makeChunks(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan)],
+                                    pans: [(BeatTime, Pan, Double?)],
                                     annotations: [DynamicAnnotation],
                                     sortedBoundaries: [BeatTime],
                                     divisions: Int) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
@@ -374,7 +379,7 @@ extension MusicXML.Exporter {
     private static func _makeDirectionItems(at start: BeatTime,
                                             tempos: [(BeatTime, Tempo)],
                                             tempoIndex: inout Int,
-                                            pans: [(BeatTime, Pan)],
+                                            pans: [(BeatTime, Pan, Double?)],
                                             panIndex: inout Int,
                                             annotations: [DynamicAnnotation],
                                             ramps: [BeatTime: Ramp]) -> [MXLMusicItem] {
@@ -386,14 +391,19 @@ extension MusicXML.Exporter {
         }
 
         while panIndex < pans.count, pans[panIndex].0 <= start {
-            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(pan: pans[panIndex].1))))
+            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(pan: pans[panIndex].1,
+                                                                               degree: pans[panIndex].2))))
             panIndex += 1
         }
 
         for annotation in annotations {
-            if case let .mark(time, dynamic) = annotation,
-               time == start,
-               let item = convertToMusicXMLDynamics(dynamic) {
+            guard case let .mark(time, dynamic, mark) = annotation,
+                  time == start
+            else { continue }
+
+            if let mark {
+                items.append(.direction(_makeDynamicsDirection(convertToMusicXMLDynamics(mark: mark))))
+            } else if let item = convertToMusicXMLDynamics(dynamic) {
                 items.append(.direction(_makeDynamicsDirection(item)))
             }
         }
@@ -421,32 +431,56 @@ extension MusicXML.Exporter {
     // Both the sound tie (`MXLTie`, inside `content`) and the notated tie
     // (`MXLTied`, inside `notations`) are written together, since MusicXML
     // keeps the two independent and an importer or renderer may read either.
+    // `extrasList` (per-pitch, parallel to the pitches this event's
+    // segments share) only contributes articulation/ornament/technical/
+    // fingering items on the segment where `isFirstSegment` is true (a
+    // tied-from-previous continuation never repeats them) and a
+    // `slurStart`/`slurEnd` item on whichever of `isFirstSegment`/
+    // `isLastSegment` matches — the same first/last-segment gating
+    // `ABC.Exporter`/`Guido.Exporter` use, adapted to MusicXML's one-
+    // `<notations>`-block-per-note shape instead of a symbol stream.
+    // Every pitch in a chord shares the same union of markers — see
+    // `ABC.Exporter._unionElements(_:)` for why a chord-wide union, not a
+    // per-pitch split, is this vocabulary's accepted chord simplification.
     private static func _makeNoteItems(pitches: [Pitch],
                                        duration: MXLPositiveDivisions,
                                        tiedFromPrevious: Bool,
-                                       tiedToNext: Bool) throws(MusicXML.Error) -> [MXLMusicItem] {
+                                       tiedToNext: Bool,
+                                       extrasList: [Extras?],
+                                       isFirstSegment: Bool,
+                                       isLastSegment: Bool) throws(MusicXML.Error) -> [MXLMusicItem] {
         var items: [MXLMusicItem] = []
+        let elements = extrasList.compactMap { $0?.elements }.flatMap { $0 }
 
         for (index, pitch) in pitches.enumerated() {
             let mxlPitch = try convertToMusicXMLPitch(pitch)
 
             var ties: [MXLTie] = []
-            var tiedItems: [MXLNotations.Item] = []
+            var notationItems: [MXLNotations.Item] = []
 
             if tiedFromPrevious {
                 ties.append(MXLTie(kind: .stop))
-                tiedItems.append(.tied(MXLTied(kind: .stop)))
+                notationItems.append(.tied(MXLTied(kind: .stop)))
             }
 
             if tiedToNext {
                 ties.append(MXLTie(kind: .start))
-                tiedItems.append(.tied(MXLTied(kind: .start)))
+                notationItems.append(.tied(MXLTied(kind: .start)))
+            }
+
+            if isFirstSegment {
+                notationItems += convertToMusicXMLNotationItems(elements)
+                notationItems += convertToMusicXMLSlurStartItems(elements)
+            }
+
+            if isLastSegment {
+                notationItems += convertToMusicXMLSlurEndItems(elements)
             }
 
             let note = MXLNote(content: .regularNote(fullNote: MXLFullNote(isChord: index > 0, content: .pitch(mxlPitch)),
                                                      duration: duration,
                                                      tie: ties),
-                               notations: tiedItems.isEmpty ? [] : [MXLNotations(items: tiedItems)])
+                               notations: notationItems.isEmpty ? [] : [MXLNotations(items: notationItems)])
 
             items.append(.note(note))
         }
@@ -497,14 +531,29 @@ extension MusicXML.Exporter {
         var instruments: [MXLScoreInstrument] = []
         var group2: [MusicXML.ScorePart.Group2] = []
 
-        if let instrument = _firstInstrument(part.instrumentMap) {
+        if let first = _firstInstrument(part.instrumentMap) {
             let instrumentID = id + "-I1"
 
-            instruments.append(MXLScoreInstrument(id: instrumentID, name: instrument.stringValue))
+            instruments.append(MXLScoreInstrument(id: instrumentID, name: first.instrument.stringValue))
 
-            if let program = generalMIDIProgramNumber(name: instrument.stringValue),
-               let midiProgram = MXLMidi128(uintValue: UInt(program + 1)) {
-                group2.append(MusicXML.ScorePart.Group2(midiInstrument: MXLMidiInstrument(id: instrumentID, midiProgram: midiProgram)))
+            let exactProgram = intValue(first.extras, .midiProgram)
+            let derivedProgram = generalMIDIProgramNumber(name: first.instrument.stringValue).map { $0 + 1 }
+
+            if let program = exactProgram ?? derivedProgram,
+               let midiProgram = MXLMidi128(uintValue: UInt(program)) {
+                let midiChannel = intValue(first.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
+                let midiBank = intValue(first.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
+                let midiUnpitched = intValue(first.extras, .midiUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
+                let volume = doubleValue(first.extras, .midiVolume)
+                let elevation = doubleValue(first.extras, .midiElevation)
+
+                group2.append(MusicXML.ScorePart.Group2(midiInstrument: MXLMidiInstrument(id: instrumentID,
+                                                                                          midiChannel: midiChannel,
+                                                                                          midiBank: midiBank,
+                                                                                          midiProgram: midiProgram,
+                                                                                          midiUnpitched: midiUnpitched,
+                                                                                          volume: volume,
+                                                                                          elevation: elevation)))
             }
         }
 
@@ -532,7 +581,10 @@ extension MusicXML.Exporter {
         return try _makeNoteItems(pitches: event.pitches,
                                   duration: mxlDuration,
                                   tiedFromPrevious: event.attack != start,
-                                  tiedToNext: event.end != end)
+                                  tiedToNext: event.end != end,
+                                  extrasList: event.extrasList,
+                                  isFirstSegment: event.attack == start,
+                                  isLastSegment: event.end == end)
     }
 
     // A `<direction>` requires at least one `<direction-type>` child even
@@ -569,10 +621,10 @@ extension MusicXML.Exporter {
         return max(1, UInt(measures))
     }
 
-    private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan)] {
-        var directives: [(BeatTime, Pan)] = []
+    private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan, Double?)] {
+        var directives: [(BeatTime, Pan, Double?)] = []
 
-        panMap.forEach { _, time, pan, _ in directives.append((time, pan)) }
+        panMap.forEach { _, time, pan, extras in directives.append((time, pan, doubleValue(extras, .panDegree))) }
 
         return directives
     }

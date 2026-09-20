@@ -20,7 +20,7 @@ extension MIDIImporterContextTests {
         let beatMap = try MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
         var context = MIDI.Importer.Context(beatMap: beatMap)
 
-        context.handlePan(SMFEventTime(0), MIDI.PanValue(64))
+        context.handlePan(SMFEventTime(0), MIDI.PanValue(64), nil)
 
         #expect(!context.panMap.isEmpty)
     }

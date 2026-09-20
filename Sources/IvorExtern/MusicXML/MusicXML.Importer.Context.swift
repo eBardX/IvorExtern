@@ -4,6 +4,7 @@ internal import IvorModel
 internal import IvorMusicXML
 internal import IvorTiming
 internal import IvorTuning
+internal import XestiTools
 
 // The running resolution scope threaded through one part's walk, across every
 // measure the `Plan` visits (a measure may be visited more than once, for a
@@ -58,10 +59,10 @@ extension MusicXML.Importer {
         internal var lastDuration: MusicXML.Duration = .zero
         internal var measureAdvance: MusicXML.Duration = .zero
         internal var measureStart: MusicXML.Duration = .zero
-        internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic)]] = [:]
+        internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]] = [:]
         internal var noteTables: [String?: NoteTable<BeatTime, IvorTuning.Pitch>] = [:]
-        internal var panEvents: [(beatTime: BeatTime, pan: Pan)] = []
-        internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration)]] = [:]
+        internal var panEvents: [(beatTime: BeatTime, pan: Pan, degree: Double?)] = []
+        internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration, extras: Extras?)]] = [:]
         internal var pendingWedges: [MXLNumberLevel?: (beatTime: BeatTime, dynamic: Dynamic, kind: MXLWedge.Kind)] = [:]
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []
         internal var times: [UInt?: MXLTime] = [:]
