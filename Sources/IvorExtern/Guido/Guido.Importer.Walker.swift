@@ -15,11 +15,13 @@ private import XestiTools
 // inline with a cycle guard (`_expandVariable`/`_expandedSymbols`), and tied
 // notes/chords coalesced into a single table entry via `Context`'s
 // `pendingNote`/`tieArmed` slots rather than as a separate post-pass over an
-// intermediate event stream. Grace notes, tablature attachments, and the
-// generic tag-passthrough lane remain out of scope — every tag other than
-// `\tie`, `\tempo`, `\intensity`, and `\crescendo`/`\diminuendo` is inert
-// here, contributing nothing beyond closing out whatever note/chord it
-// interrupts.
+// intermediate event stream. Grace notes and cue notes remain out of scope —
+// each carries its notes as a body, like `\beam`/`\tuplet`/`\lyrics` and
+// friends do, but their timing/staging semantics aren't implemented, so both
+// stay inert, contributing nothing beyond closing out whatever note/chord
+// they interrupt. Every other bodied tag is a transparent wrapper: its body
+// is walked as if the tag weren't there, so the notes it covers land in the
+// table same as unwrapped ones.
 //
 // `$variable` expansion has no access to `GMNVariable`'s declaration-time
 // symbol stash (an `internal` property of `IvorGuido`, invisible outside
@@ -241,10 +243,32 @@ extension Guido.Importer.Walker {
                                        extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
             }
 
-        default:
+        // A grace note's body would advance `currentBeatTime` like any other
+        // note if walked here, which is wrong for a grace note (it borrows
+        // time rather than taking its own), and a cue note's body is an
+        // alternate, non-sounding passage — so both stay inert, same as
+        // before this stage.
+        case .cue,
+             .grace:
             try Self._flushPendingNote(&context)
 
             context.tieArmed = false
+
+        // Every other bodied tag (`\beam`, `\tuplet`, `\lyrics`, `\harmony`,
+        // and the rest) is a transparent wrapper around the notes it covers
+        // — those notes are its whole reason for having a body — so its body
+        // is walked exactly as if the wrapping tag were not there. A gap
+        // fixed after a real score (Fauré's "Après un rêve", almost entirely
+        // `\lyrics`- and `\beam`-wrapped) round-tripped through an import
+        // with two of its three voices silently empty.
+        default:
+            if !tag.body.isEmpty {
+                try _walk(tag.body, &context, &inProgressVariableNames)
+            } else {
+                try Self._flushPendingNote(&context)
+
+                context.tieArmed = false
+            }
         }
     }
 

@@ -37,6 +37,24 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_beamTag_walksNotesInBody() throws {
+        let octave = try #require(GMNPitch.Octave(intValue: 1))
+        let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
+                           duration: GMNDuration(numerator: 1, denominator: 4))
+        let beam = try #require(GMNBeam(kind: .normal, body: [.note(note)]))
+        let walker = Guido.Importer.Walker(variables: [:])
+        let voice = Guido.Voice(symbols: [.tag(.beam(beam))])
+
+        let context = try walker.walk(voice)
+
+        var count = 0
+
+        context.noteTable.forEach { _, _, _, _, _, _ in count += 1 }
+
+        #expect(count == 1)
+    }
+
+    @Test
     func walk_chord_insertsMembersAndAdvancesByMaxDuration() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))
         let note1 = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
