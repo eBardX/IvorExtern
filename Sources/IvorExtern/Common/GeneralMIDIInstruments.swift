@@ -20,7 +20,7 @@ internal func generalMIDIInstrumentName(program: Int) -> String {
 // to program 0, which would mislabel every unrecognized instrument as
 // Acoustic Grand Piano.
 internal func generalMIDIProgramNumber(name: String) -> Int? {
-    let normalized = _normalizeGeneralMIDIInstrumentName(name)
+    let normalized = normalizeGeneralMIDIName(name)
 
     if let program = generalMIDIProgramNumbersByName[normalized] {
         return program
@@ -31,6 +31,16 @@ internal func generalMIDIProgramNumber(name: String) -> Int? {
     else { return nil }
 
     return program
+}
+
+// Lowercases and collapses runs of whitespace into single spaces, trimming
+// leading/trailing whitespace, so lookups are insensitive to both. Shared by
+// `generalMIDIProgramNumber(name:)` and `GeneralMIDIPercussion.swift`'s own
+// `generalMIDIPercussionNote(name:)`.
+internal func normalizeGeneralMIDIName(_ name: String) -> String {
+    name.lowercased()
+        .split(separator: " ", omittingEmptySubsequences: true)
+        .joined(separator: " ")
 }
 
 // MARK: Private Constants
@@ -178,24 +188,14 @@ private let generalMIDIInstrumentNames: [String] = ["Acoustic Grand Piano",
 
 // A case-insensitive, whitespace-normalized reverse index of
 // `generalMIDIInstrumentNames`, built once. Keys are normalized with
-// `_normalizeGeneralMIDIInstrumentName(_:)` so lookups match regardless of
-// case or incidental whitespace differences.
+// `normalizeGeneralMIDIName(_:)` so lookups match regardless of case or
+// incidental whitespace differences.
 private let generalMIDIProgramNumbersByName: [String: Int] = {
     var map: [String: Int] = [:]
 
     for (program, name) in generalMIDIInstrumentNames.enumerated() {
-        map[_normalizeGeneralMIDIInstrumentName(name)] = program
+        map[normalizeGeneralMIDIName(name)] = program
     }
 
     return map
 }()
-
-// MARK: Private Functions
-
-// Lowercases and collapses runs of whitespace into single spaces, trimming
-// leading/trailing whitespace, so lookups are insensitive to both.
-private func _normalizeGeneralMIDIInstrumentName(_ name: String) -> String {
-    name.lowercased()
-        .split(separator: " ", omittingEmptySubsequences: true)
-        .joined(separator: " ")
-}

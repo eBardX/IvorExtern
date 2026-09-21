@@ -117,6 +117,36 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_instrumentMap_nameUnmatchedByProgram_emitsInstrumentNameEvent() throws {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Fiddle")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        instrumentMap: instrumentMap)
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work)
+        let events = sequence.tracks[1].events
+
+        let instrumentNames = events.compactMap { event -> String? in
+            guard case let .meta(_, .instrumentName(text)) = event
+            else { return nil }
+
+            return text.stringValue
+        }
+
+        #expect(instrumentNames == ["Fiddle"])
+
+        let nameIndex = events.firstIndex { if case .meta(_, .instrumentName) = $0 { true } else { false } }
+        let programIndex = events.firstIndex { if case .midi(_, .programChange) = $0 { true } else { false } }
+
+        #expect(try #require(nameIndex) < #require(programIndex))
+    }
+
+    @Test
     func convert_instrumentMap_present_emitsProgramChange() throws {
         var instrumentMap = InstrumentMap<BeatTime>()
 

@@ -43,6 +43,42 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_instrumentNameEvent_emptyText_fallsBackToGeneralMIDIName() throws {
+        let emptyName = try #require(SMFText(stringValue: ""))
+        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
+        let track = SMFTrack(events: [.meta(.zero, .instrumentName(emptyName)),
+                                      .midi(.zero, programChange),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+    }
+
+    @Test
+    func convert_instrumentNameEvent_precedingProgramChange_overridesGeneralMIDIName() throws {
+        let name = try #require(SMFText(stringValue: "Fiddle"))
+        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
+        let track = SMFTrack(events: [.meta(.zero, .instrumentName(name)),
+                                      .midi(.zero, programChange),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Fiddle"))
+    }
+
+    @Test
     func convert_namedTracksSharingAChannel_produceOnePartPerTrack() throws {
         // The common single-instrument convention: every part shares one
         // channel, and only the track boundary (plus each track's own

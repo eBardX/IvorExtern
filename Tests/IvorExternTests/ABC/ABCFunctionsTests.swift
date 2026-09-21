@@ -40,21 +40,65 @@ extension ABCFunctionsTests {
     @Test
     func convertToInstrument_programWithChannel_usesTrailingProgramNumber() throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
-        let directive = ABCDirective(name: name, value: "program 1 40")
+        let directive = ABCDirective(name: name, value: "program 1 41")
         let resolved = convertToInstrument(directive)
 
         #expect(resolved?.instrument == Instrument("Violin"))
         #expect(resolved?.channel == 1)
+        #expect(resolved?.program == 41)
     }
 
+    // `program 40` is 1-based per the ABC standard and `abc2midi.txt`, so
+    // it names GM patch 40 ("Synth Bass 2", 0-based index 39) — not the
+    // 0-based index 40 ("Violin") a naive pass-through would produce.
     @Test
     func convertToInstrument_programWithoutChannel_looksUpGeneralMIDIName() throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "program 40")
         let resolved = convertToInstrument(directive)
 
-        #expect(resolved?.instrument == Instrument("Violin"))
+        #expect(resolved?.instrument == Instrument("Synth Bass 2"))
         #expect(resolved?.channel == nil)
+        #expect(resolved?.program == 40)
+    }
+
+    @Test
+    func convertToInstrument_programOutOfRange_returnsNil() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let directive = ABCDirective(name: name, value: "program 129")
+
+        #expect(convertToInstrument(directive) == nil)
+    }
+
+    @Test
+    func convertToChannel_bareChannelDirective_returnsChannel() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let directive = ABCDirective(name: name, value: "channel 5")
+
+        #expect(convertToChannel(directive) == 5)
+    }
+
+    @Test
+    func convertToChannel_nonMIDIDirective_returnsNil() {
+        let directive = ABCDirective(name: .linebreak, value: "channel 5")
+
+        #expect(convertToChannel(directive) == nil)
+    }
+
+    @Test
+    func convertToChannel_programDirective_returnsNil() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let directive = ABCDirective(name: name, value: "program 1 40")
+
+        #expect(convertToChannel(directive) == nil)
+    }
+
+    @Test
+    func convertToChannel_outOfRange_returnsNil() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let directive = ABCDirective(name: name, value: "channel 17")
+
+        #expect(convertToChannel(directive) == nil)
     }
 
     @Test

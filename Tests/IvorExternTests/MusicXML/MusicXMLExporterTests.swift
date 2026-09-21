@@ -222,6 +222,30 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_instrumentMap_recognizedPercussionName_emitsMidiUnpitched() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Snare")))
+
+        let part = Part(name: "Drums", noteTable: table, instrumentMap: instrumentMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
+            guard case let .scorePart(scorePart) = item
+            else { return nil }
+
+            return scorePart
+        }.first)
+
+        #expect(scorePart.instrument.first?.name == "Acoustic Snare")
+        #expect(scorePart.group2.first?.midiInstrument?.midiUnpitched?.uintValue == 39)
+        #expect(scorePart.group2.first?.midiInstrument?.midiProgram == nil)
+    }
+
+    @Test
     func convert_instrumentMap_unrecognizedName_omitsMidiProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -242,6 +266,31 @@ extension MusicXMLExporterTests {
 
         #expect(scorePart.instrument.first?.name == "Kazoo Ensemble")
         #expect(scorePart.group2.isEmpty)
+    }
+
+    @Test
+    func convert_instrumentMap_vanillaInstrumentWithMidiChannelExtra_emitsMidiInstrumentWithoutProgram() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        instrumentMap.insert(time: BeatTime(0),
+                             instrument: .vanilla,
+                             extras: Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(5)])]))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
+            guard case let .scorePart(scorePart) = item
+            else { return nil }
+
+            return scorePart
+        }.first)
+
+        #expect(scorePart.group2.first?.midiInstrument?.midiChannel?.uintValue == 5)
+        #expect(scorePart.group2.first?.midiInstrument?.midiProgram == nil)
     }
 
     @Test

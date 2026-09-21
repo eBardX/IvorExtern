@@ -105,7 +105,7 @@ extension ABCImporterTests {
             T:Instrument Tune
             L:1/4
             K:C
-            %%MIDI program 40
+            %%MIDI program 41
             C D E F|
             """
         let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
@@ -123,7 +123,7 @@ extension ABCImporterTests {
             T:Instrument Tune
             L:1/4
             K:C
-            %%MIDI program 5 40
+            %%MIDI program 5 41
             C D E F|
             """
         let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
@@ -138,6 +138,58 @@ extension ABCImporterTests {
         }
 
         #expect(foundChannel == 5)
+    }
+
+    @Test
+    func read_bareMidiChannelDirective_populatesVanillaInstrumentWithChannelExtra() throws {
+        let abc = """
+            X:1
+            T:Channel-Only Tune
+            L:1/4
+            K:C
+            %%MIDI channel 3
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument.vanilla)
+
+        var foundChannel: Int?
+
+        parts.first?.instrumentMap.forEach { _, _, _, extras in
+            foundChannel = intValue(extras, .midiChannel)
+        }
+
+        #expect(foundChannel == 3)
+    }
+
+    @Test
+    func read_midiProgramAndStandaloneChannelDirectives_programChannelTakesPriority() throws {
+        let abc = """
+            X:1
+            T:Both Directives Tune
+            L:1/4
+            K:C
+            %%MIDI channel 3
+            %%MIDI program 2 41
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        var foundChannel: Int?
+
+        parts.first?.instrumentMap.forEach { _, _, _, extras in
+            foundChannel = intValue(extras, .midiChannel)
+        }
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(foundChannel == 2)
     }
 
     @Test

@@ -538,15 +538,24 @@ extension MusicXML.Exporter {
 
             let exactProgram = intValue(first.extras, .midiProgram)
             let derivedProgram = generalMIDIProgramNumber(name: first.instrument.stringValue).map { $0 + 1 }
+            let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
+            let midiChannel = intValue(first.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
+            let midiBank = intValue(first.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
+            let exactUnpitched = intValue(first.extras, .midiUnpitched)
+            let derivedUnpitched = generalMIDIPercussionNote(name: first.instrument.stringValue).map { $0 + 1 }
+            let midiUnpitched = (exactUnpitched ?? derivedUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
+            let volume = doubleValue(first.extras, .midiVolume)
+            let elevation = doubleValue(first.extras, .midiElevation)
 
-            if let program = exactProgram ?? derivedProgram,
-               let midiProgram = MXLMidi128(uintValue: UInt(program)) {
-                let midiChannel = intValue(first.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
-                let midiBank = intValue(first.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
-                let midiUnpitched = intValue(first.extras, .midiUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
-                let volume = doubleValue(first.extras, .midiVolume)
-                let elevation = doubleValue(first.extras, .midiElevation)
-
+            // `<midi-program>` is optional per the MusicXML schema, so a
+            // `.vanilla` instrument imported from a channel/bank/volume/
+            // elevation/unpitched-only `<midi-instrument>` (see
+            // `MusicXML.Importer._makeInstrumentMap`) still round-trips
+            // its data even though no program can be derived for it —
+            // emitting the element on any one field being present, not
+            // gating the whole thing on `midiProgram` alone.
+            if midiProgram != nil || midiChannel != nil || midiBank != nil ||
+               midiUnpitched != nil || volume != nil || elevation != nil {
                 group2.append(MusicXML.ScorePart.Group2(midiInstrument: MXLMidiInstrument(id: instrumentID,
                                                                                           midiChannel: midiChannel,
                                                                                           midiBank: midiBank,

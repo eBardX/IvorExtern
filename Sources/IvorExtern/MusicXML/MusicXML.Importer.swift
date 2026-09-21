@@ -212,20 +212,28 @@ extension MusicXML.Importer {
     // An instrument assignment, like pan, applies to the whole MusicXML part
     // rather than any one voice — see the type-level comment above — so
     // every voice split from the same part shares this one map. A part with
-    // no usable instrument data (see `convertToInstrument(_:)`) gets an
-    // empty map, which reads as `Instrument.vanilla` via `InstrumentMap`'s
-    // own default.
+    // no usable instrument data at all (no name, no `<midi-instrument>")
+    // gets an empty map, which reads as `Instrument.vanilla` via
+    // `InstrumentMap`'s own default. A `<midi-instrument>` that carries
+    // only channel/bank/volume/elevation/unpitched data and no `<midi-
+    // program>` — so `convertToInstrument(_:)` can't name an instrument —
+    // still produces an explicit `.vanilla` entry rather than being
+    // dropped, the same way a bare `%%MIDI channel` directive does in ABC
+    // (see `ABC.Importer._makeInstrumentMap`); otherwise that data would
+    // have nowhere to attach and would silently vanish on import.
     private static func _makeInstrumentMap(_ scorePart: MusicXML.ScorePart) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
+        let midiInstrument = scorePart.group2.lazy.compactMap(\.midiInstrument).first
+        let instrument = convertToInstrument(scorePart)
 
-        if let instrument = convertToInstrument(scorePart) {
+        if instrument != nil || midiInstrument != nil {
             var elements: [Extra] = []
 
-            if let channel = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiChannel).first {
+            if let channel = midiInstrument?.midiChannel {
                 elements.append(Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]))
             }
 
-            if let bank = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiBank).first {
+            if let bank = midiInstrument?.midiBank {
                 elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue))]))
             }
 
@@ -233,24 +241,24 @@ extension MusicXML.Importer {
             // MusicXML's own convention — stored as declared, no `- 1`. See
             // `midiProgram`'s "1-128 convention" decision in
             // `EXTRAS_CANDIDATES.md`.
-            if let program = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiProgram).first {
+            if let program = midiInstrument?.midiProgram {
                 elements.append(Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))]))
             }
 
-            if let volume = scorePart.group2.lazy.compactMap(\.midiInstrument?.volume).first {
+            if let volume = midiInstrument?.volume {
                 elements.append(Extra(name: Extra.midiVolume.name, values: [.double(volume)]))
             }
 
-            if let elevation = scorePart.group2.lazy.compactMap(\.midiInstrument?.elevation).first {
+            if let elevation = midiInstrument?.elevation {
                 elements.append(Extra(name: Extra.midiElevation.name, values: [.double(elevation)]))
             }
 
-            if let unpitched = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiUnpitched).first {
+            if let unpitched = midiInstrument?.midiUnpitched {
                 elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
             }
 
             instrumentMap.insert(time: .zero,
-                                 instrument: instrument,
+                                 instrument: instrument ?? .vanilla,
                                  extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 

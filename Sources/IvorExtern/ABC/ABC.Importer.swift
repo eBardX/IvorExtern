@@ -34,7 +34,8 @@ extension ABC.Importer {
     private static func _convert(_ tune: ABCTune,
                                  fileHeader: [ABCHeaderEntry]) throws(ABC.Error) -> Work {
         let results = try Walker().walk(tune, fileHeader: fileHeader)
-        let instrumentMap = _makeInstrumentMap(_findMIDIProgramDirective(tune, fileHeader: fileHeader))
+        let instrumentMap = _makeInstrumentMap(program: _findMIDIDirective(tune, fileHeader: fileHeader, keyword: "program"),
+                                               channel: _findMIDIDirective(tune, fileHeader: fileHeader, keyword: "channel"))
         let parts = results.compactMap { result -> Part<BeatTime, Pitch>? in
             guard result.identity != nil || !_isEmptyImplicitVoice(result.context)
             else { return nil }
@@ -66,23 +67,28 @@ extension ABC.Importer {
         return works
     }
 
-    // ABC's `%%MIDI program` directive assigns one instrument for the whole
-    // tune — abc2midi gives it no scoping to a particular voice or bar
-    // position — so the first occurrence found, searched in the same
-    // file-header/tune-header/tune-body precedence order every other header
-    // field resolves in, becomes every voice's single `InstrumentMap` entry.
-    private static func _findMIDIProgramDirective(_ tune: ABCTune,
-                                                  fileHeader: [ABCHeaderEntry]) -> ABCDirective? {
+    // ABC's `%%MIDI program`/`%%MIDI channel` directives each assign one
+    // setting for the whole tune — abc2midi gives neither any scoping to a
+    // particular voice or bar position — so the first occurrence of the
+    // given `keyword` found, searched in the same file-header/tune-header/
+    // tune-body precedence order every other header field resolves in,
+    // is every voice's single directive of that kind.
+    private static func _findMIDIDirective(_ tune: ABCTune,
+                                           fileHeader: [ABCHeaderEntry],
+                                           keyword: String) -> ABCDirective? {
+        func matches(_ directive: ABCDirective) -> Bool {
+            directive.name.stringValue.lowercased() == "midi" &&
+            directive.value.split(whereSeparator: \.isWhitespace).first?.lowercased() == keyword
+        }
+
         for entry in fileHeader + tune.header {
-            if case let .directive(directive) = entry,
-               convertToInstrument(directive) != nil {
+            if case let .directive(directive) = entry, matches(directive) {
                 return directive
             }
         }
 
         for entry in tune.body {
-            if case let .directive(directive) = entry,
-               convertToInstrument(directive) != nil {
+            if case let .directive(directive) = entry, matches(directive) {
                 return directive
             }
         }
@@ -141,17 +147,31 @@ extension ABC.Importer {
         return dynamicMap
     }
 
-    private static func _makeInstrumentMap(_ directive: ABCDirective?) -> InstrumentMap<BeatTime> {
+    // A `program` directive's own embedded channel token wins over a
+    // standalone `channel` directive — it's the more specific of the two —
+    // with the standalone directive as a fallback. A `channel` directive
+    // with no `program` at all still produces an entry, as `.vanilla`, so
+    // its `midiChannel` extra has somewhere to live; an empty
+    // `InstrumentMap` would otherwise be indistinguishable from "no MIDI
+    // directives at all" (see this type's own `Instrument.vanilla`
+    // default).
+    private static func _makeInstrumentMap(program: ABCDirective?, channel: ABCDirective?) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
+        let resolvedProgram = program.flatMap(convertToInstrument)
+        let standaloneChannel = channel.flatMap(convertToChannel)
 
-        if let directive, let resolved = convertToInstrument(directive) {
-            var elements = [Extra(name: Extra.midiProgram.name, values: [.int(resolved.program + 1)])]
+        if let resolvedProgram {
+            var elements = [Extra(name: Extra.midiProgram.name, values: [.int(resolvedProgram.program)])]
 
-            if let channel = resolved.channel {
+            if let channel = resolvedProgram.channel ?? standaloneChannel {
                 elements.append(Extra(name: Extra.midiChannel.name, values: [.int(channel)]))
             }
 
-            instrumentMap.insert(time: .zero, instrument: resolved.instrument, extras: Extras(elements: elements))
+            instrumentMap.insert(time: .zero, instrument: resolvedProgram.instrument, extras: Extras(elements: elements))
+        } else if let standaloneChannel {
+            let elements = [Extra(name: Extra.midiChannel.name, values: [.int(standaloneChannel)])]
+
+            instrumentMap.insert(time: .zero, instrument: .vanilla, extras: Extras(elements: elements))
         }
 
         return instrumentMap

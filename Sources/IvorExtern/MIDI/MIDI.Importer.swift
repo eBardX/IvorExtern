@@ -82,6 +82,7 @@ extension MIDI.Importer {
     }
 
     private static func _convert(_ voice: MIDI.Voice,
+                                 _ instrumentNameEvents: [SMFEvent],
                                  _ beatMap: MIDI.BeatMap) -> Part<BeatTime, NoteNumber> {
         var context = Self.Context(beatMap: beatMap)
 
@@ -130,14 +131,15 @@ extension MIDI.Importer {
                     instrumentMap: _makeInstrumentMap(voice.programChangeEvents,
                                                       voice.bankSelectEvents,
                                                       voice.volumeEvents,
+                                                      instrumentNameEvents,
                                                       channel: voice.channel,
                                                       beatMap),
                     panMap: context.panMap)
     }
 
-    private static func _convert(_ voices: [MIDI.Voice],
+    private static func _convert(_ voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])],
                                  _ beatMap: MIDI.BeatMap) -> [Part<BeatTime, NoteNumber>] {
-        voices.map { _convert($0, beatMap) }
+        voices.map { _convert($0.voice, $0.instrumentNameEvents, beatMap) }
     }
 
     private static func _makeBeatMap(_ division: MIDI.Division,
@@ -156,43 +158,50 @@ extension MIDI.Importer {
     }
 
     // Program Change events carry every `InstrumentMap` entry's own time and
-    // instrument; Bank Select (CC 0 MSB / CC 32 LSB) events are stateful,
-    // not tied to any one entry, so they're merged in tick order alongside
-    // the program changes and the most recently seen MSB/LSB pair (if any)
-    // is combined into a 14-bit `midiBank` extra at each entry — see
-    // `Extra+InstrumentMap.swift`. Bank Select is placed ahead of Program
-    // Change in the merge so a coincident pair (same tick) resolves in MIDI
+    // (absent an override) instrument; Bank Select (CC 0 MSB / CC 32 LSB)
+    // and Channel Volume events are stateful, not tied to any one entry, so
+    // they're merged in tick order alongside the program changes and the
+    // most recently seen MSB/LSB pair (if any) is combined into a 14-bit
+    // `midiBank` extra at each entry — see `Extra+InstrumentMap.swift`.
+    // Instrument Name (`FF 04`) meta events are merged the same stateful
+    // way: the most recently seen name, if any, wins over the generic
+    // General MIDI name `convertToInstrument(program)` would otherwise
+    // derive — the same "explicit name beats a program-derived guess"
+    // priority `Guido`'s and `MusicXML`'s own `convertToInstrument`
+    // functions give their own named-vs-program instrument sources. Bank
+    // Select and Instrument Name are both placed ahead of Program Change in
+    // the merge so a coincident event (same tick) resolves in MIDI
     // convention order.
     private static func _makeInstrumentMap(_ programChangeEvents: [SMFEvent],
                                            _ bankSelectEvents: [SMFEvent],
                                            _ volumeEvents: [SMFEvent],
+                                           _ instrumentNameEvents: [SMFEvent],
                                            channel: MIDI.Channel,
                                            _ beatMap: MIDI.BeatMap) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
         var bankMSB: UInt?
         var bankLSB: UInt?
         var volume: UInt?
+        var instrumentName: String?
 
-        let events = (bankSelectEvents + volumeEvents + programChangeEvents).sorted {
-            guard case let .midi(lhsTime, _) = $0,
-                  case let .midi(rhsTime, _) = $1
-            else { return false }
+        let events = (instrumentNameEvents + bankSelectEvents + volumeEvents + programChangeEvents)
+            .sorted { $0.eventTime < $1.eventTime }
 
-            return lhsTime < rhsTime
-        }
+        for event in events {
+            switch event {
+            case let .meta(_, .instrumentName(text)):
+                instrumentName = text.stringValue.nilIfEmpty
 
-        for case let .midi(eventTime, message) in events {
-            switch message {
-            case let .controlChange(_, .bankSelectMSB, value):
+            case let .midi(_, .controlChange(_, .bankSelectMSB, value)):
                 bankMSB = value.uintValue
 
-            case let .controlChange(_, .bankSelectLSB, value):
+            case let .midi(_, .controlChange(_, .bankSelectLSB, value)):
                 bankLSB = value.uintValue
 
-            case let .controlChange(_, .channelVolumeMSB, value):
+            case let .midi(_, .controlChange(_, .channelVolumeMSB, value)):
                 volume = value.uintValue
 
-            case let .programChange(_, program):
+            case let .midi(eventTime, .programChange(_, program)):
                 let (beatTime, _) = beatMap[eventTime]
                 var elements = [Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]),
                                 Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue) + 1)])]
@@ -207,8 +216,10 @@ extension MIDI.Importer {
                                           values: [.int(Int((bankMSB << 7) | bankLSB) + 1)]))
                 }
 
+                let instrument = instrumentName.flatMap { Instrument(stringValue: $0) } ?? convertToInstrument(program)
+
                 instrumentMap.insert(time: beatTime,
-                                     instrument: convertToInstrument(program),
+                                     instrument: instrument,
                                      extras: Extras(elements: elements))
 
             default:
@@ -259,8 +270,13 @@ extension MIDI.Importer {
     // into one. A track using more than one channel still splits per
     // channel within itself, same as before; a track with no channel
     // events at all (a tempo/name-only track) contributes no voice.
-    private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [MIDI.Voice] {
-        var voices: [MIDI.Voice] = []
+    // Instrument Name meta events aren't channel-scoped — unlike Program
+    // Change, MIDI has nowhere to attach one to a single channel within a
+    // multi-channel track — so every voice split from a track shares that
+    // track's own set of them, the same way a multi-channel track's voices
+    // already share its one track name.
+    private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] {
+        var voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] = []
 
         for track in tracks {
             var channelEvents: [MIDI.Channel: [SMFEvent]] = [:]
@@ -277,13 +293,18 @@ extension MIDI.Importer {
 
             let trackName = determineTrackName(track)
             let isMultiChannel = channelEvents.count > 1
+            let instrumentNameEvents = track.events.filter {
+                if case .meta(_, .instrumentName) = $0 { true } else { false }
+            }
 
             for channel in channelEvents.keys.sorted() {
-                try voices.append(_makeVoice(channel: channel,
-                                             name: _makeVoiceName(trackName: trackName,
-                                                                  channel: channel,
-                                                                  isMultiChannel: isMultiChannel),
-                                             events: channelEvents[channel] ?? []))
+                let voice = try _makeVoice(channel: channel,
+                                           name: _makeVoiceName(trackName: trackName,
+                                                                channel: channel,
+                                                                isMultiChannel: isMultiChannel),
+                                           events: channelEvents[channel] ?? [])
+
+                voices.append((voice, instrumentNameEvents))
             }
         }
 

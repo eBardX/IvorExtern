@@ -124,16 +124,26 @@ internal func convertToDynamic(_ sound: MXLSound) -> Dynamic? {
 // A part's own first `<score-instrument>` name wins — the same "first/
 // default instrument only" reading `determinePartName` already gives a
 // multi-instrument part elsewhere — falling back to its first `<midi-
-// instrument>` program number (via `<score-part>`'s own `group2`, a MIDI
-// device/instrument assignment made directly on the part rather than nested
-// in a `<score-instrument>`) when no name was written. `nil` when neither is
+// instrument>` (via `<score-part>`'s own `group2`, a MIDI device/instrument
+// assignment made directly on the part rather than nested in a `<score-
+// instrument>`) when no name was written. A `<midi-unpitched>` note number
+// wins over `<midi-program>` in that fallback: it identifies a specific GM
+// percussion voice (channel 10's own note-number convention, not Program
+// Change), which is the more descriptive of the two whenever both are
+// present. `nil` when none of a name, an unpitched note, or a program is
 // present, leaving the part's `InstrumentMap` empty.
 internal func convertToInstrument(_ scorePart: MusicXML.ScorePart) -> Instrument? {
     if let name = scorePart.instrument.first?.name.nilIfEmpty {
         return Instrument(stringValue: name)
     }
 
-    guard let program = scorePart.group2.lazy.compactMap(\.midiInstrument?.midiProgram).first
+    let midiInstrument = scorePart.group2.lazy.compactMap(\.midiInstrument).first
+
+    if let unpitched = midiInstrument?.midiUnpitched {
+        return Instrument(stringValue: generalMIDIPercussionName(note: Int(unpitched.uintValue) - 1))
+    }
+
+    guard let program = midiInstrument?.midiProgram
     else { return nil }
 
     return Instrument(stringValue: generalMIDIInstrumentName(program: Int(program.uintValue) - 1))

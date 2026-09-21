@@ -157,7 +157,7 @@ extension ABCExporterTests {
             return directive
         }.first)
 
-        #expect(directive.value == "program 5 0")
+        #expect(directive.value == "program 5 1")
     }
 
     @Test
@@ -180,7 +180,7 @@ extension ABCExporterTests {
         }.first)
 
         #expect(directive.name.stringValue.lowercased() == "midi")
-        #expect(directive.value == "program 0")
+        #expect(directive.value == "program 1")
     }
 
     @Test
@@ -197,6 +197,30 @@ extension ABCExporterTests {
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
 
         #expect(!tune.body.contains { if case .directive = $0 { true } else { false } })
+    }
+
+    @Test
+    func convert_instrumentMap_unrecognizedNameWithMidiChannelExtra_emitsStandaloneChannelDirective() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Kazoo Ensemble")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(3)])]))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
+            guard case let .directive(directive) = entry
+            else { return nil }
+
+            return directive
+        }.first)
+
+        #expect(directive.value == "channel 3")
     }
 
     @Test

@@ -277,7 +277,14 @@ extension MIDI.Exporter {
     // `midiBank`/`midiVolume` extra on the entry emits a Bank Select MSB/
     // LSB pair / Channel Volume event immediately before the Program
     // Change, MIDI convention order — the reverse of the combine
-    // `MIDI.Importer._makeInstrumentMap` does on the way in.
+    // `MIDI.Importer._makeInstrumentMap` does on the way in. The
+    // instrument's own name is also written as an Instrument Name (`FF 04`)
+    // meta event immediately ahead of the Program Change, unconditionally —
+    // the same "always write the resolved name" choice
+    // `MusicXML.Exporter`'s own `<score-instrument name=…>` makes — so an
+    // explicit name that doesn't match its program's generic General MIDI
+    // name (see `MIDI.Importer._makeInstrumentMap`) round-trips rather than
+    // silently degrading to that generic name.
     private static func _instrumentEvents(_ instrumentMap: InstrumentMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
@@ -301,6 +308,10 @@ extension MIDI.Exporter {
                 if let volume = doubleValue(extras, .midiVolume),
                    let value = MIDIData1Value(uintValue: UInt((volume / 100.0 * 127.0).rounded())) {
                     events.append(.midi(eventTime, .controlChange(channel, .channelVolumeMSB, value)))
+                }
+
+                if let instrumentName = convertToMIDIText(instrument.stringValue) {
+                    events.append(.meta(eventTime, .instrumentName(instrumentName)))
                 }
 
                 events.append(.midi(eventTime, .programChange(channel, program)))

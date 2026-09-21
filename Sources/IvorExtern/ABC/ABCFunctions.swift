@@ -277,6 +277,13 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 // number — surfaced as `channel` for a `midiChannel` extra (see
 // `Extra+InstrumentMap.swift`); `nil` when the directive omits it (just
 // `program program-number`, no channel token at all).
+//
+// Both the ABC 2.0 draft standard (§14.1) and `abc2midi.txt` itself
+// document `program-number` as 1–128 — the human-facing GM convention,
+// same as MusicXML's `<midi-program>` — not the raw 0–127 wire value, so
+// it's converted to a 0-based index before the table lookup. The returned
+// `program` stays in its native 1–128 form, matching the `midiProgram`
+// extra's own "1-128 convention" (see `EXTRAS_CANDIDATES.md`).
 internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Instrument, channel: Int?, program: Int)? {
     guard directive.name.stringValue.lowercased() == "midi"
     else { return nil }
@@ -286,15 +293,35 @@ internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Ins
     guard let keyword = tokens.first,
           keyword.lowercased() == "program",
           let programToken = tokens.last,
-          let program = Int(programToken)
+          let program = Int(programToken),
+          (1...128).contains(program)
     else { return nil }
 
-    guard let instrument = Instrument(stringValue: generalMIDIInstrumentName(program: program))
+    guard let instrument = Instrument(stringValue: generalMIDIInstrumentName(program: program - 1))
     else { return nil }
 
     let channel = tokens.count == 3 ? Int(tokens[1]) : nil
 
     return (instrument, channel, program)
+}
+
+// A standalone `%%MIDI channel n` directive — no `program` token — sets the
+// MIDI channel without implying any instrument assignment, per
+// `abc2midi.txt`. `n` is 1–16, the same convention `MXLMidi16`/`MIDI.
+// Channel` already use elsewhere.
+internal func convertToChannel(_ directive: ABCDirective) -> Int? {
+    guard directive.name.stringValue.lowercased() == "midi"
+    else { return nil }
+
+    let tokens = directive.value.split(whereSeparator: \.isWhitespace)
+
+    guard tokens.count == 2,
+          tokens[0].lowercased() == "channel",
+          let channel = Int(tokens[1]),
+          (1...16).contains(channel)
+    else { return nil }
+
+    return channel
 }
 
 internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {

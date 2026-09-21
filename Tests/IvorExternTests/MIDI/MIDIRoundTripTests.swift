@@ -126,6 +126,32 @@ extension MIDIRoundTripTests {
     }
 
     @Test
+    func roundTrip_instrumentName_unmatchedByGeneralMIDIProgram_survives() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Fiddle")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
+
+        let part = Part(name: "Lead", noteTable: table, instrumentMap: instrumentMap)
+        let work = Work(name: "Instrument", content: .keyboardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
+
+        // Program 41 is General MIDI's "Violin" — without the Instrument
+        // Name meta event, this would round-trip back as "Violin" instead.
+        #expect(recoveredPart.instrumentMap[.zero] == Instrument("Fiddle"))
+    }
+
+    @Test
     func roundTrip_midiKeyPressure_preservesPeakValue() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
