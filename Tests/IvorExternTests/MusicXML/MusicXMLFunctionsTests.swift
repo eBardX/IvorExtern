@@ -74,9 +74,10 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
-    func convertToInstrument_midiUnpitchedFallback_looksUpGeneralMIDIPercussionName() throws {
+    func convertToInstrument_midiUnpitchedAndProgramBothPresent_unpitchedTakesPriority() throws {
+        let program = try #require(MXLMidi128(uintValue: 1))
         let unpitched = try #require(MXLMidi128(uintValue: 39))
-        let midiInstrument = MXLMidiInstrument(id: "P1-I1", midiUnpitched: unpitched)
+        let midiInstrument = MXLMidiInstrument(id: "P1-I1", midiProgram: program, midiUnpitched: unpitched)
         let scorePart = MXLScorePart(id: "P1",
                                      name: MXLPartName(value: "Drums", text: .init()),
                                      group2: [MXLScorePart.Group2(midiInstrument: midiInstrument)])
@@ -85,10 +86,9 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
-    func convertToInstrument_midiUnpitchedAndProgramBothPresent_unpitchedTakesPriority() throws {
-        let program = try #require(MXLMidi128(uintValue: 1))
+    func convertToInstrument_midiUnpitchedFallback_looksUpGeneralMIDIPercussionName() throws {
         let unpitched = try #require(MXLMidi128(uintValue: 39))
-        let midiInstrument = MXLMidiInstrument(id: "P1-I1", midiProgram: program, midiUnpitched: unpitched)
+        let midiInstrument = MXLMidiInstrument(id: "P1-I1", midiUnpitched: unpitched)
         let scorePart = MXLScorePart(id: "P1",
                                      name: MXLPartName(value: "Drums", text: .init()),
                                      group2: [MXLScorePart.Group2(midiInstrument: midiInstrument)])

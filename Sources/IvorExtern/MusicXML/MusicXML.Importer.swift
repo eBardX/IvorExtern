@@ -95,7 +95,7 @@ extension MusicXML.Importer {
         results.flatMap {
             _convert($0.part,
                      groupName: groupNames[$0.part.part.id],
-                     panMap: _makePanMap($0.panEvents),
+                     panMap: _makePanMap($0.part.part, $0.panEvents),
                      directionDynamicMap: _makeDirectionDynamicMap($0.directionDynamicEvents))
         }
     }
@@ -265,16 +265,33 @@ extension MusicXML.Importer {
         return instrumentMap
     }
 
+    // A part's static `<score-part><midi-instrument><pan>` — the common
+    // case, since most notation software declares pan once per part there
+    // rather than as a repeated inline `<sound>` — seeds the map at `.zero`
+    // the same way `_makeInstrumentMap` seeds channel/bank/volume/elevation
+    // from the same element. It's placed first so a stable sort keeps it
+    // ahead of any real `<sound>` pan event also at `.zero`, letting that
+    // more explicit, in-score event take priority when both exist.
+    private static func _makeDefaultPanEvent(_ scorePart: MusicXML.ScorePart) -> (beatTime: BeatTime, pan: Pan, degree: Double?)? {
+        guard let degree = scorePart.group2.lazy.compactMap(\.midiInstrument?.pan).first,
+              let pan = convertToPan(degrees: degree)
+        else { return nil }
+
+        return (beatTime: .zero, pan: pan, degree: degree)
+    }
+
     // The same prev/curr double-insert step `_makeTempoMap` uses below, for
     // the same reason: a `PanMap` lookup finds the pan active *at or before*
     // a time, so the pan in effect immediately before a change has to be
     // reasserted at the change's own beat position before the new pan is
     // inserted there too.
-    private static func _makePanMap(_ events: [(beatTime: BeatTime, pan: Pan, degree: Double?)]) -> PanMap<BeatTime> {
+    private static func _makePanMap(_ scorePart: MusicXML.ScorePart,
+                                    _ events: [(beatTime: BeatTime, pan: Pan, degree: Double?)]) -> PanMap<BeatTime> {
         var panMap = PanMap<BeatTime>()
         var previousPan: Pan = .center
+        let allEvents = _makeDefaultPanEvent(scorePart).map { [$0] + events } ?? events
 
-        for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
+        for event in allEvents.sorted(by: { $0.beatTime < $1.beatTime }) {
             if event.beatTime != .zero {
                 panMap.insert(time: event.beatTime, pan: previousPan)
             }

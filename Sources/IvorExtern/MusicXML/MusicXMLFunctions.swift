@@ -305,7 +305,14 @@ internal func convertToPan(_ sound: MXLSound) -> Pan? {
     guard let degrees = _convertToPanDegree(sound)
     else { return nil }
 
-    return Pan(numberValue: Number(min(1, max(-1, degrees / 90))))
+    return convertToPan(degrees: degrees)
+}
+
+// Shared with `_makeDefaultPanEvent` in `MusicXML.Importer.swift`, which
+// reads a part's static `<score-part><midi-instrument><pan>` degree rather
+// than a `<sound>`'s, but clamps it to `Pan` the same way.
+internal func convertToPan(degrees: Double) -> Pan? {
+    Pan(numberValue: Number(min(1, max(-1, degrees / 90))))
 }
 
 // The unclamped degree `convertToPan(_:)` clamps away — see `panDegree` in

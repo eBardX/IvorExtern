@@ -264,6 +264,46 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_scorePartMidiInstrumentPan_populatesPanMap_whenNoSoundPanEvent() throws {
+        // Regression test: a `<score-part><midi-instrument><pan>0</pan>`
+        // (explicit center) must still seed `panMap`, even with no `<sound>`
+        // pan event anywhere in the part — `0` is a real, present value, not
+        // an absent one.
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1">
+                  <part-name>Piano</part-name>
+                  <midi-instrument id="P1-I1">
+                    <pan>0</pan>
+                  </midi-instrument>
+                </score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(!(parts.first?.panMap.isEmpty ?? true))
+        #expect(parts.first?.panMap[.zero] == .center)
+    }
+
+    @Test
     func read_soundTempo_populatesTempoMap() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>

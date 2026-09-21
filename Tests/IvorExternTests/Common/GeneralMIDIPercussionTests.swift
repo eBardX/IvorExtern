@@ -15,13 +15,13 @@ extension GeneralMIDIPercussionTests {
     }
 
     @Test
-    func generalMIDIPercussionName_unassignedNote_returnsFallback() {
-        #expect(generalMIDIPercussionName(note: 10) == "Percussion 10")
+    func generalMIDIPercussionName_outOfRangeNote_returnsFallback() {
+        #expect(generalMIDIPercussionName(note: 128) == "Percussion 128")
     }
 
     @Test
-    func generalMIDIPercussionName_outOfRangeNote_returnsFallback() {
-        #expect(generalMIDIPercussionName(note: 128) == "Percussion 128")
+    func generalMIDIPercussionName_unassignedNote_returnsFallback() {
+        #expect(generalMIDIPercussionName(note: 10) == "Percussion 10")
     }
 
     @Test
