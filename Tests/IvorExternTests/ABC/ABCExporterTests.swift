@@ -71,25 +71,6 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_dynamicMarkExtra_emitsLiteralDecorationText() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
-
-        var dynamicMap = DynamicMap<BeatTime>()
-
-        dynamicMap.insert(time: BeatTime(0),
-                          dynamic: .mp,
-                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("sfz")])]))
-
-        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
-        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
-        let decorations = decorations(in: tune)
-
-        #expect(decorations.contains { $0.name.stringValue == "sfz" })
-    }
-
-    @Test
     func convert_distinctTimeDynamicPair_emitsHairpin() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -107,6 +88,25 @@ extension ABCExporterTests {
 
         #expect(decorations.contains { $0.name.stringValue == "crescendo(" })
         #expect(decorations.contains { $0.name.stringValue == "crescendo)" })
+    }
+
+    @Test
+    func convert_dynamicMarkExtra_emitsLiteralDecorationText() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0),
+                          dynamic: .mp,
+                          extras: Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string("sfz")])]))
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let decorations = decorations(in: tune)
+
+        #expect(decorations.contains { $0.name.stringValue == "sfz" })
     }
 
     @Test
@@ -137,29 +137,6 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedName_emitsMidiDirective() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
-
-        var instrumentMap = InstrumentMap<BeatTime>()
-
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
-
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
-        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
-        let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
-            guard case let .directive(directive) = entry
-            else { return nil }
-
-            return directive
-        }.first)
-
-        #expect(directive.name.stringValue.lowercased() == "midi")
-        #expect(directive.value == "program 0")
-    }
-
-    @Test
     func convert_instrumentMap_midiChannelExtra_emitsChannelToken() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -181,6 +158,29 @@ extension ABCExporterTests {
         }.first)
 
         #expect(directive.value == "program 5 0")
+    }
+
+    @Test
+    func convert_instrumentMap_recognizedName_emitsMidiDirective() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
+            guard case let .directive(directive) = entry
+            else { return nil }
+
+            return directive
+        }.first)
+
+        #expect(directive.name.stringValue.lowercased() == "midi")
+        #expect(directive.value == "program 0")
     }
 
     @Test
@@ -219,36 +219,6 @@ extension ABCExporterTests {
         }
 
         #expect(Set(voiceIDs).count == 2)
-    }
-
-    @Test
-    func convert_singlePartNamed_stillEmitsVoiceField() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
-
-        let work = standardBeatWork(parts: [Part(name: "Piano", noteTable: table)])
-        let tune = try ABC.Exporter().convert(work)
-        let bodyHasVoiceField = tune.body.contains { if case .field(.voice) = $0 { true } else { false } }
-        let headerHasVoiceField = tune.header.contains { if case .field(.voice) = $0 { true } else { false } }
-
-        #expect(bodyHasVoiceField)
-        #expect(headerHasVoiceField)
-    }
-
-    @Test
-    func convert_singlePartUnnamed_omitsVoiceField() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
-
-        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
-        let tune = try ABC.Exporter().convert(work)
-        let bodyHasVoiceField = tune.body.contains { if case .field(.voice) = $0 { true } else { false } }
-        let headerHasVoiceField = tune.header.contains { if case .field(.voice) = $0 { true } else { false } }
-
-        #expect(!bodyHasVoiceField)
-        #expect(!headerHasVoiceField)
     }
 
     @Test
@@ -302,6 +272,36 @@ extension ABCExporterTests {
         #expect(note.pitch.letter == .c)
         #expect(note.pitch.accidental == .natural)
         #expect(note.pitch.octave.uintValue == 4)
+    }
+
+    @Test
+    func convert_singlePartNamed_stillEmitsVoiceField() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        let work = standardBeatWork(parts: [Part(name: "Piano", noteTable: table)])
+        let tune = try ABC.Exporter().convert(work)
+        let bodyHasVoiceField = tune.body.contains { if case .field(.voice) = $0 { true } else { false } }
+        let headerHasVoiceField = tune.header.contains { if case .field(.voice) = $0 { true } else { false } }
+
+        #expect(bodyHasVoiceField)
+        #expect(headerHasVoiceField)
+    }
+
+    @Test
+    func convert_singlePartUnnamed_omitsVoiceField() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let tune = try ABC.Exporter().convert(work)
+        let bodyHasVoiceField = tune.body.contains { if case .field(.voice) = $0 { true } else { false } }
+        let headerHasVoiceField = tune.header.contains { if case .field(.voice) = $0 { true } else { false } }
+
+        #expect(!bodyHasVoiceField)
+        #expect(!headerHasVoiceField)
     }
 
     @Test

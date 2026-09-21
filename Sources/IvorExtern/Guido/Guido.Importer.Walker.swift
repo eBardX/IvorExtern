@@ -254,63 +254,6 @@ extension Guido.Importer.Walker {
     // stage. Only the open-span `Begin`/`End` form (the common case for a
     // multi-note slur) and articulation/ornament/fingering/breathMark's own
     // single-note-preceding convention are wired.
-    private static func _articulationExtra(_ articulation: GMNArticulation) -> Extra {
-        switch articulation.kind {
-        case .accent:
-            .accent
-
-        case .bow:
-            switch articulation.type?.lowercased() {
-            case "up":
-                .upBow
-
-            case "down":
-                .downBow
-
-            default:
-                Extra(name: Extra.articulation.name, values: [.string("bow")])
-            }
-
-        case .fermata:
-            .fermata
-
-        case .harmonic:
-            .harmonic
-
-        case .marcato:
-            .marcato
-
-        case .pizzicato:
-            .pizzicato
-
-        case .staccato:
-            .staccato
-
-        case .tenuto:
-            .tenuto
-        }
-    }
-
-    private static func _ornamentExtra(_ ornament: GMNOrnament) -> Extra {
-        switch ornament.kind {
-        case .mordent:
-            .mordent
-
-        case .trill:
-            .trill
-
-        case .turn:
-            .turn
-        }
-    }
-
-    private static func _slurExtra(_ extra: Extra, ident: GMNTag.Ident?) -> Extra {
-        guard let ident
-        else { return extra }
-
-        return Extra(name: extra.name, values: [.string("\(ident.uintValue)")])
-    }
-
     private func _walk(_ symbols: [GMNSymbol],
                        _ context: inout Guido.Importer.Context,
                        _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
@@ -365,6 +308,43 @@ extension Guido.Importer.Walker {
         }
 
         return Guido.Duration(numberValue: total)
+    }
+
+    private static func _articulationExtra(_ articulation: GMNArticulation) -> Extra {
+        switch articulation.kind {
+        case .accent:
+            .accent
+
+        case .bow:
+            switch articulation.type?.lowercased() {
+            case "up":
+                .upBow
+
+            case "down":
+                .downBow
+
+            default:
+                Extra(name: Extra.articulation.name, values: [.string("bow")])
+            }
+
+        case .fermata:
+            .fermata
+
+        case .harmonic:
+            .harmonic
+
+        case .marcato:
+            .marcato
+
+        case .pizzicato:
+            .pizzicato
+
+        case .staccato:
+            .staccato
+
+        case .tenuto:
+            .tenuto
+        }
     }
 
     // The two endpoints of a ramp are inserted plainly (`.rampBoundary`),
@@ -504,6 +484,19 @@ extension Guido.Importer.Walker {
 
         context.tieArmed = false
         context.advance(convertToBeatDuration(resolved.duration))
+    }
+
+    private static func _ornamentExtra(_ ornament: GMNOrnament) -> Extra {
+        switch ornament.kind {
+        case .mordent:
+            .mordent
+
+        case .trill:
+            .trill
+
+        case .turn:
+            .turn
+        }
     }
 
     private static func _pitchesMatch(_ lhs: [Guido.Note],
@@ -681,5 +674,12 @@ extension Guido.Importer.Walker {
         let clampedIndex = min(max(index + shift, 0), dynamicScale.count - 1)
 
         return dynamicScale[clampedIndex]
+    }
+
+    private static func _slurExtra(_ extra: Extra, ident: GMNTag.Ident?) -> Extra {
+        guard let ident
+        else { return extra }
+
+        return Extra(name: extra.name, values: [.string("\(ident.uintValue)")])
     }
 }

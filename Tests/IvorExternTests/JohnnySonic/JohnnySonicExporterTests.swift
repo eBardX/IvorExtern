@@ -188,8 +188,8 @@ extension JohnnySonicExporterTests {
         let trailingSegment = try #require(tempoLines.last)
 
         #expect(trailingSegment.startBeat == 4.0)
-        #expect(trailingSegment.initialTempo == 140.0)
-        #expect(trailingSegment.finalTempo == 140.0)
+        #expect(trailingSegment.startTempo == 140.0)
+        #expect(trailingSegment.endTempo == 140.0)
     }
 
     @Test

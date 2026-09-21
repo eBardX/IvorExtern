@@ -16,6 +16,41 @@ struct GuidoRoundTripTests {
 
 extension GuidoRoundTripTests {
     @Test
+    func roundTrip_articulationAndSlur_preservesFlags() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: Extras(elements: [Extra(name: Extra.accent.name, values: []),
+                                               Extra(name: Extra.slurStart.name, values: [.string("1")])]))
+        table.insert(attack: BeatTime(1),
+                     duration: BeatDuration(1),
+                     pitch: "D4",
+                     extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
+
+        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
+            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0].accent)
+        #expect(flags[0].slurStart == "1")
+        #expect(flags[1].slurEnd == "1")
+    }
+
+    @Test
     func roundTrip_chord_preservesSimultaneousNotes() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -186,41 +221,6 @@ extension GuidoRoundTripTests {
         }
 
         #expect(foundText == "Allegro")
-    }
-
-    @Test
-    func roundTrip_articulationAndSlur_preservesFlags() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0),
-                     duration: BeatDuration(1),
-                     pitch: "C4",
-                     extras: Extras(elements: [Extra(name: Extra.accent.name, values: []),
-                                               Extra(name: Extra.slurStart.name, values: [.string("1")])]))
-        table.insert(attack: BeatTime(1),
-                     duration: BeatDuration(1),
-                     pitch: "D4",
-                     extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
-
-        let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
-
-        let recovered = try roundTrip(work,
-                                      exporter: Guido.Exporter(),
-                                      importer: Guido.Importer(),
-                                      fileFormat: .gmn)
-        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
-
-        var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
-
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
-        }
-
-        #expect(flags.count == 2)
-        #expect(flags[0].accent)
-        #expect(flags[0].slurStart == "1")
-        #expect(flags[1].slurEnd == "1")
     }
 
     // A duration whose fraction of a whole note has no power-of-2

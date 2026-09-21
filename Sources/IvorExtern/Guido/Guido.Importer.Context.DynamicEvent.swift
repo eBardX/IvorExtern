@@ -12,12 +12,7 @@ extension Guido.Importer.Context {
     // `Extra+DynamicMap.swift`.
     internal struct DynamicEvent {
 
-        // MARK: Internal Instance Properties
-
-        internal let beatTime: BeatTime
-        internal let dynamic: Dynamic
-        internal let kind: Kind
-        internal let mark: String?
+        // MARK: Internal Initializers
 
         internal init(beatTime: BeatTime,
                       dynamic: Dynamic,
@@ -28,6 +23,13 @@ extension Guido.Importer.Context {
             self.kind = kind
             self.mark = mark
         }
+
+        // MARK: Internal Instance Properties
+
+        internal let beatTime: BeatTime
+        internal let dynamic: Dynamic
+        internal let kind: Kind
+        internal let mark: String?
     }
 }
 

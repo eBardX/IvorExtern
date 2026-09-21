@@ -149,8 +149,8 @@ extension JohnnySonic.Exporter {
 
             return [.tempoLine(DKMTempoLine(startBeat: 0,
                                             duration: 1,
-                                            initialTempo: tempo,
-                                            finalTempo: tempo))]
+                                            startTempo: tempo,
+                                            endTempo: tempo))]
         }
 
         var tmpSeq: [(BeatTime, Tempo, Extras?)] = []
@@ -161,13 +161,13 @@ extension JohnnySonic.Exporter {
 
         var commands: [DKMCommand] = zip(tmpSeq.dropLast(),
                                          tmpSeq.dropFirst()).compactMap { elt in
-            if let initial = doubleValue(elt.0.2, .rampInitialTempo),
-               let final = doubleValue(elt.0.2, .rampFinalTempo),
+            if let initial = doubleValue(elt.0.2, .rampStartTempo),
+               let final = doubleValue(elt.0.2, .rampEndTempo),
                let duration = doubleValue(elt.0.2, .rampDuration) {
                 return .tempoLine(DKMTempoLine(startBeat: convertToJohnnySonicBeat(elt.0.0),
                                                duration: duration,
-                                               initialTempo: initial,
-                                               finalTempo: final))
+                                               startTempo: initial,
+                                               endTempo: final))
             }
 
             let startBeat  = convertToJohnnySonicBeat(elt.0.0)
@@ -179,8 +179,8 @@ extension JohnnySonic.Exporter {
             if duration > 0 {
                 return .tempoLine(DKMTempoLine(startBeat: startBeat,
                                                duration: duration,
-                                               initialTempo: startTempo,
-                                               finalTempo: endTempo))
+                                               startTempo: startTempo,
+                                               endTempo: endTempo))
             } else {
                 return nil
             }
@@ -201,8 +201,8 @@ extension JohnnySonic.Exporter {
             if duration > 0 {
                 commands.append(.tempoLine(DKMTempoLine(startBeat: startBeat,
                                                         duration: duration,
-                                                        initialTempo: tempo,
-                                                        finalTempo: tempo)))
+                                                        startTempo: tempo,
+                                                        endTempo: tempo)))
             }
         }
 

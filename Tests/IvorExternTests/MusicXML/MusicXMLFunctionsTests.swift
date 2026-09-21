@@ -260,15 +260,6 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
-    func determinePartName_singleNumeralNameWithGroupName_combinesGroupAndNumeral() {
-        let scorePart = MXLScorePart(id: "P12",
-                                     name: MXLPartName(value: "3",
-                                                       text: .init()))
-
-        #expect(determinePartName(scorePart, groupName: "Trombones") == "Trombones (3)")
-    }
-
-    @Test
     func determinePartName_numeralOnlyNameWithoutGroupName_returnsNameAsIs() {
         let scorePart = MXLScorePart(id: "P8",
                                      name: MXLPartName(value: "1 2",
@@ -306,6 +297,15 @@ extension MusicXMLFunctionsTests {
                                                        text: .init()))
 
         #expect(determinePartName(scorePart, groupName: nil) == "Violin")
+    }
+
+    @Test
+    func determinePartName_singleNumeralNameWithGroupName_combinesGroupAndNumeral() {
+        let scorePart = MXLScorePart(id: "P12",
+                                     name: MXLPartName(value: "3",
+                                                       text: .init()))
+
+        #expect(determinePartName(scorePart, groupName: "Trombones") == "Trombones (3)")
     }
 
     @Test

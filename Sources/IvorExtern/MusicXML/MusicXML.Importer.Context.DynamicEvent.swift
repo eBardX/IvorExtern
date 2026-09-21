@@ -13,13 +13,7 @@ extension MusicXML.Importer.Context {
     // `Extra+DynamicMap.swift`.
     internal struct DynamicEvent {
 
-        // MARK: Internal Instance Properties
-
-        internal let beatTime: BeatTime
-        internal let dynamic: Dynamic
-        internal let kind: Kind
-        internal let mark: String?
-        internal let velocity: Int?
+        // MARK: Internal Initializers
 
         internal init(beatTime: BeatTime,
                       dynamic: Dynamic,
@@ -32,6 +26,14 @@ extension MusicXML.Importer.Context {
             self.mark = mark
             self.velocity = velocity
         }
+
+        // MARK: Internal Instance Properties
+
+        internal let beatTime: BeatTime
+        internal let dynamic: Dynamic
+        internal let kind: Kind
+        internal let mark: String?
+        internal let velocity: Int?
     }
 }
 

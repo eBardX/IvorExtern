@@ -10,73 +10,6 @@ private import XestiNumbers
 
 // MARK: Internal Functions
 
-// The reverse of `Guido.Importer.Walker._articulationExtra(_:)`/
-// `_ornamentExtra(_:)`/`_slurExtra(_:_:)` — one Tier 1 flag (see
-// `EXTRAS_CANDIDATES.md`) converts to one Guido tag, scoped over `body`
-// (the note/chord symbol(s) it covers). Every `GMNArticulation`/
-// `GMNOrnament` kind but `\stacc` only has guidolib's bracketing `.whole`
-// form — no open-span `Begin`/`End` alternative — so `body:` (not a
-// sibling `Begin`/`End` pair) is this vocabulary's one uniform wrapping
-// shape; `\breathMark`/`\fingering` take the same shape for consistency,
-// even though guidolib's own template doesn't require it of them. Guido
-// has no free-text escape hatch the way ABC's open decoration names or
-// MusicXML's `other…` cases do, so the `articulation` catch-all extra has
-// nothing to convert to here and is silently dropped on export — a real,
-// documented asymmetry, not a bug: Guido's own closed vocabulary is simply
-// narrower than what this vocabulary's catch-all needs to hold.
-internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
-    switch extra.name {
-    case Extra.accent.name:
-        GMNArticulation(kind: .accent, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.marcato.name:
-        GMNArticulation(kind: .marcato, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.tenuto.name:
-        GMNArticulation(kind: .tenuto, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.staccato.name:
-        GMNArticulation(kind: .staccato, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.fermata.name:
-        GMNArticulation(kind: .fermata, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.harmonic.name:
-        GMNArticulation(kind: .harmonic, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.pizzicato.name:
-        GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.upBow.name:
-        GMNArticulation(kind: .bow, type: "up", body: body).map { GMNTag.articulation($0) }
-
-    case Extra.downBow.name:
-        GMNArticulation(kind: .bow, type: "down", body: body).map { GMNTag.articulation($0) }
-
-    case Extra.trill.name:
-        GMNOrnament(kind: .trill, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.mordent.name:
-        GMNOrnament(kind: .mordent, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.turn.name:
-        GMNOrnament(kind: .turn, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.breathMark.name:
-        .breathMark(GMNBreathMark(body: body))
-
-    case Extra.fingering.name:
-        if case let .string(text)? = extra.values.first {
-            GMNTag.fingering(GMNFingering(text: text, body: body))
-        } else {
-            nil
-        }
-
-    default:
-        nil
-    }
-}
-
 internal func convertToBeatDuration(_ duration: Guido.Duration) -> BeatDuration {
     BeatDuration(duration.numberValue * 4)
 }
@@ -201,6 +134,73 @@ internal func convertToGuidoPitch(_ pitch: Pitch) throws(Guido.Error) -> GMNPitc
     return GMNPitch(name: _convertToGuidoPitchName(pitch.pitchClass.letter),
                     accidental: _convertToGuidoPitchAccidental(pitch.pitchClass.accidental),
                     octave: octave)
+}
+
+// The reverse of `Guido.Importer.Walker._articulationExtra(_:)`/
+// `_ornamentExtra(_:)`/`_slurExtra(_:_:)` — one Tier 1 flag (see
+// `EXTRAS_CANDIDATES.md`) converts to one Guido tag, scoped over `body`
+// (the note/chord symbol(s) it covers). Every `GMNArticulation`/
+// `GMNOrnament` kind but `\stacc` only has guidolib's bracketing `.whole`
+// form — no open-span `Begin`/`End` alternative — so `body:` (not a
+// sibling `Begin`/`End` pair) is this vocabulary's one uniform wrapping
+// shape; `\breathMark`/`\fingering` take the same shape for consistency,
+// even though guidolib's own template doesn't require it of them. Guido
+// has no free-text escape hatch the way ABC's open decoration names or
+// MusicXML's `other…` cases do, so the `articulation` catch-all extra has
+// nothing to convert to here and is silently dropped on export — a real,
+// documented asymmetry, not a bug: Guido's own closed vocabulary is simply
+// narrower than what this vocabulary's catch-all needs to hold.
+internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
+    switch extra.name {
+    case Extra.accent.name:
+        GMNArticulation(kind: .accent, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.marcato.name:
+        GMNArticulation(kind: .marcato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.tenuto.name:
+        GMNArticulation(kind: .tenuto, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.staccato.name:
+        GMNArticulation(kind: .staccato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.fermata.name:
+        GMNArticulation(kind: .fermata, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.harmonic.name:
+        GMNArticulation(kind: .harmonic, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.pizzicato.name:
+        GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.upBow.name:
+        GMNArticulation(kind: .bow, type: "up", body: body).map { GMNTag.articulation($0) }
+
+    case Extra.downBow.name:
+        GMNArticulation(kind: .bow, type: "down", body: body).map { GMNTag.articulation($0) }
+
+    case Extra.trill.name:
+        GMNOrnament(kind: .trill, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.mordent.name:
+        GMNOrnament(kind: .mordent, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.turn.name:
+        GMNOrnament(kind: .turn, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.breathMark.name:
+        .breathMark(GMNBreathMark(body: body))
+
+    case Extra.fingering.name:
+        if case let .string(text)? = extra.values.first {
+            GMNTag.fingering(GMNFingering(text: text, body: body))
+        } else {
+            nil
+        }
+
+    default:
+        nil
+    }
 }
 
 // The `bpm` metronome specification always uses a quarter note as the beat

@@ -58,6 +58,63 @@ internal func convertToABCDecorationName(_ dynamic: Dynamic) -> ABCDecoration.Na
     return ABCDecoration.Name(stringValue: name)
 }
 
+// The reverse of `convertToArticulationExtra(_:)` — one canonical ABC
+// decoration name per Tier 1 flag. `plus`/`snap` both read as `.pizzicato`
+// on import (ABC has no single generic pizzicato word), so this picks
+// `snap` (the more common of the two markings) as the one write direction;
+// the `plus`/`snap` distinction itself is lost on a `.pizzicato` round
+// trip, an accepted simplification given ABC's own vocabulary split.
+internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? {
+    let name: String? = switch extra.name {
+    case Extra.accent.name:
+        "accent"
+
+    case Extra.marcato.name:
+        "marcato"
+
+    case Extra.tenuto.name:
+        "tenuto"
+
+    case Extra.staccato.name:
+        "staccato"
+
+    case Extra.fermata.name:
+        "fermata"
+
+    case Extra.harmonic.name:
+        "harmonic"
+
+    case Extra.pizzicato.name:
+        "snap"
+
+    case Extra.trill.name:
+        "trill"
+
+    case Extra.mordent.name:
+        "mordent"
+
+    case Extra.turn.name:
+        "turn"
+
+    case Extra.upBow.name:
+        "upbow"
+
+    case Extra.downBow.name:
+        "downbow"
+
+    case Extra.breathMark.name:
+        "breath"
+
+    default:
+        nil
+    }
+
+    guard let name
+    else { return nil }
+
+    return ABCDecoration.Name(stringValue: name)
+}
+
 // Converts an absolute duration (in beats, i.e. a multiplier of the unit
 // note length `L:1/4` this exporter always writes) into an `ABCLength`, or
 // `nil` if the reduced fraction's denominator isn't a power of 2 in
@@ -101,53 +158,6 @@ internal func convertToABCTempo(_ tempo: Tempo, text: String? = nil) -> ABCTempo
     return ABCTempo(lengths: [quarterLength],
                     rate: tempo.uintValue,
                     text: text)
-}
-
-internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) -> BeatDuration {
-    BeatDuration(duration.numberValue * 4)
-}
-
-// A decoration's `name` is open, matched against a rendering program's own
-// symbol table only when the score is played (see `ABCDecoration.Name`'s
-// doc comment), so only the ten standard dynamic names — matched
-// case-insensitively — convert; anything else (an ornament, an articulation,
-// a dialect this vocabulary doesn't cover) is left unrecognized rather than
-// guessed at.
-internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
-    switch name.stringValue.lowercased() {
-    case "pppp":
-        .pppp
-
-    case "ppp":
-        .ppp
-
-    case "pp":
-        .pp
-
-    case "p":
-        .p
-
-    case "mp":
-        .mp
-
-    case "mf":
-        .mf
-
-    case "f":
-        .f
-
-    case "ff":
-        .ff
-
-    case "fff":
-        .fff
-
-    case "ffff":
-        .ffff
-
-    default:
-        nil
-    }
 }
 
 // The Tier 1 bare-flag articulation/ornament names shared with Guido's
@@ -209,61 +219,51 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
     }
 }
 
-// The reverse of `convertToArticulationExtra(_:)` — one canonical ABC
-// decoration name per Tier 1 flag. `plus`/`snap` both read as `.pizzicato`
-// on import (ABC has no single generic pizzicato word), so this picks
-// `snap` (the more common of the two markings) as the one write direction;
-// the `plus`/`snap` distinction itself is lost on a `.pizzicato` round
-// trip, an accepted simplification given ABC's own vocabulary split.
-internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? {
-    let name: String? = switch extra.name {
-    case Extra.accent.name:
-        "accent"
+internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) -> BeatDuration {
+    BeatDuration(duration.numberValue * 4)
+}
 
-    case Extra.marcato.name:
-        "marcato"
+// A decoration's `name` is open, matched against a rendering program's own
+// symbol table only when the score is played (see `ABCDecoration.Name`'s
+// doc comment), so only the ten standard dynamic names — matched
+// case-insensitively — convert; anything else (an ornament, an articulation,
+// a dialect this vocabulary doesn't cover) is left unrecognized rather than
+// guessed at.
+internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
+    switch name.stringValue.lowercased() {
+    case "pppp":
+        .pppp
 
-    case Extra.tenuto.name:
-        "tenuto"
+    case "ppp":
+        .ppp
 
-    case Extra.staccato.name:
-        "staccato"
+    case "pp":
+        .pp
 
-    case Extra.fermata.name:
-        "fermata"
+    case "p":
+        .p
 
-    case Extra.harmonic.name:
-        "harmonic"
+    case "mp":
+        .mp
 
-    case Extra.pizzicato.name:
-        "snap"
+    case "mf":
+        .mf
 
-    case Extra.trill.name:
-        "trill"
+    case "f":
+        .f
 
-    case Extra.mordent.name:
-        "mordent"
+    case "ff":
+        .ff
 
-    case Extra.turn.name:
-        "turn"
+    case "fff":
+        .fff
 
-    case Extra.upBow.name:
-        "upbow"
-
-    case Extra.downBow.name:
-        "downbow"
-
-    case Extra.breathMark.name:
-        "breath"
+    case "ffff":
+        .ffff
 
     default:
         nil
     }
-
-    guard let name
-    else { return nil }
-
-    return ABCDecoration.Name(stringValue: name)
 }
 
 // abc2midi's `%%MIDI program [channel] program-number` directive is the only

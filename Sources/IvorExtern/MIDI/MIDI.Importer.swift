@@ -72,7 +72,7 @@ extension MIDI.Importer {
 
             tempoMap.insert(beatTime: beatTime,
                             tempo: currTempo,
-                            extras: Extras(elements: [Extra(name: Extra.exactMicrosecondsPerQuarter.name,
+                            extras: Extras(elements: [Extra(name: Extra.midiTempo.name,
                                                             values: [.int(Int(tempo.uintValue))])]))
 
             prevTempo = currTempo

@@ -217,8 +217,8 @@ extension JohnnySonicRoundTripTests {
 
         tempoMap.insert(beatTime: BeatTime(0),
                         tempo: Tempo(120),
-                        extras: Extras(elements: [Extra(name: Extra.rampInitialTempo.name, values: [.double(120)]),
-                                                  Extra(name: Extra.rampFinalTempo.name, values: [.double(160)]),
+                        extras: Extras(elements: [Extra(name: Extra.rampStartTempo.name, values: [.double(120)]),
+                                                  Extra(name: Extra.rampEndTempo.name, values: [.double(160)]),
                                                   Extra(name: Extra.rampDuration.name, values: [.double(4)])]))
         tempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(160))
 
@@ -235,20 +235,20 @@ extension JohnnySonicRoundTripTests {
                                       fileFormat: .dkm)
         let recoveredTempoMap = try #require(recovered.tempoMap)
 
-        var foundInitial: Double?
-        var foundFinal: Double?
+        var foundStart: Double?
+        var foundEnd: Double?
         var foundDuration: Double?
 
         recoveredTempoMap.forEach { _, time, _, extras in
             if time == BeatTime(0) {
-                foundInitial = doubleValue(extras, .rampInitialTempo)
-                foundFinal = doubleValue(extras, .rampFinalTempo)
+                foundStart = doubleValue(extras, .rampStartTempo)
+                foundEnd = doubleValue(extras, .rampEndTempo)
                 foundDuration = doubleValue(extras, .rampDuration)
             }
         }
 
-        #expect(foundInitial == 120)
-        #expect(foundFinal == 160)
+        #expect(foundStart == 120)
+        #expect(foundEnd == 160)
         #expect(foundDuration == 4)
     }
 }

@@ -93,6 +93,33 @@ extension MusicXML.Importer.Walker {
         }
     }
 
+    private static func _articulationExtras(_ items: [MXLArticulations.Item]) -> [Extra] {
+        items.compactMap { item in
+            switch item {
+            case .accent:
+                .accent
+
+            case .breathMark:
+                .breathMark
+
+            case .staccato:
+                .staccato
+
+            case .strongAccent:
+                .marcato
+
+            case .tenuto:
+                .tenuto
+
+            case let .otherArticulation(text):
+                Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+            default:
+                nil
+            }
+        }
+    }
+
     private static func _flushPendingTies(_ context: inout MusicXML.Importer.Context) {
         for (voiceID, pending) in context.pendingTies {
             var table = context.noteTable(forVoice: voiceID)
@@ -150,92 +177,6 @@ extension MusicXML.Importer.Walker {
             break
         }
     }
-
-    private static func _recordDirectionDynamic(_ dynamic: Dynamic,
-                                                at beatTime: BeatTime,
-                                                mark: String? = nil,
-                                                velocity: Int? = nil,
-                                                _ context: inout MusicXML.Importer.Context) {
-        context.directionDynamicEvents.append(MusicXML.Importer.Context.DynamicEvent(beatTime: beatTime,
-                                                                                     dynamic: dynamic,
-                                                                                     kind: .step,
-                                                                                     mark: mark,
-                                                                                     velocity: velocity))
-
-        context.lastDirectionDynamic = dynamic
-    }
-
-    // A chord tone's own `dynamics` is recorded exactly like its lead note's
-    // — both are individually written `<note>` elements, each free to carry
-    // (or omit) the attribute.
-    private static func _recordDynamic(_ note: MXLNote,
-                                       attack: BeatTime,
-                                       voiceID: String?,
-                                       _ context: inout MusicXML.Importer.Context) {
-        guard let dynamic = convertToDynamic(note)
-        else { return }
-
-        context.noteDynamicEvents[voiceID, default: []].append((beatTime: attack,
-                                                                dynamic: dynamic,
-                                                                velocity: convertToVelocity(note)))
-    }
-
-    private static func _scorePartsByID(_ score: MusicXML.Score) -> [String: MXLScorePart] {
-        var result: [String: MXLScorePart] = [:]
-
-        for item in score.partList.items {
-            if case let .scorePart(scorePart) = item {
-                result[scorePart.id] = scorePart
-            }
-        }
-
-        return result
-    }
-
-    // One step along `dynamicScale` in the given wedge kind's direction,
-    // clamped at either end — a wedge beyond `ffff` stays `ffff`, one
-    // beyond `pppp` stays `pppp`, rather than producing no shift at all.
-    // `kind` is always `.crescendo` or `.diminuendo` in practice: those are
-    // the only cases `_handleWedge` ever stores in `pendingWedges`.
-    private static func _shifted(_ dynamic: Dynamic,
-                                 kind: MXLWedge.Kind) -> Dynamic {
-        guard let index = dynamicScale.firstIndex(of: dynamic)
-        else { return dynamic }
-
-        let shift = kind == .crescendo ? 1 : -1
-        let clampedIndex = min(max(index + shift, 0), dynamicScale.count - 1)
-
-        return dynamicScale[clampedIndex]
-    }
-
-    // MusicXML declares no voice order anywhere — a `<voice>` id is a
-    // free-form string a note simply carries, with nothing in the
-    // `<part-list>` preamble (or anywhere else) enumerating a part's voices
-    // — so `context.voiceIDs` only ever reflects the order each id was
-    // first met while walking notes, which need not be ascending (a
-    // higher-numbered voice's first note routinely precedes a
-    // lower-numbered voice's in the raw file). Sorting here, once voice
-    // resolution is otherwise done, gives every consumer the reading order
-    // a listener actually expects (1, 2, 3, …) instead of encounter order.
-    private static func _voices(from context: MusicXML.Importer.Context) -> [MusicXML.Voice] {
-        context.voiceIDs.sorted { _voiceSortKey($0) < _voiceSortKey($1) }.map { id in
-            MusicXML.Voice(id: id,
-                           noteDynamicEvents: context.noteDynamicEvents[id] ?? [],
-                           noteTable: context.noteTables[id] ?? NoteTable())
-        }
-    }
-
-    // Numeric ids sort by their integer value; a non-numeric or absent
-    // (`nil`, the implicit voice) id sorts after every numeric one,
-    // ordered lexicographically among themselves.
-    private static func _voiceSortKey(_ id: String?) -> (Int, String) {
-        guard let id, let number = Int(id)
-        else { return (Int.max, id ?? "") }
-
-        return (number, id)
-    }
-
-    // MARK: Private Instance Methods
 
     // Unions two (optional) extras bags element-wise — used to accumulate
     // articulation/ornament/fingering/slur markers across every leg of a
@@ -306,33 +247,6 @@ extension MusicXML.Importer.Walker {
         return elements.isEmpty ? nil : Extras(elements: elements)
     }
 
-    private static func _articulationExtras(_ items: [MXLArticulations.Item]) -> [Extra] {
-        items.compactMap { item in
-            switch item {
-            case .accent:
-                .accent
-
-            case .breathMark:
-                .breathMark
-
-            case .staccato:
-                .staccato
-
-            case .strongAccent:
-                .marcato
-
-            case .tenuto:
-                .tenuto
-
-            case let .otherArticulation(text):
-                Extra(name: Extra.articulation.name, values: [.string(text.value)])
-
-            default:
-                nil
-            }
-        }
-    }
-
     private static func _ornamentExtra(_ content: MXLOrnaments.Content) -> Extra? {
         switch content {
         case .invertedMordent,
@@ -352,6 +266,78 @@ extension MusicXML.Importer.Walker {
             Extra(name: Extra.articulation.name, values: [.string(text.value)])
 
         default:
+            nil
+        }
+    }
+
+    private static func _recordDirectionDynamic(_ dynamic: Dynamic,
+                                                at beatTime: BeatTime,
+                                                mark: String? = nil,
+                                                velocity: Int? = nil,
+                                                _ context: inout MusicXML.Importer.Context) {
+        context.directionDynamicEvents.append(MusicXML.Importer.Context.DynamicEvent(beatTime: beatTime,
+                                                                                     dynamic: dynamic,
+                                                                                     kind: .step,
+                                                                                     mark: mark,
+                                                                                     velocity: velocity))
+
+        context.lastDirectionDynamic = dynamic
+    }
+
+    // A chord tone's own `dynamics` is recorded exactly like its lead note's
+    // — both are individually written `<note>` elements, each free to carry
+    // (or omit) the attribute.
+    private static func _recordDynamic(_ note: MXLNote,
+                                       attack: BeatTime,
+                                       voiceID: String?,
+                                       _ context: inout MusicXML.Importer.Context) {
+        guard let dynamic = convertToDynamic(note)
+        else { return }
+
+        context.noteDynamicEvents[voiceID, default: []].append((beatTime: attack,
+                                                                dynamic: dynamic,
+                                                                velocity: convertToVelocity(note)))
+    }
+
+    private static func _scorePartsByID(_ score: MusicXML.Score) -> [String: MXLScorePart] {
+        var result: [String: MXLScorePart] = [:]
+
+        for item in score.partList.items {
+            if case let .scorePart(scorePart) = item {
+                result[scorePart.id] = scorePart
+            }
+        }
+
+        return result
+    }
+
+    // One step along `dynamicScale` in the given wedge kind's direction,
+    // clamped at either end — a wedge beyond `ffff` stays `ffff`, one
+    // beyond `pppp` stays `pppp`, rather than producing no shift at all.
+    // `kind` is always `.crescendo` or `.diminuendo` in practice: those are
+    // the only cases `_handleWedge` ever stores in `pendingWedges`.
+    private static func _shifted(_ dynamic: Dynamic,
+                                 kind: MXLWedge.Kind) -> Dynamic {
+        guard let index = dynamicScale.firstIndex(of: dynamic)
+        else { return dynamic }
+
+        let shift = kind == .crescendo ? 1 : -1
+        let clampedIndex = min(max(index + shift, 0), dynamicScale.count - 1)
+
+        return dynamicScale[clampedIndex]
+    }
+
+    private static func _slurExtra(_ slur: MXLSlur) -> Extra? {
+        let id = "\(slur.number.uintValue)"
+
+        return switch slur.kind {
+        case .start:
+            Extra(name: Extra.slurStart.name, values: [.string(id)])
+
+        case .stop:
+            Extra(name: Extra.slurEnd.name, values: [.string(id)])
+
+        case .continue:
             nil
         }
     }
@@ -380,20 +366,34 @@ extension MusicXML.Importer.Walker {
         }
     }
 
-    private static func _slurExtra(_ slur: MXLSlur) -> Extra? {
-        let id = "\(slur.number.uintValue)"
-
-        return switch slur.kind {
-        case .start:
-            Extra(name: Extra.slurStart.name, values: [.string(id)])
-
-        case .stop:
-            Extra(name: Extra.slurEnd.name, values: [.string(id)])
-
-        case .continue:
-            nil
+    // MusicXML declares no voice order anywhere — a `<voice>` id is a
+    // free-form string a note simply carries, with nothing in the
+    // `<part-list>` preamble (or anywhere else) enumerating a part's voices
+    // — so `context.voiceIDs` only ever reflects the order each id was
+    // first met while walking notes, which need not be ascending (a
+    // higher-numbered voice's first note routinely precedes a
+    // lower-numbered voice's in the raw file). Sorting here, once voice
+    // resolution is otherwise done, gives every consumer the reading order
+    // a listener actually expects (1, 2, 3, …) instead of encounter order.
+    private static func _voices(from context: MusicXML.Importer.Context) -> [MusicXML.Voice] {
+        context.voiceIDs.sorted { _voiceSortKey($0) < _voiceSortKey($1) }.map { id in
+            MusicXML.Voice(id: id,
+                           noteDynamicEvents: context.noteDynamicEvents[id] ?? [],
+                           noteTable: context.noteTables[id] ?? NoteTable())
         }
     }
+
+    // Numeric ids sort by their integer value; a non-numeric or absent
+    // (`nil`, the implicit voice) id sorts after every numeric one,
+    // ordered lexicographically among themselves.
+    private static func _voiceSortKey(_ id: String?) -> (Int, String) {
+        guard let id, let number = Int(id)
+        else { return (Int.max, id ?? "") }
+
+        return (number, id)
+    }
+
+    // MARK: Private Instance Methods
 
     private func _insert(_ pitch: IvorTuning.Pitch,
                          attack: BeatTime,

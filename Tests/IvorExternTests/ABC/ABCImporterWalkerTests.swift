@@ -17,6 +17,30 @@ struct ABCImporterWalkerTests {
 
 extension ABCImporterWalkerTests {
     @Test
+    func walk_accentDecoration_attachesFlagToNextNote() throws {
+        let abc = """
+            X:1
+            L:1/4
+            K:C
+            !accent!C D|
+            """
+        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+        let tune = try #require(tunebook.tunes.first)
+
+        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
+
+        var found = false
+
+        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
+            if hasFlag(extras, .accent) {
+                found = true
+            }
+        }
+
+        #expect(found)
+    }
+
+    @Test
     func walk_brokenRhythm_rescalesFlankingNotes() throws {
         let abc = """
             X:1
@@ -55,27 +79,6 @@ extension ABCImporterWalkerTests {
         #expect(events.first?.beatTime == .zero)
         #expect(events.first?.dynamic == .mf)
         #expect(events.first?.kind == .step)
-    }
-
-    @Test
-    func walk_unrecognizedDecoration_recordsMarkedStepAtPreviousLevel() throws {
-        let abc = """
-            X:1
-            L:1/4
-            K:C
-            !sfz!C D|
-            """
-        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
-        let tune = try #require(tunebook.tunes.first)
-
-        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
-        let events = results[0].context.dynamicEvents
-
-        #expect(events.count == 1)
-        #expect(events.first?.beatTime == .zero)
-        #expect(events.first?.dynamic == .mp)
-        #expect(events.first?.kind == .step)
-        #expect(events.first?.mark == "sfz")
     }
 
     @Test
@@ -176,6 +179,30 @@ extension ABCImporterWalkerTests {
     }
 
     @Test
+    func walk_slur_attachesStartAndEndFlags() throws {
+        let abc = """
+            X:1
+            L:1/4
+            K:C
+            (C D)|
+            """
+        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+        let tune = try #require(tunebook.tunes.first)
+
+        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
+
+        var flags: [(start: Bool, end: Bool)] = []
+
+        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
+            flags.append((hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0] == (true, false))
+        #expect(flags[1] == (false, true))
+    }
+
+    @Test
     func walk_tempoField_recordsTempoEvent() throws {
         let abc = """
             X:1
@@ -217,50 +244,23 @@ extension ABCImporterWalkerTests {
     }
 
     @Test
-    func walk_accentDecoration_attachesFlagToNextNote() throws {
+    func walk_unrecognizedDecoration_recordsMarkedStepAtPreviousLevel() throws {
         let abc = """
             X:1
             L:1/4
             K:C
-            !accent!C D|
+            !sfz!C D|
             """
         let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
         let tune = try #require(tunebook.tunes.first)
 
         let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
+        let events = results[0].context.dynamicEvents
 
-        var found = false
-
-        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
-            if hasFlag(extras, .accent) {
-                found = true
-            }
-        }
-
-        #expect(found)
-    }
-
-    @Test
-    func walk_slur_attachesStartAndEndFlags() throws {
-        let abc = """
-            X:1
-            L:1/4
-            K:C
-            (C D)|
-            """
-        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
-        let tune = try #require(tunebook.tunes.first)
-
-        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
-
-        var flags: [(start: Bool, end: Bool)] = []
-
-        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
-        }
-
-        #expect(flags.count == 2)
-        #expect(flags[0] == (true, false))
-        #expect(flags[1] == (false, true))
+        #expect(events.count == 1)
+        #expect(events.first?.beatTime == .zero)
+        #expect(events.first?.dynamic == .mp)
+        #expect(events.first?.kind == .step)
+        #expect(events.first?.mark == "sfz")
     }
 }

@@ -196,6 +196,17 @@ extension ABC.Importer.Walker {
 
 extension ABC.Importer.Walker {
 
+    // Off-scale-but-still-dynamic accent words MusicXML's own fixed-case
+    // dynamics enumeration also names (`sf`, `sfz`, `fz`, `rf`, `rfz`, and
+    // near-spellings) — these stay on the `dynamicMark` path in
+    // `_handleDecoration(_:_:)` rather than routing to the Tier 1/catch-all
+    // articulation vocabulary, since they genuinely are dynamics markings,
+    // just not one of `Dynamic`'s ten named levels.
+
+    // MARK: Private Type Properties
+
+    private static let dynamicMarkWords: Set<String> = ["sf", "sfz", "sfzp", "sffz", "fz", "rf", "rfz", "ffz"]
+
     // MARK: Private Instance Methods
 
     private func _apply(_ field: ABCField,
@@ -321,14 +332,6 @@ extension ABC.Importer.Walker {
     // so `context.currentBeatTime` has to reflect them — but they may still
     // be sitting in `pendingEvent`, undecided until the walk sees whether the
     // next item ties onto them, unless this flushes them itself.
-    // Off-scale-but-still-dynamic accent words MusicXML's own fixed-case
-    // dynamics enumeration also names (`sf`, `sfz`, `fz`, `rf`, `rfz`, and
-    // near-spellings) — these stay on the `dynamicMark` path below rather
-    // than routing to the Tier 1/catch-all articulation vocabulary, since
-    // they genuinely are dynamics markings, just not one of `Dynamic`'s ten
-    // named levels.
-    private static let dynamicMarkWords: Set<String> = ["sf", "sfz", "sfzp", "sffz", "fz", "rf", "rfz", "ffz"]
-
     private func _handleDecoration(_ decoration: ABCDecoration,
                                    _ context: inout ABC.Importer.Context) throws(ABC.Error) {
         try _commitPending(&context)

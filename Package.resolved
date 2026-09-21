@@ -34,7 +34,7 @@
       "location" : "https://github.com/eBardX/IvorJohnnySonic.git",
       "state" : {
         "branch" : "v3-main",
-        "revision" : "5226401184d50a80a1b58a6959476891dcb5e1b6"
+        "revision" : "fdcbae8107961a7e1b9e70fa8b811c683b8c6404"
       }
     },
     {
@@ -52,7 +52,7 @@
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "6f5cc371abe96aa7fa50ec65d2875072cd90d346"
+        "revision" : "93cfd9f8f05d5b50b2717865bbe44b1b53125ef4"
       }
     },
     {
@@ -70,7 +70,7 @@
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "9e33da93680c969c0bcc5adc5fc7c9ce02766d8e"
+        "revision" : "fab6c1c640d12683b1d4ee48b375d6c1b34c501d"
       }
     },
     {

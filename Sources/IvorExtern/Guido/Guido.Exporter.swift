@@ -210,85 +210,6 @@ extension Guido.Exporter {
         return events
     }
 
-    // See `ABC.Exporter._unionElements(_:)` — same chord-wide-union
-    // simplification, for the same reason (Guido's own tags apply to a
-    // whole chord group, not one member note).
-    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
-        extrasList.compactMap { $0?.elements }.flatMap { $0 }
-    }
-
-    // Wraps `symbols` (the event's own note/chord symbol(s)) one layer per
-    // Tier 1/fingering/breathMark extra present, innermost-first — only
-    // called for an event's *first* segment (a tie-continuation's own
-    // segments carry no repeated wrapping). `body:`-form tags are the only
-    // shape guidolib's own template gives most of these kinds — see
-    // `convertToGuidoTag(_:body:)`.
-    private static func _wrapArticulations(_ symbols: [GMNSymbol], _ extrasList: [Extras?]) -> [GMNSymbol] {
-        _unionElements(extrasList).reduce(symbols) { wrapped, element in
-            guard let tag = convertToGuidoTag(element, body: wrapped)
-            else { return wrapped }
-
-            return [.tag(tag)]
-        }
-    }
-
-    // A `\slurBegin:n` marker, written immediately before a note/chord's
-    // own symbol(s) (and any articulation wrapping above) — only called
-    // for an event's *first* segment. A `slurStart` extra with no
-    // parseable `.string` id (e.g. one that originated from ABC's bare-flag
-    // convention, carried across a cross-format conversion) is dropped
-    // rather than guessed at: Guido's own slur pairing is ident-based, not
-    // stack-based, so there's no positional fallback the way ABC's own
-    // export has.
-    private static func _leadingSlurStartSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
-        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurStart.name }),
-              case let .string(text)? = idText.values.first,
-              let uintValue = UInt(text),
-              let ident = GMNTag.Ident(uintValue: uintValue),
-              let slur = GMNSlur(ident: ident, span: .begin)
-        else { return [] }
-
-        return [.tag(.slur(slur))]
-    }
-
-    // A `\slurEnd:n` marker, written immediately after a note/chord's own
-    // symbol(s) — only called for an event's *last* segment. Same id-only
-    // requirement as `_leadingArticulationSymbols(_:)`.
-    private static func _trailingSlurEndSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
-        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurEnd.name }),
-              case let .string(text)? = idText.values.first,
-              let uintValue = UInt(text),
-              let ident = GMNTag.Ident(uintValue: uintValue),
-              let slur = GMNSlur(ident: ident, span: .end)
-        else { return [] }
-
-        return [.tag(.slur(slur))]
-    }
-
-    // One event's own segment symbols: articulation-wrapped note/chord
-    // symbols, with a leading `\slurBegin:n` on the event's first segment
-    // and a trailing `\slurEnd:n` on its last.
-    private static func _segmentSymbols(event: Event,
-                                        start: BeatTime,
-                                        end: BeatTime,
-                                        duration: BeatDuration) throws(Guido.Error) -> [GMNSymbol] {
-        var symbols: [GMNSymbol] = []
-        var noteSymbols = try _makeSymbols(pitches: event.pitches, duration: duration)
-
-        if event.attack == start {
-            noteSymbols = _wrapArticulations(noteSymbols, event.extrasList)
-            symbols += _leadingSlurStartSymbols(event.extrasList)
-        }
-
-        symbols += noteSymbols
-
-        if event.end == end {
-            symbols += _trailingSlurEndSymbols(event.extrasList)
-        }
-
-        return symbols
-    }
-
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, GMNInstrument)] {
         var directives: [(BeatTime, GMNInstrument)] = []
 
@@ -317,6 +238,25 @@ extension Guido.Exporter {
         }
 
         return convertToGuidoIntensity(dynamic)
+    }
+
+    // A `\slurBegin:n` marker, written immediately before a note/chord's
+    // own symbol(s) (and any articulation wrapping above) — only called
+    // for an event's *first* segment. A `slurStart` extra with no
+    // parseable `.string` id (e.g. one that originated from ABC's bare-flag
+    // convention, carried across a cross-format conversion) is dropped
+    // rather than guessed at: Guido's own slur pairing is ident-based, not
+    // stack-based, so there's no positional fallback the way ABC's own
+    // export has.
+    private static func _leadingSlurStartSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
+        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurStart.name }),
+              case let .string(text)? = idText.values.first,
+              let uintValue = UInt(text),
+              let ident = GMNTag.Ident(uintValue: uintValue),
+              let slur = GMNSlur(ident: ident, span: .begin)
+        else { return [] }
+
+        return [.tag(.slur(slur))]
     }
 
     private static func _makeBody(work: Work,
@@ -505,6 +445,30 @@ extension Guido.Exporter {
         return max(1, UInt(measures))
     }
 
+    // One event's own segment symbols: articulation-wrapped note/chord
+    // symbols, with a leading `\slurBegin:n` on the event's first segment
+    // and a trailing `\slurEnd:n` on its last.
+    private static func _segmentSymbols(event: Event,
+                                        start: BeatTime,
+                                        end: BeatTime,
+                                        duration: BeatDuration) throws(Guido.Error) -> [GMNSymbol] {
+        var symbols: [GMNSymbol] = []
+        var noteSymbols = try _makeSymbols(pitches: event.pitches, duration: duration)
+
+        if event.attack == start {
+            noteSymbols = _wrapArticulations(noteSymbols, event.extrasList)
+            symbols += _leadingSlurStartSymbols(event.extrasList)
+        }
+
+        symbols += noteSymbols
+
+        if event.end == end {
+            symbols += _trailingSlurEndSymbols(event.extrasList)
+        }
+
+        return symbols
+    }
+
     private static func _tempoDirectives(_ tempoMap: TempoMap) -> [(BeatTime, GMNTempo)] {
         var directives: [(BeatTime, GMNTempo)] = []
 
@@ -515,6 +479,42 @@ extension Guido.Exporter {
         }
 
         return directives
+    }
+
+    // A `\slurEnd:n` marker, written immediately after a note/chord's own
+    // symbol(s) — only called for an event's *last* segment. Same id-only
+    // requirement as `_leadingArticulationSymbols(_:)`.
+    private static func _trailingSlurEndSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
+        guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurEnd.name }),
+              case let .string(text)? = idText.values.first,
+              let uintValue = UInt(text),
+              let ident = GMNTag.Ident(uintValue: uintValue),
+              let slur = GMNSlur(ident: ident, span: .end)
+        else { return [] }
+
+        return [.tag(.slur(slur))]
+    }
+
+    // See `ABC.Exporter._unionElements(_:)` — same chord-wide-union
+    // simplification, for the same reason (Guido's own tags apply to a
+    // whole chord group, not one member note).
+    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
+        extrasList.compactMap { $0?.elements }.flatMap { $0 }
+    }
+
+    // Wraps `symbols` (the event's own note/chord symbol(s)) one layer per
+    // Tier 1/fingering/breathMark extra present, innermost-first — only
+    // called for an event's *first* segment (a tie-continuation's own
+    // segments carry no repeated wrapping). `body:`-form tags are the only
+    // shape guidolib's own template gives most of these kinds — see
+    // `convertToGuidoTag(_:body:)`.
+    private static func _wrapArticulations(_ symbols: [GMNSymbol], _ extrasList: [Extras?]) -> [GMNSymbol] {
+        _unionElements(extrasList).reduce(symbols) { wrapped, element in
+            guard let tag = convertToGuidoTag(element, body: wrapped)
+            else { return wrapped }
+
+            return [.tag(tag)]
+        }
     }
 
     // Replaces every run of chunks a ramp annotation covers with one chunk

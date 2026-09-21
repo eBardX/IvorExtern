@@ -38,6 +38,21 @@ extension MIDI.Importer.Context {
 
     // MARK: Internal Instance Methods
 
+    // Inserts a `DynamicMap` entry at the dynamic already active at
+    // `eventTime` (an Expression Controller event doesn't itself carry a
+    // note-on-velocity-style dynamic — it's a continuous shaper layered on
+    // top of whatever's already sounding), tagged with the combined 0-127
+    // Expression Controller value. See `expressionValue` in
+    // `Extra+DynamicMap.swift`.
+    internal mutating func handleExpression(_ eventTime: MIDI.EventTime,
+                                            _ value: Int) {
+        let (beatTime, _) = beatMap[eventTime]
+
+        dynamicMap.insert(time: beatTime,
+                          dynamic: dynamicMap[beatTime],
+                          extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(value)])]))
+    }
+
     internal mutating func handleNote(_ note: MIDI.Note) {
         let (attack, _) = beatMap[note.startTime]
         let (release, _) = beatMap[MIDI.EventTime(note.startTime.uintValue + note.duration)]
@@ -80,21 +95,6 @@ extension MIDI.Importer.Context {
         panMap.insert(time: beatTime,
                       pan: pan,
                       extras: extras)
-    }
-
-    // Inserts a `DynamicMap` entry at the dynamic already active at
-    // `eventTime` (an Expression Controller event doesn't itself carry a
-    // note-on-velocity-style dynamic — it's a continuous shaper layered on
-    // top of whatever's already sounding), tagged with the combined 0-127
-    // Expression Controller value. See `expressionValue` in
-    // `Extra+DynamicMap.swift`.
-    internal mutating func handleExpression(_ eventTime: MIDI.EventTime,
-                                            _ value: Int) {
-        let (beatTime, _) = beatMap[eventTime]
-
-        dynamicMap.insert(time: beatTime,
-                          dynamic: dynamicMap[beatTime],
-                          extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(value)])]))
     }
 }
 

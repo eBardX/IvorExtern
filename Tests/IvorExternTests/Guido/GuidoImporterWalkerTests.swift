@@ -15,6 +15,28 @@ struct GuidoImporterWalkerTests {
 
 extension GuidoImporterWalkerTests {
     @Test
+    func walk_articulationTag_attachesFlagToNextNote() throws {
+        let octave = try #require(GMNPitch.Octave(intValue: 1))
+        let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
+                           duration: GMNDuration(numerator: 1, denominator: 4))
+        let articulation = try #require(GMNArticulation(kind: .accent))
+        let walker = Guido.Importer.Walker(variables: [:])
+        let voice = Guido.Voice(symbols: [.tag(.articulation(articulation)), .note(note)])
+
+        let context = try walker.walk(voice)
+
+        var found = false
+
+        context.noteTable.forEach { _, _, _, _, _, extras in
+            if hasFlag(extras, .accent) {
+                found = true
+            }
+        }
+
+        #expect(found)
+    }
+
+    @Test
     func walk_chord_insertsMembersAndAdvancesByMaxDuration() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))
         let note1 = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
@@ -207,6 +229,32 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_slurBeginEnd_attachesStartAndEndFlags() throws {
+        let octave = try #require(GMNPitch.Octave(intValue: 1))
+        let note1 = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
+                            duration: GMNDuration(numerator: 1, denominator: 4))
+        let note2 = GMNNote(pitch: GMNPitch(name: .d, accidental: .omitted, octave: octave),
+                            duration: GMNDuration(numerator: 1, denominator: 4))
+        let ident = try #require(GMNTag.Ident(uintValue: 1))
+        let begin = try #require(GMNSlur(ident: ident, span: .begin))
+        let end = try #require(GMNSlur(ident: ident, span: .end))
+        let walker = Guido.Importer.Walker(variables: [:])
+        let voice = Guido.Voice(symbols: [.tag(.slur(begin)), .note(note1), .note(note2), .tag(.slur(end))])
+
+        let context = try walker.walk(voice)
+
+        var flags: [(start: String?, end: String?)] = []
+
+        context.noteTable.forEach { _, _, _, _, _, extras in
+            flags.append((stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0].start == "1")
+        #expect(flags[1].end == "1")
+    }
+
+    @Test
     func walk_tablature_throwsUnsupportedEvent() throws {
         let tablature = try #require(GMNTablature(tabString: 1, fret: "3", duration: nil))
         let walker = Guido.Importer.Walker(variables: [:])
@@ -291,54 +339,6 @@ extension GuidoImporterWalkerTests {
 
         #expect(count == 3)
         #expect(context.currentBeatTime == BeatTime(3))
-    }
-
-    @Test
-    func walk_articulationTag_attachesFlagToNextNote() throws {
-        let octave = try #require(GMNPitch.Octave(intValue: 1))
-        let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
-                           duration: GMNDuration(numerator: 1, denominator: 4))
-        let articulation = try #require(GMNArticulation(kind: .accent))
-        let walker = Guido.Importer.Walker(variables: [:])
-        let voice = Guido.Voice(symbols: [.tag(.articulation(articulation)), .note(note)])
-
-        let context = try walker.walk(voice)
-
-        var found = false
-
-        context.noteTable.forEach { _, _, _, _, _, extras in
-            if hasFlag(extras, .accent) {
-                found = true
-            }
-        }
-
-        #expect(found)
-    }
-
-    @Test
-    func walk_slurBeginEnd_attachesStartAndEndFlags() throws {
-        let octave = try #require(GMNPitch.Octave(intValue: 1))
-        let note1 = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
-                            duration: GMNDuration(numerator: 1, denominator: 4))
-        let note2 = GMNNote(pitch: GMNPitch(name: .d, accidental: .omitted, octave: octave),
-                            duration: GMNDuration(numerator: 1, denominator: 4))
-        let ident = try #require(GMNTag.Ident(uintValue: 1))
-        let begin = try #require(GMNSlur(ident: ident, span: .begin))
-        let end = try #require(GMNSlur(ident: ident, span: .end))
-        let walker = Guido.Importer.Walker(variables: [:])
-        let voice = Guido.Voice(symbols: [.tag(.slur(begin)), .note(note1), .note(note2), .tag(.slur(end))])
-
-        let context = try walker.walk(voice)
-
-        var flags: [(start: String?, end: String?)] = []
-
-        context.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
-        }
-
-        #expect(flags.count == 2)
-        #expect(flags[0].start == "1")
-        #expect(flags[1].end == "1")
     }
 
     @Test

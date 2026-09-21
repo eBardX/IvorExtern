@@ -229,59 +229,40 @@ extension MIDI.Exporter {
                              tracks: tracks)
     }
 
-    // Parses a part name of the exact form "Channel N", returning N, or
-    // `nil` if the name doesn't match (a renamed part, or a part sourced
-    // from another importer).
-    private static func _parseChannelName(_ name: String) -> Int? {
-        let prefix = "Channel "
+    // The exact pre-quantization velocity (see `velocity` in
+    // `Extra+DynamicMap.swift`) held at each `DynamicMap` entry that carries
+    // one, keyed by beat time so the note-emission loop can prefer it over
+    // `convertToMIDIKeyVelocity(_:)`'s re-derivation from `Dynamic`.
+    private static func _exactVelocityByBeatTime(_ dynamicMap: DynamicMap<BeatTime>) -> [BeatTime: MIDI.KeyVelocity] {
+        var result: [BeatTime: MIDI.KeyVelocity] = [:]
 
-        guard name.hasPrefix(prefix)
-        else { return nil }
-
-        return Int(name.dropFirst(prefix.count))
-    }
-
-    // A part's preferred export channel: its `instrumentMap`'s first
-    // entry's `midiChannel` extra, if any, otherwise the "Channel N" name
-    // convention `_parseChannelName(_:)` reads.
-    private static func _preferredChannel(_ part: Part<BeatTime, NoteNumber>) -> Int? {
-        var firstExtras: Extras?
-        var seen = false
-
-        part.instrumentMap.forEach { _, _, _, extras in
-            if !seen {
-                firstExtras = extras
-                seen = true
+        dynamicMap.forEach { _, beatTime, _, extras in
+            if let velocity = intValue(extras, .velocity),
+               let value = MIDI.KeyVelocity(uintValue: UInt(velocity)) {
+                result[beatTime] = value
             }
         }
 
-        return intValue(firstExtras, .midiChannel) ?? _parseChannelName(part.name)
+        return result
     }
 
-    // `midiPan`, when present, is the exact combined 14-bit value — split
-    // back into an LSB/MSB pair, rather than re-deriving a 7-bit-only value
-    // from `Pan`. LSB is emitted first (unlike Bank Select's MSB-then-LSB
-    // convention) so `MIDI.Importer`'s same-tick merge — which reads events
-    // in emission order, not MIDI-standard byte order — already knows the
-    // LSB by the time it processes the MSB that actually creates the
-    // `PanMap` entry.
-    private static func _panEvents(_ panMap: PanMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+    // `expressionValue` is additive expressive data with no rounding
+    // counterpart to fall back to (unlike `velocity`, which always has
+    // `Dynamic`'s own re-derivation to fall back to) — emitted only when
+    // present, never synthesized.
+    private static func _expressionEvents(_ dynamicMap: DynamicMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        panMap.forEach { _, beatTime, pan, extras in
-            guard let eventTime = convertToMIDIEventTime(beatTime, exportTickRate)
-            else { return }
-
-            if let midiPan = intValue(extras, .midiPan) {
-                let raw = UInt(midiPan)
+        dynamicMap.forEach { _, beatTime, _, extras in
+            if let expression = intValue(extras, .expressionValue),
+               let eventTime = convertToMIDIEventTime(beatTime, exportTickRate) {
+                let raw = UInt(expression)
 
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
                    let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
-                    events.append(.midi(eventTime, .controlChange(channel, .panLSB, lsb)))
-                    events.append(.midi(eventTime, .controlChange(channel, .panMSB, msb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerMSB, msb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerLSB, lsb)))
                 }
-            } else if let panValue = convertToMIDIPanValue(pan) {
-                events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
             }
         }
 
@@ -329,44 +310,63 @@ extension MIDI.Exporter {
         return events
     }
 
-    // The exact pre-quantization velocity (see `velocity` in
-    // `Extra+DynamicMap.swift`) held at each `DynamicMap` entry that carries
-    // one, keyed by beat time so the note-emission loop can prefer it over
-    // `convertToMIDIKeyVelocity(_:)`'s re-derivation from `Dynamic`.
-    private static func _exactVelocityByBeatTime(_ dynamicMap: DynamicMap<BeatTime>) -> [BeatTime: MIDI.KeyVelocity] {
-        var result: [BeatTime: MIDI.KeyVelocity] = [:]
-
-        dynamicMap.forEach { _, beatTime, _, extras in
-            if let velocity = intValue(extras, .velocity),
-               let value = MIDI.KeyVelocity(uintValue: UInt(velocity)) {
-                result[beatTime] = value
-            }
-        }
-
-        return result
-    }
-
-    // `expressionValue` is additive expressive data with no rounding
-    // counterpart to fall back to (unlike `velocity`, which always has
-    // `Dynamic`'s own re-derivation to fall back to) — emitted only when
-    // present, never synthesized.
-    private static func _expressionEvents(_ dynamicMap: DynamicMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+    // `midiPan`, when present, is the exact combined 14-bit value — split
+    // back into an LSB/MSB pair, rather than re-deriving a 7-bit-only value
+    // from `Pan`. LSB is emitted first (unlike Bank Select's MSB-then-LSB
+    // convention) so `MIDI.Importer`'s same-tick merge — which reads events
+    // in emission order, not MIDI-standard byte order — already knows the
+    // LSB by the time it processes the MSB that actually creates the
+    // `PanMap` entry.
+    private static func _panEvents(_ panMap: PanMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        dynamicMap.forEach { _, beatTime, _, extras in
-            if let expression = intValue(extras, .expressionValue),
-               let eventTime = convertToMIDIEventTime(beatTime, exportTickRate) {
-                let raw = UInt(expression)
+        panMap.forEach { _, beatTime, pan, extras in
+            guard let eventTime = convertToMIDIEventTime(beatTime, exportTickRate)
+            else { return }
+
+            if let midiPan = intValue(extras, .midiPan) {
+                let raw = UInt(midiPan)
 
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
                    let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
-                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerMSB, msb)))
-                    events.append(.midi(eventTime, .controlChange(channel, .expressionControllerLSB, lsb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .panLSB, lsb)))
+                    events.append(.midi(eventTime, .controlChange(channel, .panMSB, msb)))
                 }
+            } else if let panValue = convertToMIDIPanValue(pan) {
+                events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
             }
         }
 
         return events
+    }
+
+    // Parses a part name of the exact form "Channel N", returning N, or
+    // `nil` if the name doesn't match (a renamed part, or a part sourced
+    // from another importer).
+    private static func _parseChannelName(_ name: String) -> Int? {
+        let prefix = "Channel "
+
+        guard name.hasPrefix(prefix)
+        else { return nil }
+
+        return Int(name.dropFirst(prefix.count))
+    }
+
+    // A part's preferred export channel: its `instrumentMap`'s first
+    // entry's `midiChannel` extra, if any, otherwise the "Channel N" name
+    // convention `_parseChannelName(_:)` reads.
+    private static func _preferredChannel(_ part: Part<BeatTime, NoteNumber>) -> Int? {
+        var firstExtras: Extras?
+        var seen = false
+
+        part.instrumentMap.forEach { _, _, _, extras in
+            if !seen {
+                firstExtras = extras
+                seen = true
+            }
+        }
+
+        return intValue(firstExtras, .midiChannel) ?? _parseChannelName(part.name)
     }
 
     private static func _tempoEvents(from tempoMap: TempoMap) -> [MIDI.Event] {
@@ -392,7 +392,7 @@ extension MIDI.Exporter {
                 anchorBeatTimes.append(beatTime)
             }
 
-            exactMicrosecondsByBeatTime[beatTime] = intValue(extras, .exactMicrosecondsPerQuarter)
+            exactMicrosecondsByBeatTime[beatTime] = intValue(extras, .midiTempo)
         }
 
         // Build the ordered list of beat times to sample: the anchors

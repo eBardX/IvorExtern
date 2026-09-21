@@ -51,6 +51,38 @@ extension ABC.Exporter {
 
     // MARK: Private Type Methods
 
+    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
+    // crossing a barline splits into tied segments (each independently
+    // tuplet-scaled), gaps become rests, and every measure sums to exactly
+    // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
+    // duration becomes a tuplet-marked segment instead.
+    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
+        var barTimes: [BeatTime] = []
+        var barBeat: UInt = 4
+
+        while barBeat < measureCount * 4 {
+            barTimes.append(BeatTime(Number(numerator: barBeat, denominator: 1)))
+            barBeat += 4
+        }
+
+        return barTimes
+    }
+
+    private static func _boundaries(events: [Event], barTimes: [BeatTime], endTime: BeatTime) -> [BeatTime] {
+        var boundaries: Set<BeatTime> = [.zero, endTime]
+
+        for barTime in barTimes {
+            boundaries.insert(barTime)
+        }
+
+        for event in events {
+            boundaries.insert(event.attack)
+            boundaries.insert(event.end)
+        }
+
+        return boundaries.sorted()
+    }
+
     private static func _convert(work: Work) throws(ABC.Error) -> ABCTune {
         guard case let .standardBeat(parts, tempoMap) = work.content
         else {
@@ -72,6 +104,24 @@ extension ABC.Exporter {
         else { throw ABC.Error.noWorksToExport }
 
         return tune
+    }
+
+    // Tier 1 flags convert through `convertToABCDecorationName(_:)`; the
+    // `articulation` catch-all writes its own literal text back out
+    // verbatim (the same free-text round trip its own import side reads).
+    // `fingering` has no ABC representation to write to at all — per the
+    // candidates doc's own finding, ABC has no native fingering decoration
+    // — so a `fingering` extra is silently dropped on export, same as
+    // today.
+    private static func _decorationNames(_ elements: [Extra]) -> [ABCDecoration.Name] {
+        elements.compactMap { element in
+            if element.name == Extra.articulation.name,
+               case let .string(text)? = element.values.first {
+                return ABCDecoration.Name(stringValue: text)
+            }
+
+            return convertToABCDecorationName(element)
+        }
     }
 
     // Reduces a dynamic map's (time, level) entries into decoration
@@ -154,61 +204,6 @@ extension ABC.Exporter {
         return events
     }
 
-    // A chord's decoration/slur markers apply to the whole group in ABC's
-    // own grammar (there's no per-note-within-a-chord decoration syntax),
-    // so a chord's markers are the union across every member pitch's own
-    // extras — a documented simplification for chords carrying different
-    // per-note articulations, not a bug: a single-note event (the common
-    // case) is unaffected.
-    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
-        extrasList.compactMap { $0?.elements }.flatMap { $0 }
-    }
-
-    // Decoration symbols (Tier 1 flags + the `articulation` catch-all) plus
-    // a `(` slur-start marker, both written immediately before a note/
-    // chord's own symbol(s) — only called for an event's *first* segment,
-    // never a tie-continuation.
-    private static func _leadingArticulationSymbols(_ extrasList: [Extras?]) -> [ABCSymbol] {
-        let elements = _unionElements(extrasList)
-        var symbols: [ABCSymbol] = []
-
-        for name in _decorationNames(elements) {
-            if let decoration = ABCDecoration(name: name) {
-                symbols.append(.decoration(decoration))
-            }
-        }
-
-        if elements.contains(where: { $0.name == Extra.slurStart.name }) {
-            symbols.append(.slur(.startRegular))
-        }
-
-        return symbols
-    }
-
-    // A `)` slur-end marker, written immediately after a note/chord's own
-    // symbol(s) — only called for an event's *last* segment.
-    private static func _trailingSlurEndSymbol(_ extrasList: [Extras?]) -> [ABCSymbol] {
-        _unionElements(extrasList).contains { $0.name == Extra.slurEnd.name } ? [.slur(.endRegular)] : []
-    }
-
-    // Tier 1 flags convert through `convertToABCDecorationName(_:)`; the
-    // `articulation` catch-all writes its own literal text back out
-    // verbatim (the same free-text round trip its own import side reads).
-    // `fingering` has no ABC representation to write to at all — per the
-    // candidates doc's own finding, ABC has no native fingering decoration
-    // — so a `fingering` extra is silently dropped on export, same as
-    // today.
-    private static func _decorationNames(_ elements: [Extra]) -> [ABCDecoration.Name] {
-        elements.compactMap { element in
-            if element.name == Extra.articulation.name,
-               case let .string(text)? = element.values.first {
-                return ABCDecoration.Name(stringValue: text)
-            }
-
-            return convertToABCDecorationName(element)
-        }
-    }
-
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, ABCDirective)] {
         var directives: [(BeatTime, ABCDirective)] = []
         let name = ABCDirective.Name(stringValue: "MIDI").require()
@@ -230,6 +225,27 @@ extension ABC.Exporter {
         }
 
         return directives
+    }
+
+    // Decoration symbols (Tier 1 flags + the `articulation` catch-all) plus
+    // a `(` slur-start marker, both written immediately before a note/
+    // chord's own symbol(s) — only called for an event's *first* segment,
+    // never a tie-continuation.
+    private static func _leadingArticulationSymbols(_ extrasList: [Extras?]) -> [ABCSymbol] {
+        let elements = _unionElements(extrasList)
+        var symbols: [ABCSymbol] = []
+
+        for name in _decorationNames(elements) {
+            if let decoration = ABCDecoration(name: name) {
+                symbols.append(.decoration(decoration))
+            }
+        }
+
+        if elements.contains(where: { $0.name == Extra.slurStart.name }) {
+            symbols.append(.slur(.startRegular))
+        }
+
+        return symbols
     }
 
     // A non-power-of-2 denominator has no plain ABC spelling (`ABCLength`
@@ -349,38 +365,6 @@ extension ABC.Exporter {
                                                                      mode: .major).require()))))
 
         return header
-    }
-
-    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
-    // crossing a barline splits into tied segments (each independently
-    // tuplet-scaled), gaps become rests, and every measure sums to exactly
-    // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
-    // duration becomes a tuplet-marked segment instead.
-    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
-        var barTimes: [BeatTime] = []
-        var barBeat: UInt = 4
-
-        while barBeat < measureCount * 4 {
-            barTimes.append(BeatTime(Number(numerator: barBeat, denominator: 1)))
-            barBeat += 4
-        }
-
-        return barTimes
-    }
-
-    private static func _boundaries(events: [Event], barTimes: [BeatTime], endTime: BeatTime) -> [BeatTime] {
-        var boundaries: Set<BeatTime> = [.zero, endTime]
-
-        for barTime in barTimes {
-            boundaries.insert(barTime)
-        }
-
-        for event in events {
-            boundaries.insert(event.attack)
-            boundaries.insert(event.end)
-        }
-
-        return boundaries.sorted()
     }
 
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
@@ -511,17 +495,6 @@ extension ABC.Exporter {
         return symbols
     }
 
-    // A single, unnamed part is written as an implicit voice — no `V:`
-    // field at all — matching how a real single-voice ABC tune is normally
-    // written, and keeping that case round-trip-safe: an implicit voice
-    // imports back as unnamed (see `ABCFunctions.determinePartName`), while
-    // an explicit `V:` field's `id` becomes the imported name whenever it
-    // has no name property of its own. A lone *named* part still needs its
-    // `V:` field, since that's ABC's only place to record a part name.
-    private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
-        parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
-    }
-
     private static func _makeVoice(part: Part<BeatTime, Pitch>,
                                    index: Int) -> ABCVoice {
         var properties: [String: String] = [:]
@@ -544,6 +517,33 @@ extension ABC.Exporter {
         let measures = (range.upperBound.doubleValue / 4).rounded(.up)
 
         return max(1, UInt(measures))
+    }
+
+    // A single, unnamed part is written as an implicit voice — no `V:`
+    // field at all — matching how a real single-voice ABC tune is normally
+    // written, and keeping that case round-trip-safe: an implicit voice
+    // imports back as unnamed (see `ABCFunctions.determinePartName`), while
+    // an explicit `V:` field's `id` becomes the imported name whenever it
+    // has no name property of its own. A lone *named* part still needs its
+    // `V:` field, since that's ABC's only place to record a part name.
+    private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
+        parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
+    }
+
+    // A `)` slur-end marker, written immediately after a note/chord's own
+    // symbol(s) — only called for an event's *last* segment.
+    private static func _trailingSlurEndSymbol(_ extrasList: [Extras?]) -> [ABCSymbol] {
+        _unionElements(extrasList).contains { $0.name == Extra.slurEnd.name } ? [.slur(.endRegular)] : []
+    }
+
+    // A chord's decoration/slur markers apply to the whole group in ABC's
+    // own grammar (there's no per-note-within-a-chord decoration syntax),
+    // so a chord's markers are the union across every member pitch's own
+    // extras — a documented simplification for chords carrying different
+    // per-note articulations, not a bug: a single-note event (the common
+    // case) is unaffected.
+    private static func _unionElements(_ extrasList: [Extras?]) -> [Extra] {
+        extrasList.compactMap { $0?.elements }.flatMap { $0 }
     }
 
     private static func _voiceID(index: Int) -> ABCVoice.ID {

@@ -134,8 +134,8 @@ extension JohnnySonicImporterTests {
                                   startPitch: 60,
                                   endPitch: 60,
                                   instrument: "Piano")
-        let first = DKMTempoLine(startBeat: 0, duration: 4, initialTempo: 60, finalTempo: 100)
-        let second = DKMTempoLine(startBeat: 8, duration: 1, initialTempo: 200, finalTempo: 200)
+        let first = DKMTempoLine(startBeat: 0, duration: 4, startTempo: 60, endTempo: 100)
+        let second = DKMTempoLine(startBeat: 8, duration: 1, startTempo: 200, endTempo: 200)
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(first), .tempoLine(second), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
@@ -162,7 +162,7 @@ extension JohnnySonicImporterTests {
                                   startPitch: 60,
                                   endPitch: 60,
                                   instrument: "Piano")
-        let tempo = DKMTempoLine(startBeat: 4, duration: 4, initialTempo: 120, finalTempo: 120)
+        let tempo = DKMTempoLine(startBeat: 4, duration: 4, startTempo: 120, endTempo: 120)
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .end, .tempoLine(tempo)])
         let work = try JohnnySonic.Importer().convert(score)
 
@@ -181,7 +181,7 @@ extension JohnnySonicImporterTests {
                                   startPitch: 60,
                                   endPitch: 60,
                                   instrument: "Piano")
-        let tempo = DKMTempoLine(startBeat: 0, duration: 4, initialTempo: 120, finalTempo: 120)
+        let tempo = DKMTempoLine(startBeat: 0, duration: 4, startTempo: 120, endTempo: 120)
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(tempo), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
@@ -206,7 +206,7 @@ extension JohnnySonicImporterTests {
         // per-beat step behavior, not a value that continuously ramps from
         // 60 toward 100.
         //
-        let ramp = DKMTempoLine(startBeat: 0, duration: 4, initialTempo: 60, finalTempo: 100)
+        let ramp = DKMTempoLine(startBeat: 0, duration: 4, startTempo: 60, endTempo: 100)
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(ramp), .end])
         let work = try JohnnySonic.Importer().convert(score)
 

@@ -16,6 +16,41 @@ struct MusicXMLRoundTripTests {
 
 extension MusicXMLRoundTripTests {
     @Test
+    func roundTrip_articulationAndSlur_preservesFlags() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: Extras(elements: [Extra(name: Extra.accent.name, values: []),
+                                               Extra(name: Extra.slurStart.name, values: [.string("1")])]))
+        table.insert(attack: BeatTime(1),
+                     duration: BeatDuration(1),
+                     pitch: "D4",
+                     extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
+
+        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
+            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0].accent)
+        #expect(flags[0].slurStart == "1")
+        #expect(flags[1].slurEnd == "1")
+    }
+
+    @Test
     func roundTrip_chord_preservesSimultaneousNotes() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -122,41 +157,6 @@ extension MusicXMLRoundTripTests {
     }
 
     @Test
-    func roundTrip_articulationAndSlur_preservesFlags() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0),
-                     duration: BeatDuration(1),
-                     pitch: "C4",
-                     extras: Extras(elements: [Extra(name: Extra.accent.name, values: []),
-                                               Extra(name: Extra.slurStart.name, values: [.string("1")])]))
-        table.insert(attack: BeatTime(1),
-                     duration: BeatDuration(1),
-                     pitch: "D4",
-                     extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
-
-        let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
-
-        let recovered = try roundTrip(work,
-                                      exporter: MusicXML.Exporter(),
-                                      importer: MusicXML.Importer(),
-                                      fileFormat: .musicXML)
-        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
-
-        var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
-
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
-        }
-
-        #expect(flags.count == 2)
-        #expect(flags[0].accent)
-        #expect(flags[0].slurStart == "1")
-        #expect(flags[1].slurEnd == "1")
-    }
-
-    @Test
     func roundTrip_multiPart_preservesEachPartsNotesAndNames() throws {
         var table1 = NoteTable<BeatTime, Pitch>()
 
@@ -226,28 +226,6 @@ extension MusicXMLRoundTripTests {
     }
 
     @Test
-    func roundTrip_panMap_preservesHardRight() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
-
-        var panMap = PanMap<BeatTime>()
-
-        panMap.insert(time: BeatTime(0), pan: .right)
-
-        let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Pan", content: .standardBeat([part], TempoMap()))
-
-        let recovered = try roundTrip(work,
-                                      exporter: MusicXML.Exporter(),
-                                      importer: MusicXML.Importer(),
-                                      fileFormat: .musicXML)
-        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
-
-        #expect(recoveredPart.panMap[BeatTime(0)] == .right)
-    }
-
-    @Test
     func roundTrip_panDegree_preservesUnclampedDegreeBeyondHardRight() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -278,6 +256,28 @@ extension MusicXMLRoundTripTests {
     }
 
     @Test
+    func roundTrip_panMap_preservesHardRight() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: BeatTime(0), pan: .right)
+
+        let part = Part(name: "Piano", noteTable: table, panMap: panMap)
+        let work = Work(name: "Pan", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        #expect(recoveredPart.panMap[BeatTime(0)] == .right)
+    }
+
+    @Test
     func roundTrip_tempo_preservesFlatValue() throws {
         var tempoMap = TempoMap()
 
@@ -303,6 +303,7 @@ extension MusicXMLRoundTripTests {
     // denominator has no plain ABC spelling, but MusicXML's integer
     // `<divisions>` represents any rational exactly — no tuplet
     // reconstruction is needed.
+
     @Test
     func roundTrip_tripletNotes_preservesDurations() throws {
         var table = NoteTable<BeatTime, Pitch>()

@@ -47,7 +47,7 @@ extension JohnnySonic.Importer {
             for i in 0...duration {
                 let fraction = (Double(i) + 0.5) / Double(duration)
 
-                beatTempos[startBeat + i] = line.initialTempo + (line.finalTempo - line.initialTempo) * fraction
+                beatTempos[startBeat + i] = line.startTempo + (line.endTempo - line.startTempo) * fraction
             }
         }
 
@@ -234,7 +234,7 @@ extension JohnnySonic.Importer {
     // in the original C source) does *not* vary tempo continuously across a
     // `/Tempo` line: it holds a constant BPM for each whole beat, computed as
     // the ramp's midpoint-sampled average over that beat —
-    // `initialTempo + (finalTempo - initialTempo) * (i - startBeat + 0.5) /
+    // `startTempo + (endTempo - startTempo) * (i - startBeat + 0.5) /
     // duration` — then jumps instantly at the next beat boundary. Its loop
     // runs one beat past the line's declared range (`i <= startBeat +
     // duration`), so a contiguous next line's own first beat naturally
@@ -253,13 +253,13 @@ extension JohnnySonic.Importer {
         guard let lastBeat = beatTempos.keys.max()
         else { return TempoMap() }
 
-        var rampsByStartBeat: [Int: (initial: Double, final: Double, duration: Double)] = [:]
+        var rampsByStartBeat: [Int: (start: Double, end: Double, duration: Double)] = [:]
 
         for command in commands {
             guard case let .tempoLine(line) = command
             else { continue }
 
-            rampsByStartBeat[Int(line.startBeat.rounded())] = (line.initialTempo, line.finalTempo, line.duration)
+            rampsByStartBeat[Int(line.startBeat.rounded())] = (line.startTempo, line.endTempo, line.duration)
         }
 
         var tempoMap = TempoMap()
@@ -280,8 +280,8 @@ extension JohnnySonic.Importer {
             var extras: Extras?
 
             if let ramp = rampsByStartBeat[beat] {
-                extras = Extras(elements: [Extra(name: Extra.rampInitialTempo.name, values: [.double(ramp.initial)]),
-                                           Extra(name: Extra.rampFinalTempo.name, values: [.double(ramp.final)]),
+                extras = Extras(elements: [Extra(name: Extra.rampStartTempo.name, values: [.double(ramp.start)]),
+                                           Extra(name: Extra.rampEndTempo.name, values: [.double(ramp.end)]),
                                            Extra(name: Extra.rampDuration.name, values: [.double(ramp.duration)])])
             }
 
