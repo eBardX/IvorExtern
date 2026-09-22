@@ -215,7 +215,7 @@ extension MusicXML.Importer {
     // no usable instrument data at all (no name, no `<midi-instrument>")
     // gets an empty map, which reads as `Instrument.vanilla` via
     // `InstrumentMap`'s own default. A `<midi-instrument>` that carries
-    // only channel/bank/volume/elevation/unpitched data and no `<midi-
+    // only channel/bank/volume/unpitched data and no `<midi-
     // program>` — so `convertToInstrument(_:)` can't name an instrument —
     // still produces an explicit `.vanilla` entry rather than being
     // dropped, the same way a bare `%%MIDI channel` directive does in ABC
@@ -249,10 +249,6 @@ extension MusicXML.Importer {
                 elements.append(Extra(name: Extra.midiVolume.name, values: [.double(volume)]))
             }
 
-            if let elevation = midiInstrument?.elevation {
-                elements.append(Extra(name: Extra.midiElevation.name, values: [.double(elevation)]))
-            }
-
             if let unpitched = midiInstrument?.midiUnpitched {
                 elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
             }
@@ -268,8 +264,8 @@ extension MusicXML.Importer {
     // A part's static `<score-part><midi-instrument><pan>` — the common
     // case, since most notation software declares pan once per part there
     // rather than as a repeated inline `<sound>` — seeds the map at `.zero`
-    // the same way `_makeInstrumentMap` seeds channel/bank/volume/elevation
-    // from the same element. It's placed first so a stable sort keeps it
+    // the same way `_makeInstrumentMap` seeds channel/bank/volume from the
+    // same element. It's placed first so a stable sort keeps it
     // ahead of any real `<sound>` pan event also at `.zero`, letting that
     // more explicit, in-score event take priority when both exist.
     private static func _makeDefaultPanEvent(_ scorePart: MusicXML.ScorePart) -> (beatTime: BeatTime, pan: Pan, degree: Double?)? {
@@ -289,18 +285,38 @@ extension MusicXML.Importer {
                                     _ events: [(beatTime: BeatTime, pan: Pan, degree: Double?)]) -> PanMap<BeatTime> {
         var panMap = PanMap<BeatTime>()
         var previousPan: Pan = .center
-        let allEvents = _makeDefaultPanEvent(scorePart).map { [$0] + events } ?? events
+        let elevation = scorePart.group2.lazy.compactMap(\.midiInstrument?.elevation).first
+
+        // Elevation is a flavor of pan — the vertical axis to `<pan>`'s
+        // horizontal one — so it belongs here rather than on the instrument
+        // map, and it rides on the entry at `.zero` because MusicXML only
+        // ever declares it statically, in `<score-part>`. A part declaring
+        // elevation but no pan at all still needs that entry to exist, so a
+        // `.center` one is synthesized for it, the same way
+        // `_makeInstrumentMap` falls back to a `.vanilla` instrument.
+        let defaultEvent = _makeDefaultPanEvent(scorePart)
+            ?? (elevation != nil ? (beatTime: BeatTime.zero, pan: Pan.center, degree: nil) : nil)
+        let allEvents = defaultEvent.map { [$0] + events } ?? events
 
         for event in allEvents.sorted(by: { $0.beatTime < $1.beatTime }) {
             if event.beatTime != .zero {
                 panMap.insert(time: event.beatTime, pan: previousPan)
             }
 
-            let extras = event.degree.map {
-                Extras(elements: [Extra(name: Extra.panDegree.name, values: [.double($0)])])
+            var elements: [Extra] = []
+
+            if let degree = event.degree {
+                elements.append(Extra(name: Extra.panHorizontal.name, values: [.double(degree)]))
             }
 
-            panMap.insert(time: event.beatTime, pan: event.pan, extras: extras)
+            if event.beatTime == .zero,
+               let elevation {
+                elements.append(Extra(name: Extra.panVertical.name, values: [.double(elevation)]))
+            }
+
+            panMap.insert(time: event.beatTime,
+                          pan: event.pan,
+                          extras: elements.isEmpty ? nil : Extras(elements: elements))
             previousPan = event.pan
         }
 

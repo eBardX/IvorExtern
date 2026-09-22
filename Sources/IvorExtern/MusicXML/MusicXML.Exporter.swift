@@ -286,6 +286,24 @@ extension MusicXML.Exporter {
         return first
     }
 
+    // The earliest `PanMap` entry's extras only, for the one datum MusicXML
+    // declares statically per part rather than mid-measure: elevation. Pan
+    // itself needs no such lookup — every entry becomes its own
+    // `<direction>`/`<sound pan="...">` in `_panDirectives`.
+    private static func _firstPanExtras(_ panMap: PanMap<BeatTime>) -> Extras? {
+        var first: Extras?
+        var found = false
+
+        panMap.forEach { _, _, _, extras in
+            if !found {
+                found = true
+                first = extras
+            }
+        }
+
+        return first
+    }
+
     // Bins the flat, boundary-ordered stream of music items into one
     // `Measure` per 4-beat span, prepending `<attributes>` (divisions, a
     // fixed 4/4 time signature, and a fixed C-major key signature — the model
@@ -530,26 +548,35 @@ extension MusicXML.Exporter {
                                        part: Part<BeatTime, Pitch>) -> MusicXML.ScorePart {
         var instruments: [MXLScoreInstrument] = []
         var group2: [MusicXML.ScorePart.Group2] = []
+        let first = _firstInstrument(part.instrumentMap)
 
-        if let first = _firstInstrument(part.instrumentMap) {
+        // Elevation lives on the `PanMap` — it is a flavor of pan, not of
+        // instrument — but MusicXML declares it inside `<midi-instrument>`,
+        // so a part carrying elevation and no instrument assignment at all
+        // still needs a `<score-instrument>`/`<midi-instrument>` pair (named
+        // for `.vanilla`, as `MusicXML.Importer._makePanMap` assumes on the
+        // way back in) for the elevation to have anywhere to go.
+        let elevation = doubleValue(_firstPanExtras(part.panMap), .panVertical)
+
+        if first != nil || elevation != nil {
+            let instrument = first?.instrument ?? .vanilla
             let instrumentID = id + "-I1"
 
-            instruments.append(MXLScoreInstrument(id: instrumentID, name: first.instrument.stringValue))
+            instruments.append(MXLScoreInstrument(id: instrumentID, name: instrument.stringValue))
 
-            let exactProgram = intValue(first.extras, .midiProgram)
-            let derivedProgram = generalMIDIProgramNumber(name: first.instrument.stringValue).map { $0 + 1 }
+            let exactProgram = intValue(first?.extras, .midiProgram)
+            let derivedProgram = generalMIDIProgramNumber(name: instrument.stringValue).map { $0 + 1 }
             let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
-            let midiChannel = intValue(first.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
-            let midiBank = intValue(first.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
-            let exactUnpitched = intValue(first.extras, .midiUnpitched)
-            let derivedUnpitched = generalMIDIPercussionNote(name: first.instrument.stringValue).map { $0 + 1 }
+            let midiChannel = intValue(first?.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
+            let midiBank = intValue(first?.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
+            let exactUnpitched = intValue(first?.extras, .midiUnpitched)
+            let derivedUnpitched = generalMIDIPercussionNote(name: instrument.stringValue).map { $0 + 1 }
             let midiUnpitched = (exactUnpitched ?? derivedUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
-            let volume = doubleValue(first.extras, .midiVolume)
-            let elevation = doubleValue(first.extras, .midiElevation)
+            let volume = doubleValue(first?.extras, .midiVolume)
 
             // `<midi-program>` is optional per the MusicXML schema, so a
             // `.vanilla` instrument imported from a channel/bank/volume/
-            // elevation/unpitched-only `<midi-instrument>` (see
+            // unpitched-only `<midi-instrument>` (see
             // `MusicXML.Importer._makeInstrumentMap`) still round-trips
             // its data even though no program can be derived for it —
             // emitting the element on any one field being present, not
@@ -633,7 +660,7 @@ extension MusicXML.Exporter {
     private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan, Double?)] {
         var directives: [(BeatTime, Pan, Double?)] = []
 
-        panMap.forEach { _, time, pan, extras in directives.append((time, pan, doubleValue(extras, .panDegree))) }
+        panMap.forEach { _, time, pan, extras in directives.append((time, pan, doubleValue(extras, .panHorizontal))) }
 
         return directives
     }

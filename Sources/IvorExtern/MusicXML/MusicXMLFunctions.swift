@@ -315,7 +315,7 @@ internal func convertToPan(degrees: Double) -> Pan? {
     Pan(numberValue: Number(min(1, max(-1, degrees / 90))))
 }
 
-// The unclamped degree `convertToPan(_:)` clamps away — see `panDegree` in
+// The unclamped degree `convertToPan(_:)` clamps away — see `panHorizontal` in
 // `Extra+PanMap.swift`.
 internal func convertToPanDegree(_ sound: MXLSound) -> Double? {
     _convertToPanDegree(sound)
@@ -670,7 +670,7 @@ private func _convertToMusicXMLStep(_ letter: Pitch.Letter) -> MusicXML.Step {
     }
 }
 
-// The unclamped degree `convertToPan(_:)` clamps away — see `panDegree` in
+// The unclamped degree `convertToPan(_:)` clamps away — see `panHorizontal` in
 // `Extra+PanMap.swift`.
 private func _convertToPanDegree(_ sound: MXLSound) -> Double? {
     sound.group.lazy.compactMap(\.midiInstrument?.pan).first ?? sound.pan

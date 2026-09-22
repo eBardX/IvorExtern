@@ -114,6 +114,41 @@ extension MusicXMLRoundTripTests {
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
     }
 
+    // Elevation is a flavor of pan, so it rides on the `PanMap` even though
+    // MusicXML declares it inside `<midi-instrument>` — and it survives the
+    // trip on a part with no instrument assignment of its own.
+    @Test
+    func roundTrip_panVertical_preservesExactValueOnPanMap() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: BeatTime(0),
+                      pan: .center,
+                      extras: Extras(elements: [Extra(name: Extra.panVertical.name, values: [.double(45)])]))
+
+        let part = Part(name: "Piano", noteTable: table, panMap: panMap)
+        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        var elevation: Double?
+
+        recoveredPart.panMap.forEach { _, time, _, extras in
+            if time == .zero {
+                elevation = doubleValue(extras, .panVertical)
+            }
+        }
+
+        #expect(elevation == 45)
+    }
+
     @Test
     func roundTrip_midiInstrumentExtras_preservesExactValues() throws {
         var table = NoteTable<BeatTime, Pitch>()
@@ -126,7 +161,6 @@ extension MusicXMLRoundTripTests {
                                  instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
                                  extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(1)]),
                                                            Extra(name: Extra.midiVolume.name, values: [.double(80)]),
-                                                           Extra(name: Extra.midiElevation.name, values: [.double(45)]),
                                                            Extra(name: Extra.midiUnpitched.name, values: [.int(38)])]))
 
         let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
@@ -140,19 +174,16 @@ extension MusicXMLRoundTripTests {
 
         var program: Int?
         var volume: Double?
-        var elevation: Double?
         var unpitched: Int?
 
         recoveredPart.instrumentMap.forEach { _, _, _, extras in
             program = intValue(extras, .midiProgram)
             volume = doubleValue(extras, .midiVolume)
-            elevation = doubleValue(extras, .midiElevation)
             unpitched = intValue(extras, .midiUnpitched)
         }
 
         #expect(program == 1)
         #expect(volume == 80)
-        #expect(elevation == 45)
         #expect(unpitched == 38)
     }
 
@@ -226,7 +257,7 @@ extension MusicXMLRoundTripTests {
     }
 
     @Test
-    func roundTrip_panDegree_preservesUnclampedDegreeBeyondHardRight() throws {
+    func roundTrip_panHorizontal_preservesUnclampedDegreeBeyondHardRight() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -235,7 +266,7 @@ extension MusicXMLRoundTripTests {
 
         panMap.insert(time: BeatTime(0),
                       pan: .right,
-                      extras: Extras(elements: [Extra(name: Extra.panDegree.name, values: [.double(135)])]))
+                      extras: Extras(elements: [Extra(name: Extra.panHorizontal.name, values: [.double(135)])]))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
         let work = Work(name: "PanDegree", content: .standardBeat([part], TempoMap()))
@@ -249,7 +280,7 @@ extension MusicXMLRoundTripTests {
         var degree: Double?
 
         recoveredPart.panMap.forEach { _, _, _, extras in
-            degree = doubleValue(extras, .panDegree)
+            degree = doubleValue(extras, .panHorizontal)
         }
 
         #expect(degree == 135)
