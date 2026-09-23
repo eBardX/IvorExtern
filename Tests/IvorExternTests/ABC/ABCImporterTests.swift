@@ -237,6 +237,24 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_voiceNameWithLineBreak_joinsLinesWithSpace() throws {
+        let abc = #"""
+            X:1
+            T:Line Break
+            L:1/4
+            K:C
+            V:1 nm="Tenor\nSax"
+            C D E F|
+            """#
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.map(\.name) == ["Tenor Sax"])
+    }
+
+    @Test
     func read_multiVoiceTuneWithContentBeforeFirstVoiceField_keepsTheImplicitLeadingPart() throws {
         let abc = """
             X:1
@@ -256,10 +274,11 @@ extension ABCImporterTests {
 
         // Content before the first `V:` field lands in the implicit voice,
         // so — unlike the no-leading-content case above — it isn't empty
-        // and isn't dropped.
-        #expect(parts.map(\.name) == ["", "Melody", "Bass"])
+        // and isn't dropped. Being unnamed in a multi-part work, it takes
+        // the positional "Voice N" fallback.
+        #expect(parts.map(\.name) == ["Voice 1", "Melody", "Bass"])
 
-        let implicitPart = try #require(parts.first { $0.name.isEmpty })
+        let implicitPart = try #require(parts.first { $0.name == "Voice 1" })
 
         #expect(notes(in: implicitPart).map(\.pitch) == ["G4", "A4"])
     }
@@ -376,16 +395,25 @@ extension ABCImporterTests {
             T:Unnamed Voice
             L:1/4
             K:C
-            V:1
+            V:Tenor
             C D E F|
             """
         let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
         let works = try ABC.Importer().read(from: wrapper, as: .abc)
         let work = try #require(works.first)
         let parts = try #require(standardBeatParts(of: work))
-        let part = try #require(parts.first { $0.name == "1" })
+        let part = try #require(parts.first { $0.name == "Tenor" })
 
         #expect(notes(in: part).map(\.pitch) == ["C4", "D4", "E4", "F4"])
+    }
+
+    @Test
+    func read_voiceNumberIDsWithoutNames_fallBackToVoiceN() throws {
+        let abc = "X:1\nT:Numbered\nL:1/4\nK:C\nV:1\nC D E F|\nV:3\nG A B c|\n"
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(try ABC.Importer().read(from: wrapper, as: .abc).first)
+
+        #expect(try #require(standardBeatParts(of: work)).map(\.name) == ["Voice 1", "Voice 2"])
     }
 
     @Test

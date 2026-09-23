@@ -29,6 +29,12 @@ internal import XestiTools
 // `pendingDynamicRamps`, keyed by a ramp's optional `GMNTag.Ident` exactly as
 // guidolib itself pairs `\crescBegin`/`\crescEnd`-style spans, holds an open
 // ramp's starting beat, level, and direction until its matching close.
+//
+// `instrumentName` is the name of the first `\instrument` tag the walk
+// reaches, for the importer to name the part with — read here rather than
+// off the pre-walk AST, since only the walk splices each `$variable`'s
+// symbols into place, and an `\instrument` tag inside one is otherwise
+// invisible.
 extension Guido.Importer {
 
     // MARK: Internal Nested Types
@@ -40,6 +46,7 @@ extension Guido.Importer {
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
         internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, midi: Int?)] = []
+        internal var instrumentName: String?
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp
         internal var lastOctave: GMNPitch.Octave = Self.defaultOctave

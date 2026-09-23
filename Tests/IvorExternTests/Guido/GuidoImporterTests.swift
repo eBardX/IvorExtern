@@ -26,6 +26,55 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_instrumentTag_namesPart() throws {
+        let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Piano"])
+    }
+
+    @Test
+    func convert_instrumentTagInsideVariable_namesPart() throws {
+        let data = Data("$intro = \"\\instr<\\\"Flute\\\"> c d\"; [ $intro e ]".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Flute"])
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Flute"))
+    }
+
+    @Test
+    func convert_multipleVoicesWithoutInstrumentTags_fallsBackToVoiceN() throws {
+        let data = Data("{ [ c d ], [ \\instr<\"Bass\"> e f ], [ g a ] }".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Voice 1", "Bass", "Voice 3"])
+    }
+
+    @Test
+    func convert_singleVoiceWithoutInstrumentTag_leavesPartUnnamed() throws {
+        let data = Data("[ c d ]".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == [""])
+    }
+
+    @Test
     func convert_tempoTag_populatesTempoMap() throws {
         let data = Data("[ \\tempo<\"Allegro\", \"1/4=144\"> c ]".utf8)
         let score = try Guido.Parser().parse(data)

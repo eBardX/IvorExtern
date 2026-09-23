@@ -41,15 +41,18 @@ extension Guido.Importer {
         let variables = Dictionary(validated.variables.map { ($0.name, $0) }) { _, latest in latest }
         let walker = Walker(variables: variables)
         let contexts = try validated.voices.map { try walker.walk($0) }
+        // The walk's own `instrumentName` sees through `$variable` splicing;
+        // `determinePartName` is kept as the fallback for an `\instrument`
+        // tag nested inside a chord segment, which the walk never visits.
         let parts = zip(validated.voices, contexts).map { voice, context in
-            Part(name: determinePartName(voice),
+            Part(name: normalizeName(context.instrumentName ?? determinePartName(voice)),
                  noteTable: context.noteTable,
                  dynamicMap: _makeDynamicMap(context.dynamicEvents),
                  instrumentMap: _makeInstrumentMap(context.instrumentEvents))
         }
 
         return Work(name: determineWorkName(validated),
-                    content: .standardBeat(parts,
+                    content: .standardBeat(fillEmptyPartNames(parts),
                                            _makeTempoMap(contexts.flatMap(\.tempoEvents))))
     }
 

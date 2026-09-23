@@ -1,5 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+internal import Foundation
 internal import IvorABC
 internal import IvorModel
 internal import IvorTiming
@@ -352,11 +353,22 @@ internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
     return Tempo(uintValue: uintValue)
 }
 
+// A voice name's `\n` is abcm2ps's line-break convention for stacking a
+// staff label over two lines (`nm="Tenor\nSax"`), not text — the parser
+// keeps it as a literal backslash and `n` — so each break collapses to a
+// single space, like any other run of whitespace, for a one-line part
+// name. A voice with no name of its own falls back to its id, unless that
+// id is a bare voice number (`1`, `V2`): those say nothing a positional
+// "Voice N" from `fillEmptyPartNames` doesn't, so the part is left
+// unnamed for it to number alongside every other unnamed part.
 internal func determinePartName(_ voice: ABC.Voice?) -> String {
     guard let voice
     else { return "" }
 
-    return voice.name ?? voice.subname ?? voice.id.stringValue
+    guard let name = voice.name ?? voice.subname
+    else { return _isVoiceNumber(voice.id.stringValue) ? "" : normalizeName(voice.id.stringValue) }
+
+    return normalizeName(name.replacingOccurrences(of: "\\n", with: " "))
 }
 
 internal func determineWorkName(_ tune: ABCTune) -> String {
@@ -469,4 +481,10 @@ private func _convertToStandardPitchOctave(_ apOctave: ABC.Pitch.Octave) throws(
     else { throw ABC.Error.unrecognizedPitchOctave(apOctave) }
 
     return octave
+}
+
+private func _isVoiceNumber(_ id: String) -> Bool {
+    let digits = id.hasPrefix("V") || id.hasPrefix("v") ? id.dropFirst() : id[...]
+
+    return !digits.isEmpty && digits.allSatisfy { $0.isASCII && $0.isNumber }
 }

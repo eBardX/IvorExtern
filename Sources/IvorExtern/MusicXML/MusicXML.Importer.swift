@@ -46,7 +46,7 @@ extension MusicXML.Importer {
         let groupNames = _groupNames(score)
 
         return try Work(name: determineWorkName(score),
-                        content: .standardBeat(_convert(results, groupNames),
+                        content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
                                                _makeTempoMap(results.flatMap(\.tempoEvents))))
     }
 
@@ -80,7 +80,6 @@ extension MusicXML.Importer {
 
             return Part(name: _makePartName(part.part,
                                             groupName,
-                                            voice,
                                             index,
                                             part.voices.count),
                         noteTable: voice.noteTable,
@@ -325,22 +324,24 @@ extension MusicXML.Importer {
 
     // A part's own name is used as-is when it has a single voice — the
     // common case, and the name a listener actually recognizes — and
-    // disambiguated with the `<voice>` element's identifier only when there
-    // is more than one, falling back to a 1-based position for the implicit
-    // voice a part never declares one for.
+    // disambiguated with the voice's 1-based position within the part only
+    // when there is more than one. The `<voice>` element's own identifier
+    // isn't used: it is often numbered per staff (a piano's left hand
+    // starting at `5`), which means little to a listener. An unnamed part's
+    // voices stay unnamed here, left for `fillEmptyPartNames` to number by
+    // position across the whole work, rather than starting a second,
+    // independent "Voice N" scheme free to collide with that one.
     private static func _makePartName(_ scorePart: MusicXML.ScorePart,
                                       _ groupName: String?,
-                                      _ voice: MusicXML.Voice,
                                       _ index: Int,
                                       _ voiceCount: Int) -> String {
         let partName = determinePartName(scorePart, groupName: groupName)
 
-        guard voiceCount > 1
+        guard voiceCount > 1,
+              !partName.isEmpty
         else { return partName }
 
-        let voiceLabel = voice.id ?? String(index + 1)
-
-        return partName.isEmpty ? "Voice \(voiceLabel)" : "\(partName), Voice \(voiceLabel)"
+        return "\(partName), Voice \(index + 1)"
     }
 
     // The same prev/curr double-insert step MIDI's, Guido's, and ABC's

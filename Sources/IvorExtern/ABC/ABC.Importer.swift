@@ -48,7 +48,7 @@ extension ABC.Importer {
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 
         return try Work(name: determineWorkName(tune),
-                        content: .standardBeat(parts, _makeTempoMap(tempoEvents)))
+                        content: .standardBeat(fillEmptyPartNames(parts), _makeTempoMap(tempoEvents)))
     }
 
     private static func _convert(_ tunebook: ABC.Tunebook) throws -> [Work] {

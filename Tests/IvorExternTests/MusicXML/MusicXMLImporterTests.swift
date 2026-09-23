@@ -47,6 +47,83 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_multiplePartsWithEmptyPartNames_fallsBackToVoiceN() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name></part-name></score-part>
+                <score-part id="P2"><part-name>Cello</part-name></score-part>
+                <score-part id="P3"><part-name></part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P3">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>2</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Voice 1", "Cello", "Voice 3"])
+    }
+
+    @Test
+    func read_unnamedMultiVoicePartAfterUnnamedPart_numbersVoicesByWorkPosition() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name></part-name></score-part>
+                <score-part id="P2"><part-name></part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+                  <backup><duration>1</duration></backup>
+                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration><voice>5</voice></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        // P2's voices are labeled by their position in the work, not by
+        // their `<voice>` ids (1 and 5), so neither can collide with P1's
+        // own positional "Voice 1".
+        #expect(parts.map(\.name) == ["Voice 1", "Voice 2", "Voice 3"])
+        #expect(notes(in: parts[2]).map(\.pitch) == ["C3"])
+    }
+
+    @Test
     func read_emptyData_throws() {
         let wrapper = FileWrapper(regularFileWithContents: Data())
 
@@ -142,7 +219,7 @@ extension MusicXMLImporterTests {
                     <pitch><step>C</step><octave>3</octave></pitch>
                     <duration>8</duration>
                     <type>whole</type>
-                    <voice>2</voice>
+                    <voice>5</voice>
                   </note>
                 </measure>
               </part>

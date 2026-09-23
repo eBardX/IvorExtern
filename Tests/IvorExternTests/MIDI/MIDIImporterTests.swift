@@ -149,6 +149,29 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_namedTrackWithPaddedName_normalizesName() throws {
+        let paddedName = try #require(SMFText(stringValue: "  Right\tHand\u{0}\u{0}"))
+        let otherName = try #require(SMFText(stringValue: "Left Hand"))
+        let noteOn = MIDIChannelMessage.noteOn(MIDIChannel(1), MIDIData1Value(0x3c), MIDIData1Value(100))
+        let noteOff = MIDIChannelMessage.noteOff(MIDIChannel(1), MIDIData1Value(0x3c), MIDIData1Value(64))
+        let paddedTrack = SMFTrack(events: [.meta(.zero, .sequenceTrackName(paddedName)),
+                                            .midi(.zero, noteOn),
+                                            .midi(SMFEventTime(96), noteOff)])
+        let otherTrack = SMFTrack(events: [.meta(.zero, .sequenceTrackName(otherName)),
+                                           .midi(.zero, noteOn),
+                                           .midi(SMFEventTime(96), noteOff)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [paddedTrack, otherTrack])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Right Hand", "Left Hand"])
+    }
+
+    @Test
     func convert_programChangeEvent_populatesInstrumentMap() throws {
         let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
         let track = SMFTrack(events: [.midi(.zero, programChange),
@@ -188,6 +211,28 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_singleNamedTrack_leavesTrackNameOffParts() throws {
+        // A Format 0 file: the lone track's name is the song's title.
+        let title = try #require(SMFText(stringValue: "My Song"))
+        let key = MIDIData1Value(0x3c)
+        let track = SMFTrack(events: [.meta(.zero, .sequenceTrackName(title)),
+                                      .midi(.zero, .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
+                                      .midi(SMFEventTime(96), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
+                                      .midi(.zero, .noteOn(MIDIChannel(2), key, MIDIData1Value(100))),
+                                      .midi(SMFEventTime(96), .noteOff(MIDIChannel(2), key, MIDIData1Value(64)))])
+        let sequence = SMFSequence(format: .format0,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        #expect(work.name == "My Song")
+        #expect(parts.map(\.name) == ["Channel 1", "Channel 2"])
+    }
+
+    @Test
     func convert_tempoMetaEvent_populatesTempoMap() throws {
         let track = SMFTrack(events: [.meta(.zero, .tempo(SMFTempo(500_000))),
                                       .meta(.zero, .endOfTrack)])
@@ -220,6 +265,29 @@ extension MIDIImporterTests {
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Channel 1"])
+    }
+
+    @Test
+    func convert_unnamedTrackOnChannel10WithProgramChange_partNamedPercussion() throws {
+        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(10), MIDIData1Value(0)))])
+
+        #expect(try unnamedPartNames(track) == ["Percussion"])
+    }
+
+    @Test
+    func convert_unnamedTrackWithInstrumentName_partNamedByInstrumentName() throws {
+        let name = try #require(SMFText(stringValue: "Fiddle"))
+        let track = SMFTrack(events: [.meta(.zero, .instrumentName(name)),
+                                      .midi(.zero, .programChange(MIDIChannel(10), MIDIData1Value(40)))])
+
+        #expect(try unnamedPartNames(track) == ["Fiddle"])
+    }
+
+    @Test
+    func convert_unnamedTrackWithProgramChange_partNamedByGeneralMIDIName() throws {
+        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(1), MIDIData1Value(40)))])
+
+        #expect(try unnamedPartNames(track) == ["Violin"])
     }
 
     @Test
@@ -257,5 +325,21 @@ extension MIDIImporterTests {
     @Test
     func readableFileFormats_containsMIDI() {
         #expect(MIDI.Importer().readableFileFormats.contains(.midi))
+    }
+}
+
+// MARK: -
+
+extension MIDIImporterTests {
+    func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return [] }
+
+        return parts.map(\.name)
     }
 }

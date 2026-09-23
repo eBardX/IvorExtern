@@ -73,7 +73,7 @@ internal func determineTrackName(_ track: MIDI.Track) -> String? {
         guard case let .meta(_, .sequenceTrackName(name)) = event
         else { continue }
 
-        return name.stringValue
+        return normalizeName(name.stringValue).nilIfEmpty
     }
 
     return nil

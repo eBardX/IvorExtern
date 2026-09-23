@@ -158,6 +158,10 @@ extension Guido.Importer.Walker {
                                              instrument: convertToInstrument(instrument),
                                              midi: instrument.midi))
 
+            if context.instrumentName == nil {
+                context.instrumentName = instrument.instrumentName
+            }
+
         case let .intensity(intensity):
             try Self._flushPendingNote(&context)
 

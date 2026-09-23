@@ -280,8 +280,12 @@ extension Guido.Exporter {
             // this one's entry in the recovered `InstrumentMap`, so neither
             // clobbers the other on round trip. A part with no name and no
             // instrument map entries emits nothing here, so it costs nothing
-            // when there's nothing to preserve.
-            if !parts[index].name.isEmpty {
+            // when there's nothing to preserve. Neither does a positional
+            // "Voice N" fallback name: re-import regenerates it from
+            // position, whereas writing it would come back as a spurious
+            // "Voice N" instrument.
+            if !parts[index].name.isEmpty,
+               !isFallbackPartName(parts[index].name, index: index, count: parts.count) {
                 symbols.append(.tag(.instrument(GMNInstrument(name: parts[index].name))))
             }
 

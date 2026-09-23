@@ -153,7 +153,7 @@ extension JohnnySonic.Importer {
             }
         }
 
-        return Part(name: notes.first?.instrument ?? "",
+        return Part(name: normalizeName(notes.first?.instrument ?? ""),
                     noteTable: noteTable,
                     dynamicMap: dynamicMap,
                     instrumentMap: _makeInstrumentMap(notes),
@@ -202,7 +202,7 @@ extension JohnnySonic.Importer {
             }
         }
 
-        return Part(name: notes.first?.instrument ?? "",
+        return Part(name: normalizeName(notes.first?.instrument ?? ""),
                     noteTable: noteTable,
                     dynamicMap: dynamicMap,
                     instrumentMap: _makeInstrumentMap(notes),

@@ -125,15 +125,19 @@ extension MIDI.Importer {
             }
         }
 
-        return Part(name: voice.name,
+        let instrumentMap = _makeInstrumentMap(voice.programChangeEvents,
+                                               voice.bankSelectEvents,
+                                               voice.volumeEvents,
+                                               instrumentNameEvents,
+                                               channel: voice.channel,
+                                               beatMap)
+
+        return Part(name: voice.name.nilIfEmpty ?? _makeUnnamedPartName(instrumentMap,
+                                                                        hasInstrumentName: !instrumentNameEvents.isEmpty,
+                                                                        channel: voice.channel),
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
-                    instrumentMap: _makeInstrumentMap(voice.programChangeEvents,
-                                                      voice.bankSelectEvents,
-                                                      voice.volumeEvents,
-                                                      instrumentNameEvents,
-                                                      channel: voice.channel,
-                                                      beatMap),
+                    instrumentMap: instrumentMap,
                     panMap: context.panMap)
     }
 
@@ -230,6 +234,34 @@ extension MIDI.Importer {
         return instrumentMap
     }
 
+    // A voice from an unnamed track is named after its first instrument —
+    // an Instrument Name meta event's text, else the General MIDI program
+    // name, or "Percussion" on channel 10, where the program number doesn't
+    // pick a melodic instrument — but only when it has one: that entry's
+    // `midiChannel` extra is what `MIDI.Exporter` reads first to recover
+    // the channel on export. With no Program Change there's no such extra,
+    // so the voice falls back to "Channel N" alone, the exact form
+    // `MIDI.Exporter._parseChannelName` reads back instead.
+    private static func _makeUnnamedPartName(_ instrumentMap: InstrumentMap<BeatTime>,
+                                             hasInstrumentName: Bool,
+                                             channel: MIDI.Channel) -> String {
+        var firstInstrument: Instrument?
+
+        instrumentMap.forEach { _, _, instrument, _ in
+            if firstInstrument == nil {
+                firstInstrument = instrument
+            }
+        }
+
+        guard let firstInstrument
+        else { return "Channel \(channel.uintValue)" }
+
+        guard hasInstrumentName || channel.uintValue != 10
+        else { return "Percussion" }
+
+        return firstInstrument.stringValue
+    }
+
     private static func _makeVoice(channel: MIDI.Channel,
                                    name: String,
                                    events: [SMFEvent]) throws(MIDI.Error) -> MIDI.Voice {
@@ -247,14 +279,13 @@ extension MIDI.Importer {
     // `MIDI.Exporter` itself writes — and disambiguated with the channel
     // number only when a track packs more than one channel into itself,
     // mirroring `MusicXML.Importer`'s own `_makePartName`. An unnamed
-    // track falls back to "Channel N" alone, the exact form
-    // `MIDI.Exporter._assignChannels` reads back to recover the channel on
-    // export.
+    // track's voices stay unnamed here, left for `_makeUnnamedPartName`
+    // once their instrument maps are known.
     private static func _makeVoiceName(trackName: String?,
                                        channel: MIDI.Channel,
                                        isMultiChannel: Bool) -> String {
         guard let trackName, !trackName.isEmpty
-        else { return "Channel \(channel.uintValue)" }
+        else { return "" }
 
         guard isMultiChannel
         else { return trackName }
@@ -274,7 +305,10 @@ extension MIDI.Importer {
     // Change, MIDI has nowhere to attach one to a single channel within a
     // multi-channel track — so every voice split from a track shares that
     // track's own set of them, the same way a multi-channel track's voices
-    // already share its one track name.
+    // already share its one track name. A lone track's name isn't used for
+    // its voices at all: `determineWorkName` has already taken it as the
+    // work's title — the Format 0 convention — and repeating it on every
+    // part ("My Song, Channel 1") would only mislabel them.
     private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] {
         var voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] = []
 
@@ -291,7 +325,7 @@ extension MIDI.Importer {
             guard !channelEvents.isEmpty
             else { continue }
 
-            let trackName = determineTrackName(track)
+            let trackName = tracks.count > 1 ? determineTrackName(track) : nil
             let isMultiChannel = channelEvents.count > 1
             let instrumentNameEvents = track.events.filter {
                 if case .meta(_, .instrumentName) = $0 { true } else { false }

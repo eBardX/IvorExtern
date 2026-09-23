@@ -155,6 +155,23 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func convert_fallbackPartName_roundTripsWithoutInstrument() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        let parts = [Part(name: "Voice 1", noteTable: table), Part(name: "Bass", noteTable: table)]
+        let score = try Guido.Exporter().convert(standardBeatWork(parts: parts))
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(imported, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(imported.map(\.name) == ["Voice 1", "Bass"])
+        #expect(imported.first?.instrumentMap.isEmpty == true)
+    }
+
+    @Test
     func convert_glissandoNote_exportsAtStartPitch() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

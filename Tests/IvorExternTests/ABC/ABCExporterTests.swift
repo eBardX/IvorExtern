@@ -119,6 +119,21 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_fallbackPartName_omitsNameAndRoundTrips() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        let parts = [Part(name: "Voice 1", noteTable: table), Part(name: "Bass", noteTable: table)]
+        let file = try ABC.Exporter().write(works: [standardBeatWork(parts: parts)], as: .abc)
+        let text = try #require(file.regularFileContents.flatMap { String(bytes: $0, encoding: .utf8) })
+        let work = try #require(try ABC.Importer().read(from: file, as: .abc).first)
+
+        #expect(!text.contains("Voice 1"))
+        #expect(try #require(standardBeatParts(of: work)).map(\.name) == ["Voice 1", "Bass"])
+    }
+
+    @Test
     func convert_glissandoNote_exportsAtStartPitch() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

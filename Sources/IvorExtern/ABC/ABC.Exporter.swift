@@ -362,7 +362,8 @@ extension ABC.Exporter {
         if _needsVoiceFields(parts: parts) {
             for index in parts.indices {
                 header.append(.field(.voice(_makeVoice(part: parts[index],
-                                                       index: index))))
+                                                       index: index,
+                                                       count: parts.count))))
             }
         }
 
@@ -505,11 +506,17 @@ extension ABC.Exporter {
         return symbols
     }
 
+    // A positional "Voice N" fallback name is left out: the voice's own
+    // `V`-prefixed numeric id imports back as unnamed (see
+    // `ABCFunctions.determinePartName`), so re-import regenerates the same
+    // fallback from position.
     private static func _makeVoice(part: Part<BeatTime, Pitch>,
-                                   index: Int) -> ABCVoice {
+                                   index: Int,
+                                   count: Int) -> ABCVoice {
         var properties: [String: String] = [:]
 
-        if !part.name.isEmpty {
+        if !part.name.isEmpty,
+           !isFallbackPartName(part.name, index: index, count: count) {
             properties["name"] = part.name
         }
 
@@ -534,7 +541,7 @@ extension ABC.Exporter {
     // written, and keeping that case round-trip-safe: an implicit voice
     // imports back as unnamed (see `ABCFunctions.determinePartName`), while
     // an explicit `V:` field's `id` becomes the imported name whenever it
-    // has no name property of its own. A lone *named* part still needs its
+    // has no name property of its own and isn't a bare voice number. A lone *named* part still needs its
     // `V:` field, since that's ABC's only place to record a part name.
     private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
         parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false

@@ -398,11 +398,15 @@ internal func convertToVelocity(_ sound: MXLSound) -> Int? {
 // numerals — so `groupName`, the caller-supplied name of that enclosing
 // group (see `MusicXML.Importer._groupNames(_:)`), is combined with the
 // numerals instead: "Horns in F (1, 2)".
+//
+// Every name read here passes through `normalizeName` first, so a line
+// break meant only to stack a long label on the page ("Violin\nI") comes
+// back as one line.
 internal func determinePartName(_ scorePart: MusicXML.ScorePart,
                                 groupName: String?) -> String {
-    let name = scorePart.name.value
+    let name = normalizeName(scorePart.name.value)
 
-    if let groupName, !name.isEmpty, !name.contains(where: \.isLetter) {
+    if let groupName = groupName.map(normalizeName)?.nilIfEmpty, !name.isEmpty, !name.contains(where: \.isLetter) {
         let numerals = name.split(whereSeparator: \.isWhitespace).joined(separator: ", ")
 
         return "\(groupName) (\(numerals))"
@@ -411,7 +415,7 @@ internal func determinePartName(_ scorePart: MusicXML.ScorePart,
     guard name.isEmpty || name == "MusicXML Part"
     else { return name }
 
-    return scorePart.instrument.first?.name.nilIfEmpty ?? name
+    return scorePart.instrument.first.map { normalizeName($0.name) }?.nilIfEmpty ?? name
 }
 
 internal func determineWorkName(_ score: MusicXML.Score) -> String {

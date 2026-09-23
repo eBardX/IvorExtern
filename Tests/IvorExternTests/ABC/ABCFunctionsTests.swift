@@ -183,10 +183,42 @@ extension ABCFunctionsTests {
 
     @Test
     func determinePartName_voiceWithoutNameOrSubname_usesVoiceID() throws {
-        let id = try #require(ABCVoice.ID(stringValue: "1"))
+        let id = try #require(ABCVoice.ID(stringValue: "T1"))
         let voice = try #require(ABCVoice(id: id))
 
-        #expect(determinePartName(voice) == "1")
+        #expect(determinePartName(voice) == "T1")
+    }
+
+    @Test(arguments: ["1", "12", "V2", "v3"])
+    func determinePartName_voiceNumberIDWithoutName_returnsEmptyString(_ idValue: String) throws {
+        let id = try #require(ABCVoice.ID(stringValue: idValue))
+        let voice = try #require(ABCVoice(id: id))
+
+        #expect(determinePartName(voice).isEmpty)
+    }
+
+    @Test
+    func determinePartName_nameWithExtraWhitespace_collapsesIt() throws {
+        let id = try #require(ABCVoice.ID(stringValue: "T1"))
+        let voice = try #require(ABCVoice(id: id, properties: ["nm": "  Tenor   Sax "]))
+
+        #expect(determinePartName(voice) == "Tenor Sax")
+    }
+
+    @Test
+    func determinePartName_nameWithLineBreak_joinsLinesWithSpace() throws {
+        let id = try #require(ABCVoice.ID(stringValue: "T1"))
+        let voice = try #require(ABCVoice(id: id, properties: ["nm": #"Tenor \nSax"#]))
+
+        #expect(determinePartName(voice) == "Tenor Sax")
+    }
+
+    @Test
+    func determinePartName_subnameWithLineBreak_joinsLinesWithSpace() throws {
+        let id = try #require(ABCVoice.ID(stringValue: "T1"))
+        let voice = try #require(ABCVoice(id: id, properties: ["snm": #"T.\nSx."#]))
+
+        #expect(determinePartName(voice) == "T. Sx.")
     }
 
     @Test
