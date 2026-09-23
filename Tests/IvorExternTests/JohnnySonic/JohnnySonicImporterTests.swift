@@ -328,7 +328,7 @@ extension JohnnySonicImporterTests {
 
         var panMap = PanMap<BeatTime>()
 
-        panMap.insert(time: BeatTime(0), pan: Pan(0.5))
+        panMap.insert(time: BeatTime(0), pan: Pan(horizontal: 45))
 
         let part = Part(name: "",
                         noteTable: noteTable,
@@ -341,7 +341,7 @@ extension JohnnySonicImporterTests {
                                                    as: .dkm)
 
         if case let .keyboardBeat(parts, _) = read[0].content {
-            #expect(parts[0].panMap[BeatTime(0)] == Pan(0.5))
+            #expect(parts[0].panMap[BeatTime(0)] == Pan(horizontal: 45))
         } else {
             Issue.record("Expected keyboardBeat content")
         }

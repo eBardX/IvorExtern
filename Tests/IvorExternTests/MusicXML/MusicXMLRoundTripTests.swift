@@ -114,20 +114,18 @@ extension MusicXMLRoundTripTests {
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
     }
 
-    // Elevation is a flavor of pan, so it rides on the `PanMap` even though
-    // MusicXML declares it inside `<midi-instrument>` — and it survives the
-    // trip on a part with no instrument assignment of its own.
+    // Elevation is the vertical angle of pan, so it rides on the `PanMap`
+    // even though MusicXML declares it inside `<midi-instrument>` — and it
+    // survives the trip on a part with no instrument assignment of its own.
     @Test
-    func roundTrip_panVertical_preservesExactValueOnPanMap() throws {
+    func roundTrip_panMap_preservesVertical() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         var panMap = PanMap<BeatTime>()
 
-        panMap.insert(time: BeatTime(0),
-                      pan: .center,
-                      extras: Extras(elements: [Extra(name: Extra.panVertical.name, values: [.double(45)])]))
+        panMap.insert(time: BeatTime(0), pan: Pan(vertical: 45))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
         let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap()))
@@ -138,15 +136,37 @@ extension MusicXMLRoundTripTests {
                                       fileFormat: .musicXML)
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
-        var elevation: Double?
+        #expect(recoveredPart.panMap[.zero] == Pan(vertical: 45))
+    }
 
-        recoveredPart.panMap.forEach { _, time, _, extras in
-            if time == .zero {
-                elevation = doubleValue(extras, .panVertical)
-            }
-        }
+    // MusicXML declares elevation once per part, so it applies to every
+    // pan change in that part, not just the first.
+    @Test
+    func roundTrip_panMap_appliesVerticalToEveryEntry() throws {
+        var table = NoteTable<BeatTime, Pitch>()
 
-        #expect(elevation == 45)
+        table.insert(attack: BeatTime(0), duration: BeatDuration(8), pitch: "C4")
+
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: BeatTime(0), pan: Pan(horizontal: -90, vertical: 30))
+        panMap.insert(time: BeatTime(4), pan: Pan(horizontal: 90, vertical: 30))
+
+        let part = Part(name: "Piano", noteTable: table, panMap: panMap)
+        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+        var verticals: [Pan.Angle] = []
+
+        recoveredPart.panMap.forEach { _, _, pan, _ in verticals.append(pan.vertical) }
+
+        #expect(!verticals.isEmpty)
+        #expect(verticals.allSatisfy { $0 == 30 })
+        #expect(recoveredPart.panMap[BeatTime(4)] == Pan(horizontal: 90, vertical: 30))
     }
 
     @Test
@@ -257,16 +277,14 @@ extension MusicXMLRoundTripTests {
     }
 
     @Test
-    func roundTrip_panHorizontal_preservesUnclampedDegreeBeyondHardRight() throws {
+    func roundTrip_panMap_preservesHorizontalBeyondHardRight() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         var panMap = PanMap<BeatTime>()
 
-        panMap.insert(time: BeatTime(0),
-                      pan: .right,
-                      extras: Extras(elements: [Extra(name: Extra.panHorizontal.name, values: [.double(135)])]))
+        panMap.insert(time: BeatTime(0), pan: Pan(horizontal: 135))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
         let work = Work(name: "PanDegree", content: .standardBeat([part], TempoMap()))
@@ -277,13 +295,7 @@ extension MusicXMLRoundTripTests {
                                       fileFormat: .musicXML)
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
-        var degree: Double?
-
-        recoveredPart.panMap.forEach { _, _, _, extras in
-            degree = doubleValue(extras, .panHorizontal)
-        }
-
-        #expect(degree == 135)
+        #expect(recoveredPart.panMap[.zero] == Pan(horizontal: 135))
     }
 
     @Test

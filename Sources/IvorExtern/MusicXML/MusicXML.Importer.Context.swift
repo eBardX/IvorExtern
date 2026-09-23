@@ -61,7 +61,7 @@ extension MusicXML.Importer {
         internal var measureStart: MusicXML.Duration = .zero
         internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]] = [:]
         internal var noteTables: [String?: NoteTable<BeatTime, IvorTuning.Pitch>] = [:]
-        internal var panEvents: [(beatTime: BeatTime, pan: Pan, degree: Double?)] = []
+        internal var panEvents: [(beatTime: BeatTime, pan: Pan)] = []
         internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration, extras: Extras?)]] = [:]
         internal var pendingWedges: [MXLNumberLevel?: (beatTime: BeatTime, dynamic: Dynamic, kind: MXLWedge.Kind)] = [:]
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []

@@ -69,7 +69,7 @@ extension JohnnySonicFunctionsTests {
 
     @Test
     func convertToJohnnySonicLocation() {
-        let result = IvorExtern.convertToJohnnySonicLocation(Pan(0.5))
+        let result = IvorExtern.convertToJohnnySonicLocation(Pan(horizontal: 45))
 
         #expect(result == 0.5)
     }
@@ -114,7 +114,7 @@ extension JohnnySonicFunctionsTests {
     func convertToPan() {
         let result = IvorExtern.convertToPan(0.5)
 
-        #expect(result == Pan(0.5))
+        #expect(result == Pan(horizontal: 45))
     }
 
     @Test

@@ -267,7 +267,7 @@ extension MusicXMLImporterWalkerTests {
 
         #expect(results.first?.panEvents.count == 1)
         #expect(results.first?.panEvents.first?.beatTime == .zero)
-        #expect(results.first?.panEvents.first?.pan == Pan(-0.5))
+        #expect(results.first?.panEvents.first?.pan == Pan(horizontal: -45))
     }
 
     @Test

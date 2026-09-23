@@ -283,9 +283,11 @@ internal func convertToMusicXMLSlurStartItems(_ elements: [Extra]) -> [MXLNotati
 // A `<sound>`’s own `pan`, the same deprecated-but-simpler attribute
 // `convertToPan(_:)` falls back to reading — writing through the newer
 // midi-instrument `<pan>` element instead would require a `<score-instrument>`
-// identity this call site has no reason to mint just for a pan change.
-internal func convertToMusicXMLSound(pan: Pan, degree: Double? = nil) -> MXLSound {
-    MXLSound(pan: degree ?? pan.numberValue.doubleValue * 90)
+// identity this call site has no reason to mint just for a pan change. Only
+// the horizontal angle goes here: MusicXML declares elevation statically per
+// part, so the vertical angle is written into `<score-part>` instead.
+internal func convertToMusicXMLSound(pan: Pan) -> MXLSound {
+    MXLSound(pan: pan.horizontal.doubleValue)
 }
 
 // `<sound tempo>` is already expressed directly in quarter notes per minute,
@@ -298,27 +300,24 @@ internal func convertToMusicXMLSound(tempo: Tempo) -> MXLSound {
 // A `<sound>`'s midi-instrument `<pan>` takes priority over the sound
 // element's own `pan` attribute, which the MusicXML spec deprecated in favor
 // of the midi-instrument element. Degrees run -180...180, with -90 hard left
-// and 90 hard right (180/-180 sit directly behind the listener); `Pan` only
-// models the stereo axis, so anything past ±90° clamps to the nearest hard
-// side rather than wrapping.
+// and 90 hard right (180/-180 sit directly behind the listener) — the same
+// convention as `Pan`'s horizontal angle, so no scaling or clamping is
+// needed. The result is level: a `<sound>` cannot declare elevation, which
+// `MusicXML.Importer._makePanMap` applies from the part's `<score-part>`.
 internal func convertToPan(_ sound: MXLSound) -> Pan? {
-    guard let degrees = _convertToPanDegree(sound)
-    else { return nil }
-
-    return convertToPan(degrees: degrees)
+    _convertToPanDegree(sound).flatMap { convertToPan(horizontal: $0, vertical: nil) }
 }
 
 // Shared with `_makeDefaultPanEvent` in `MusicXML.Importer.swift`, which
 // reads a part's static `<score-part><midi-instrument><pan>` degree rather
-// than a `<sound>`'s, but clamps it to `Pan` the same way.
-internal func convertToPan(degrees: Double) -> Pan? {
-    Pan(numberValue: Number(min(1, max(-1, degrees / 90))))
-}
+// than a `<sound>`'s, but converts it to `Pan` the same way.
+internal func convertToPan(horizontal: Double?,
+                           vertical: Double?) -> Pan? {
+    guard let hangle = Pan.Angle(numberValue: Number(horizontal ?? 0)),
+          let vangle = Pan.Angle(numberValue: Number(vertical ?? 0))
+    else { return nil }
 
-// The unclamped degree `convertToPan(_:)` clamps away — see `panHorizontal` in
-// `Extra+PanMap.swift`.
-internal func convertToPanDegree(_ sound: MXLSound) -> Double? {
-    _convertToPanDegree(sound)
+    return Pan(horizontal: hangle, vertical: vangle)
 }
 
 internal func convertToStandardPitch(_ pitch: MusicXML.Pitch) throws(MusicXML.Error) -> Pitch {
@@ -674,8 +673,6 @@ private func _convertToMusicXMLStep(_ letter: Pitch.Letter) -> MusicXML.Step {
     }
 }
 
-// The unclamped degree `convertToPan(_:)` clamps away — see `panHorizontal` in
-// `Extra+PanMap.swift`.
 private func _convertToPanDegree(_ sound: MXLSound) -> Double? {
     sound.group.lazy.compactMap(\.midiInstrument?.pan).first ?? sound.pan
 }

@@ -477,7 +477,7 @@ extension MusicXML.Importer.Walker {
 
             if let sound = direction.sound,
                let pan = convertToPan(sound) {
-                context.panEvents.append((beatTime: beatTime, pan: pan, degree: convertToPanDegree(sound)))
+                context.panEvents.append((beatTime: beatTime, pan: pan))
             }
 
             // A `<sound>`'s own `tempo` — a MIDI-style playback hint — takes
@@ -524,7 +524,7 @@ extension MusicXML.Importer.Walker {
             }
 
             if let pan = convertToPan(sound) {
-                context.panEvents.append((beatTime: beatTime, pan: pan, degree: convertToPanDegree(sound)))
+                context.panEvents.append((beatTime: beatTime, pan: pan))
             }
 
             if let dynamic = convertToDynamic(sound) {

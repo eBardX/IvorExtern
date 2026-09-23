@@ -129,7 +129,7 @@ extension JohnnySonicExporterTests {
 
         var panMap = PanMap<BeatTime>()
 
-        try panMap.insert(time: BeatTime(0), pan: #require(Pan(numberValue: Number(-0.5))))
+        panMap.insert(time: BeatTime(0), pan: Pan(horizontal: -45))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))

@@ -32,7 +32,7 @@ internal func convertToMIDINoteNumber(_ pitch: NoteNumber) -> MIDI.NoteNumber? {
 }
 
 internal func convertToMIDIPanValue(_ pan: Pan) -> MIDI.PanValue? {
-    MIDI.PanValue(uintValue: UInt((((pan.doubleValue + 1.0) / 2.0) * 127.0).rounded()))
+    MIDI.PanValue(uintValue: UInt((((pan.stereo.doubleValue + 1.0) / 2.0) * 127.0).rounded()))
 }
 
 internal func convertToMIDIProgramNumber(_ instrument: Instrument) -> MIDI.ProgramNumber? {
@@ -55,7 +55,7 @@ internal func convertToNoteNumber(_ noteNumber: MIDI.NoteNumber) -> NoteNumber {
 }
 
 internal func convertToPan(_ panValue: MIDI.PanValue) -> Pan? {
-    Pan(numberValue: Number(((Double(panValue.uintValue) / 127.0) * 2.0) - 1.0))
+    Pan(stereo: Number(((Double(panValue.uintValue) / 127.0) * 2.0) - 1.0))
 }
 
 internal func convertToTempo(_ tempo: MIDI.Tempo,

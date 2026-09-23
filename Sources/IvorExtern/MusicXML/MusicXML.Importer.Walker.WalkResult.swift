@@ -17,7 +17,7 @@ extension MusicXML.Importer.Walker {
         // MARK: Internal Instance Properties
 
         internal let directionDynamicEvents: [MusicXML.Importer.Context.DynamicEvent]
-        internal let panEvents: [(beatTime: BeatTime, pan: Pan, degree: Double?)]
+        internal let panEvents: [(beatTime: BeatTime, pan: Pan)]
         internal let part: MusicXML.Part
         internal let tempoEvents: [(beatTime: BeatTime, tempo: Tempo)]
     }

@@ -41,7 +41,7 @@ internal func convertToJohnnySonicDuration(_ beatDuration: BeatDuration) -> John
 }
 
 internal func convertToJohnnySonicLocation(_ pan: Pan) -> JohnnySonic.Location {
-    pan.doubleValue
+    pan.stereo.doubleValue
 }
 
 internal func convertToJohnnySonicPitch(_ frequency: Frequency) -> JohnnySonic.Pitch {
@@ -68,7 +68,7 @@ internal func convertToNoteNumber(_ pitch: Double) -> NoteNumber? {
 }
 
 internal func convertToPan(_ location: JohnnySonic.Location) -> Pan? {
-    Pan(numberValue: Number(location))
+    Pan(stereo: Number(location))
 }
 
 internal func convertToTempo(_ bpm: Double) -> Tempo {

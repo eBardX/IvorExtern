@@ -420,8 +420,8 @@ extension MIDIExporterTests {
     func roundtrip_panRamp_survivesExportReimport() throws {
         var panMap = PanMap<BeatTime>()
 
-        try panMap.insert(time: BeatTime(0), pan: #require(Pan(numberValue: Number(-1.0))))
-        try panMap.insert(time: BeatTime(4), pan: #require(Pan(numberValue: Number(1.0))))
+        panMap.insert(time: BeatTime(0), pan: .left)
+        panMap.insert(time: BeatTime(4), pan: .right)
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),

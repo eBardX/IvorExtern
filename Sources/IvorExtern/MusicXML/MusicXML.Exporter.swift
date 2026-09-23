@@ -101,7 +101,7 @@ extension MusicXML.Exporter {
     // line split into per-measure, tied segments.
     private static func _boundaries(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan, Double?)],
+                                    pans: [(BeatTime, Pan)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: [BeatTime],
                                     endTime: BeatTime) -> [BeatTime] {
@@ -120,7 +120,7 @@ extension MusicXML.Exporter {
             boundaries.insert(time)
         }
 
-        for (time, _, _) in pans {
+        for (time, _) in pans {
             boundaries.insert(time)
         }
 
@@ -286,18 +286,16 @@ extension MusicXML.Exporter {
         return first
     }
 
-    // The earliest `PanMap` entry's extras only, for the one datum MusicXML
-    // declares statically per part rather than mid-measure: elevation. Pan
-    // itself needs no such lookup — every entry becomes its own
-    // `<direction>`/`<sound pan="...">` in `_panDirectives`.
-    private static func _firstPanExtras(_ panMap: PanMap<BeatTime>) -> Extras? {
-        var first: Extras?
-        var found = false
+    // The earliest `PanMap` entry only, for the one datum MusicXML declares
+    // statically per part rather than mid-measure: elevation, its vertical
+    // angle. The horizontal angle needs no such lookup — every entry becomes
+    // its own `<direction>`/`<sound pan="...">` in `_panDirectives`.
+    private static func _firstPan(_ panMap: PanMap<BeatTime>) -> Pan? {
+        var first: Pan?
 
-        panMap.forEach { _, _, _, extras in
-            if !found {
-                found = true
-                first = extras
+        panMap.forEach { _, _, pan, _ in
+            if first == nil {
+                first = pan
             }
         }
 
@@ -353,7 +351,7 @@ extension MusicXML.Exporter {
     // direction-level mark once any one note carried its own velocity.
     private static func _makeChunks(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan, Double?)],
+                                    pans: [(BeatTime, Pan)],
                                     annotations: [DynamicAnnotation],
                                     sortedBoundaries: [BeatTime],
                                     divisions: Int) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
@@ -397,7 +395,7 @@ extension MusicXML.Exporter {
     private static func _makeDirectionItems(at start: BeatTime,
                                             tempos: [(BeatTime, Tempo)],
                                             tempoIndex: inout Int,
-                                            pans: [(BeatTime, Pan, Double?)],
+                                            pans: [(BeatTime, Pan)],
                                             panIndex: inout Int,
                                             annotations: [DynamicAnnotation],
                                             ramps: [BeatTime: Ramp]) -> [MXLMusicItem] {
@@ -409,8 +407,7 @@ extension MusicXML.Exporter {
         }
 
         while panIndex < pans.count, pans[panIndex].0 <= start {
-            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(pan: pans[panIndex].1,
-                                                                               degree: pans[panIndex].2))))
+            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(pan: pans[panIndex].1))))
             panIndex += 1
         }
 
@@ -550,13 +547,16 @@ extension MusicXML.Exporter {
         var group2: [MusicXML.ScorePart.Group2] = []
         let first = _firstInstrument(part.instrumentMap)
 
-        // Elevation lives on the `PanMap` — it is a flavor of pan, not of
-        // instrument — but MusicXML declares it inside `<midi-instrument>`,
-        // so a part carrying elevation and no instrument assignment at all
-        // still needs a `<score-instrument>`/`<midi-instrument>` pair (named
-        // for `.vanilla`, as `MusicXML.Importer._makePanMap` assumes on the
-        // way back in) for the elevation to have anywhere to go.
-        let elevation = doubleValue(_firstPanExtras(part.panMap), .panVertical)
+        // Elevation lives on the `PanMap` — it is the vertical angle of pan,
+        // not a property of instrument — but MusicXML declares it inside
+        // `<midi-instrument>`, so a part carrying elevation and no instrument
+        // assignment at all still needs a `<score-instrument>`/
+        // `<midi-instrument>` pair (named for `.vanilla`, as
+        // `MusicXML.Importer._makePanMap` assumes on the way back in) for the
+        // elevation to have anywhere to go. A level pan (the common case)
+        // declares no elevation.
+        let vertical = _firstPan(part.panMap)?.vertical
+        let elevation = vertical.flatMap { $0.numberValue.isZero ? nil : $0.doubleValue }
 
         if first != nil || elevation != nil {
             let instrument = first?.instrument ?? .vanilla
@@ -657,10 +657,10 @@ extension MusicXML.Exporter {
         return max(1, UInt(measures))
     }
 
-    private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan, Double?)] {
-        var directives: [(BeatTime, Pan, Double?)] = []
+    private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan)] {
+        var directives: [(BeatTime, Pan)] = []
 
-        panMap.forEach { _, time, pan, extras in directives.append((time, pan, doubleValue(extras, .panHorizontal))) }
+        panMap.forEach { _, time, pan, _ in directives.append((time, pan)) }
 
         return directives
     }
