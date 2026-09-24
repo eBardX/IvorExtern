@@ -52,7 +52,7 @@
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "044c316895443cd842caec6edf3159cb14d6e4cf"
+        "revision" : "b39065d75c0ad48f7f32b59a48b984351c435480"
       }
     },
     {
@@ -70,7 +70,7 @@
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "b1a352e40ac1df953ae4725d58ccb5de9ee3b1e3"
+        "revision" : "f4b1672f6462f58e7b17cf76893ac4778374b3bf"
       }
     },
     {
