@@ -2,6 +2,8 @@
 
 @testable import IvorExtern
 import IvorMIDI
+import IvorSMF
+import IvorSMPTE
 import IvorTiming
 import IvorTuning
 import Testing
@@ -65,6 +67,13 @@ extension MIDIErrorTests {
     }
 
     @Test
+    func invalidTempo_message() {
+        let error = MIDI.Error.invalidTempo(0)
+
+        #expect(error.message == "Invalid SMF tempo: 0 microseconds per quarter note")
+    }
+
+    @Test
     func multipleWorksNotSupported_message() {
         let error = MIDI.Error.multipleWorksNotSupported
 
@@ -112,7 +121,7 @@ extension MIDIErrorTests {
 
     @Test
     func unsupportedDivision_message() throws {
-        let timeCode = try #require(SMPTETimeCode(frameRate: .fps24, tickRate: 40))
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps24, ticksPerFrame: 40))
         let error = MIDI.Error.unsupportedDivision(.timeCode(timeCode))
 
         #expect(error.message.hasPrefix("Unsupported SMF division:"))

@@ -1,6 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorMIDI
+internal import IvorSMF
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
@@ -14,6 +15,7 @@ extension MIDI {
         case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
         case invalidNoteNumber(IvorTuning.NoteNumber)
+        case invalidTempo(UInt)
         case multipleWorksNotSupported
         case noWorksToExport
         case parseFailure((any EnhancedError)?)
@@ -69,6 +71,9 @@ extension MIDI.Error: EnhancedError {
 
         case let .invalidNoteNumber(noteNumber):
             "Invalid note number: \(noteNumber)"
+
+        case let .invalidTempo(tempo):
+            "Invalid SMF tempo: \(tempo) microseconds per quarter note"
 
         case .multipleWorksNotSupported:
             "Multiple works are not supported"

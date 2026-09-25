@@ -5,6 +5,7 @@ internal import IvorTiming
 internal import IvorTuning
 
 private import IvorMIDI
+private import IvorSMF
 private import XestiNumbers
 private import XestiTools
 

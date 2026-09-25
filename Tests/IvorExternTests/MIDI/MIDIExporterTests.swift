@@ -4,6 +4,7 @@ import Foundation
 @testable import IvorExtern
 import IvorMIDI
 import IvorModel
+import IvorSMF
 import IvorTiming
 import IvorTuning
 import Testing

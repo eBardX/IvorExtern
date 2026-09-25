@@ -1,8 +1,8 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 @testable import IvorExtern
-import IvorMIDI
 import IvorModel
+import IvorSMF
 import IvorTiming
 import IvorTuning
 import Testing

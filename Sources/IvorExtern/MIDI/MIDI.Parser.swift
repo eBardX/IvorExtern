@@ -2,7 +2,7 @@
 
 internal import Foundation
 
-private import IvorMIDI
+private import IvorSMF
 private import XestiTools
 
 extension MIDI {

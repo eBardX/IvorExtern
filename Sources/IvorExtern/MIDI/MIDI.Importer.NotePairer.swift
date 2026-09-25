@@ -1,6 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorMIDI
+internal import IvorSMF
 
 extension MIDI.Importer {
 

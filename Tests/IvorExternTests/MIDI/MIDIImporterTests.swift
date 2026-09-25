@@ -4,8 +4,11 @@ import Foundation
 @testable import IvorExtern
 import IvorMIDI
 import IvorModel
+import IvorSMF
+import IvorSMPTE
 import IvorTiming
 import Testing
+import XestiNumbers
 import XestiTools
 
 struct MIDIImporterTests {
@@ -331,7 +334,7 @@ extension MIDIImporterTests {
 // MARK: -
 
 extension MIDIImporterTests {
-    func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
+    private func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
         let sequence = SMFSequence(format: .format1,
                                    division: .metrical(SMFTickRate(480)),
                                    tracks: [track])
@@ -341,5 +344,115 @@ extension MIDIImporterTests {
         else { Issue.record("Expected keyboardBeat content"); return [] }
 
         return parts.map(\.name)
+    }
+
+    @Test
+    func convert_smpteOffset_recordedAsTempoMapExtra() throws {
+        let offset = try #require(SMPTETime(string: "01:00:00;00", frameRate: .fps2997))
+        let key = MIDIData1Value(60)
+        let track = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
+                                      .meta(.zero, .tempo(SMFTempo(600_000))),
+                                      .midi(.zero, .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
+                                      .midi(SMFEventTime(480), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
+                                      .meta(SMFEventTime(480), .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+        let startExtras = try #require(tempoMapExtras(work, at: .zero))
+
+        #expect(intValue(startExtras, .midiTempo) == 600_000)
+        #expect(startExtras.elements.first { $0.name == Extra.smpteOffset.name }?.values == [.string("29.97DF"),
+                                                                                             .string("01:00:00;00")])
+        #expect(!hasFlag(startExtras, .midiTimeCode))
+    }
+
+    @Test
+    func convert_smpteOffset_withoutTempoEvents_insertsEntryAtBeatZero() throws {
+        let offset = try #require(SMPTETime(string: "00:59:58:00", frameRate: .fps25))
+        let track = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+        let startExtras = try #require(tempoMapExtras(work, at: .zero))
+
+        #expect(work.tempoMap?[.zero] == .default)
+        #expect(startExtras.elements.first { $0.name == Extra.smpteOffset.name }?.values == [.string("25"),
+                                                                                             .string("00:59:58:00")])
+    }
+
+    @Test
+    func convert_timeCodeDivision() throws {
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))
+        let key = MIDIData1Value(60)
+        let tempoTrack = SMFTrack(events: [.meta(.zero, .tempo(SMFTempo(500_000))),
+                                           .meta(SMFEventTime(2_000), .tempo(SMFTempo(1_000_000))),
+                                           .meta(SMFEventTime(2_000), .endOfTrack)])
+        let noteTrack = SMFTrack(events: [.midi(SMFEventTime(1_000), .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
+                                          .midi(SMFEventTime(3_000), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
+                                          .meta(SMFEventTime(3_000), .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .timeCode(timeCode),
+                                   tracks: [tempoTrack, noteTrack])
+        let work = try MIDI.Importer().convert(sequence)
+        let parts = try #require(keyboardBeatParts(of: work))
+        var notes: [(BeatTime, BeatDuration)] = []
+
+        parts.first?.noteTable.forEach { _, beatTime, beatDuration, _, _, _ in
+            notes.append((beatTime, beatDuration))
+        }
+
+        // 1,000 ticks per second: one second at 120 BPM, then one at 60 BPM.
+        #expect(notes.count == 1)
+        #expect(notes.first?.0 == BeatTime(2))
+        #expect(notes.first?.1 == BeatDuration(3))
+        #expect(work.tempoMap?[BeatTime(4)] == Tempo(60))
+
+        let startExtras = try #require(tempoMapExtras(work, at: .zero))
+
+        #expect(startExtras.elements.first { $0.name == Extra.midiTimeCode.name }?.values == [.string("25"),
+                                                                                              .int(40)])
+    }
+
+    @Test
+    func convert_timeCodeDivision_wallTimesMatchTimecode() throws {
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997, ticksPerFrame: 80))
+        let key = MIDIData1Value(60)
+        let track = SMFTrack(events: [.meta(.zero, .tempo(SMFTempo(500_000))),
+                                      .midi(SMFEventTime(24_000), .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
+                                      .midi(SMFEventTime(24_080), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
+                                      .meta(SMFEventTime(24_080), .endOfTrack)])
+        let sequence = SMFSequence(format: .format0,
+                                   division: .timeCode(timeCode),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+        let parts = try #require(keyboardBeatParts(of: work))
+        var attack: BeatTime?
+
+        parts.first?.noteTable.forEach { _, beatTime, _, _, _, _ in
+            attack = beatTime
+        }
+
+        // Tick 24,000 is frame 300: 00:00:10;00 in drop-frame timecode.
+        let tempoMap = try #require(work.tempoMap)
+        let wallTime = try TimeConverter(tempoMap: tempoMap).wallTime(at: #require(attack))
+        let timecode = TimecodeConverter(frameRate: .fps2997).timecode(at: wallTime)
+
+        #expect(timecode.description == "00:00:10;00")
+    }
+
+    private func tempoMapExtras(_ work: Work,
+                                at beatTime: BeatTime) -> Extras? {
+        var result: Extras?
+
+        work.tempoMap?.forEach { _, entryBeatTime, _, extras in
+            if result == nil, entryBeatTime == beatTime {
+                result = extras
+            }
+        }
+
+        return result
     }
 }

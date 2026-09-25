@@ -1,6 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorMIDI
+internal import IvorSMF
 
 internal struct MIDI {
 
@@ -21,6 +22,7 @@ internal struct MIDI {
     internal typealias Tempo         = SMFTempo
     internal typealias Text          = SMFText
     internal typealias TickRate      = SMFTickRate
+    internal typealias TimeCode      = SMFTimeCode
     internal typealias TimelineEvent = SMFEvent
     internal typealias TimeSignature = SMFTimeSignature
     internal typealias Track         = SMFTrack

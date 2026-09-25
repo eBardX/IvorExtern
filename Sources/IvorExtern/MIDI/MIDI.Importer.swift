@@ -4,6 +4,8 @@ internal import Foundation
 internal import IvorModel
 
 private import IvorMIDI
+private import IvorSMF
+private import IvorSMPTE
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers
@@ -46,6 +48,7 @@ extension MIDI.Importer {
         let parts = _convert(voices,
                              beatMap)
         let tempoMap = _convert(timeline,
+                                validated.division,
                                 beatMap)
 
         return Work(name: determineWorkName(validated),
@@ -53,10 +56,19 @@ extension MIDI.Importer {
                                            tempoMap))
     }
 
+    // The SMPTE timing of the file — its timecode division, if any, and its
+    // SMPTE Offset (`FF 54`) meta event, if any — is recorded as extras on
+    // the tempo map entry at beat zero, so that `MIDI.Exporter` can write it
+    // back and a `TimecodeConverter` can label the work's wall times. When
+    // there's no tempo event at tick zero to carry them, an entry at beat
+    // zero holding the default tempo is inserted for them.
     private static func _convert(_ timeline: [MIDI.TimelineEvent],
+                                 _ division: MIDI.Division,
                                  _ beatMap: MIDI.BeatMap) -> TempoMap {
         var tempoMap = TempoMap()
         var prevTempo: Tempo = .default
+        var startElements = _makeStartElements(timeline,
+                                               division)
 
         for event in timeline {
             guard case let .meta(eventTime, .tempo(tempo)) = event
@@ -66,6 +78,14 @@ extension MIDI.Importer {
             let currTempo = convertToTempo(tempo, factor)
 
             if beatTime != .zero {
+                if !startElements.isEmpty {
+                    tempoMap.insert(beatTime: .zero,
+                                    tempo: prevTempo,
+                                    extras: Extras(elements: startElements))
+
+                    startElements = []
+                }
+
                 tempoMap.insert(beatTime: beatTime,
                                 tempo: prevTempo)
             }
@@ -73,9 +93,16 @@ extension MIDI.Importer {
             tempoMap.insert(beatTime: beatTime,
                             tempo: currTempo,
                             extras: Extras(elements: [Extra(name: Extra.midiTempo.name,
-                                                            values: [.int(Int(tempo.uintValue))])]))
+                                                            values: [.int(Int(tempo.uintValue))])] + startElements))
 
+            startElements = []
             prevTempo = currTempo
+        }
+
+        if !startElements.isEmpty {
+            tempoMap.insert(beatTime: .zero,
+                            tempo: prevTempo,
+                            extras: Extras(elements: startElements))
         }
 
         return tempoMap
@@ -151,11 +178,18 @@ extension MIDI.Importer {
         var beatMap = try MIDI.BeatMap(division: division)
 
         for event in timeline {
-            guard case let .meta(eventTime, .timeSignature(tsig)) = event
-            else { continue }
+            switch event {
+            case let .meta(eventTime, .tempo(tempo)):
+                try beatMap.append(eventTime: eventTime,
+                                   tempo: tempo.uintValue)
 
-            try beatMap.append(eventTime: eventTime,
-                               clockRate: tsig.clockRate)
+            case let .meta(eventTime, .timeSignature(tsig)):
+                try beatMap.append(eventTime: eventTime,
+                                   clockRate: tsig.clockRate)
+
+            default:
+                continue
+            }
         }
 
         return beatMap
@@ -232,6 +266,35 @@ extension MIDI.Importer {
         }
 
         return instrumentMap
+    }
+
+    // Only the first SMPTE Offset at tick zero counts: the SMF specification
+    // requires the event to precede any nonzero delta time, and in a
+    // format 1 file the one on the first track (the tempo map) applies to
+    // them all.
+    private static func _makeStartElements(_ timeline: [MIDI.TimelineEvent],
+                                           _ division: MIDI.Division) -> [Extra] {
+        var elements: [Extra] = []
+
+        if case let .timeCode(timeCode) = division {
+            elements.append(Extra(name: Extra.midiTimeCode.name,
+                                  values: [.string(timeCode.frameRate.description),
+                                           .int(Int(timeCode.ticksPerFrame))]))
+        }
+
+        for event in timeline {
+            guard case let .meta(eventTime, .smpteOffset(offset)) = event,
+                  eventTime == .zero
+            else { continue }
+
+            elements.append(Extra(name: Extra.smpteOffset.name,
+                                  values: [.string(offset.frameRate.description),
+                                           .string(offset.description)]))
+
+            break
+        }
+
+        return elements
     }
 
     // A voice from an unnamed track is named after its first instrument —

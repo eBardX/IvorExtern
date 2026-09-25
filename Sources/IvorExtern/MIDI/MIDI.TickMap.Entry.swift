@@ -1,9 +1,9 @@
-// © 2025–2026 John Gary Pusey (see LICENSE.md)
+// © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorTiming
 internal import XestiNumbers
 
-extension MIDI.BeatMap {
+extension MIDI.TickMap {
 
     // MARK: Internal Nested Types
 
@@ -11,26 +11,23 @@ extension MIDI.BeatMap {
 
         // MARK: Internal Initializers
 
-        internal init(eventTime: MIDI.EventTime,
-                      beatTime: BeatTime,
-                      factor: Number,
+        internal init(beatTime: BeatTime,
+                      seconds: Number,
                       tempo: UInt) {
             self.beatTime = beatTime
-            self.eventTime = eventTime
-            self.factor = factor
+            self.seconds = seconds
             self.tempo = tempo
         }
 
         // MARK: Internal Instance Properties
 
         internal let beatTime: BeatTime
-        internal let eventTime: MIDI.EventTime
-        internal let factor: Factor
+        internal let seconds: Number
         internal let tempo: UInt
     }
 }
 
 // MARK: - Sendable
 
-extension MIDI.BeatMap.Entry: Sendable {
+extension MIDI.TickMap.Entry: Sendable {
 }

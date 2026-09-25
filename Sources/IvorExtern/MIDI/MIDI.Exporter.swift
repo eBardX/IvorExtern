@@ -4,6 +4,8 @@ internal import Foundation
 internal import IvorModel
 
 private import IvorMIDI
+private import IvorSMF
+private import IvorSMPTE
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers
@@ -104,11 +106,17 @@ extension MIDI.Exporter {
     }
 
     private static func _convert(name: String,
-                                 tempoMap: TempoMap) throws(MIDI.Error) -> MIDI.Track {
+                                 smpteOffset: SMPTETime?,
+                                 tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
+                                 tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events: [MIDI.Event] = []
 
         if let sequenceName = convertToMIDIText(name) {
             events.append(.meta(.zero, .sequenceTrackName(sequenceName)))
+        }
+
+        if let smpteOffset {
+            events.append(.meta(.zero, .smpteOffset(smpteOffset)))
         }
 
         // Always 4/4: a model-level limitation, not an exporter shortcut.
@@ -122,26 +130,31 @@ extension MIDI.Exporter {
             events.append(.meta(.zero, .timeSignature(timeSig)))
         }
 
-        events += Self._tempoEvents(from: tempoMap)
+        for (beatTime, tempo) in tempoChanges {
+            if let eventTime = tickMap[beatTime] {
+                events.append(.meta(eventTime, .tempo(tempo)))
+            }
+        }
 
         return MIDI.Track(events: events)
     }
 
     private static func _convert(part: Part<BeatTime, NoteNumber>,
-                                 channel: MIDI.Channel) throws(MIDI.Error) -> MIDI.Track {
+                                 channel: MIDI.Channel,
+                                 tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events: [MIDI.Event] = []
 
         if let trackName = convertToMIDIText(part.name) {
             events.append(.meta(.zero, .sequenceTrackName(trackName)))
         }
 
-        events += _panEvents(part.panMap, channel: channel)
+        events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
 
-        events += _instrumentEvents(part.instrumentMap, channel: channel)
+        events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)
 
         let exactVelocityByBeatTime = _exactVelocityByBeatTime(part.dynamicMap)
 
-        events += _expressionEvents(part.dynamicMap, channel: channel)
+        events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
         var noteError: MIDI.Error?
 
@@ -165,8 +178,8 @@ extension MIDI.Exporter {
             let attBeatTime = beatTime
             let relBeatTime = beatTime + beatDuration
 
-            if let attEventTime = convertToMIDIEventTime(beatTime, exportTickRate),
-               let relEventTime = convertToMIDIEventTime(beatTime + beatDuration, exportTickRate) {
+            if let attEventTime = tickMap[attBeatTime],
+               let relEventTime = tickMap[relBeatTime] {
                 let attKeyVelocity = exactVelocityByBeatTime[attBeatTime]
                     ?? convertToMIDIKeyVelocity(part.dynamicMap[attBeatTime])
                     ?? defaultKeyVelocity
@@ -192,24 +205,38 @@ extension MIDI.Exporter {
         return MIDI.Track(events: events)
     }
 
-    private static func _convert(parts: [Part<BeatTime, NoteNumber>]) throws(MIDI.Error) -> [MIDI.Track] {
+    private static func _convert(parts: [Part<BeatTime, NoteNumber>],
+                                 tickMap: MIDI.TickMap) throws(MIDI.Error) -> [MIDI.Track] {
         let channels = try _assignChannels(parts)
         var tracks: [MIDI.Track] = []
 
         for (part, channel) in zip(parts, channels) {
             try tracks.append(_convert(part: part,
-                                       channel: channel))
+                                       channel: channel,
+                                       tickMap: tickMap))
         }
 
         return tracks
     }
 
+    // A work imported from a file with a timecode division (see
+    // `MIDI.Importer._makeStartElements`) carries that division in a
+    // `midiTimeCode` extra, and is written back with the same division;
+    // every other work gets a metrical division. A `smpteOffset` extra is
+    // written back as an SMPTE Offset (`FF 54`) meta event, provided its
+    // frame rate is one SMF can encode.
     private static func _convert(work: Work) throws(MIDI.Error) -> MIDI.Sequence {
+        let startExtras = _startExtras(work.tempoMap)
+        let timeCode = _timeCode(startExtras)
+        let tempoChanges = work.tempoMap.map(_tempoChanges(from:)) ?? []
+        let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: exportTickRate)
         var tracks: [MIDI.Track] = []
 
-        if let tempoMap = work.tempoMap {
+        if work.tempoMap != nil {
             try tracks.append(_convert(name: work.name,
-                                       tempoMap: tempoMap))
+                                       smpteOffset: _smpteOffset(startExtras),
+                                       tempoChanges: tempoChanges,
+                                       tickMap: tickMap))
         }
 
         switch work.content {
@@ -218,14 +245,15 @@ extension MIDI.Exporter {
             throw MIDI.Error.unsupportedPitchNotation(work.pitchNotation)
 
         case let .keyboardBeat(parts, _):
-            tracks += try _convert(parts: parts)
+            tracks += try _convert(parts: parts,
+                                   tickMap: tickMap)
 
         default:
             throw MIDI.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
         return MIDI.Sequence(format: .format1,
-                             division: MIDI.Division.metrical(exportTickRate),
+                             division: timeCode.map { .timeCode($0) } ?? .metrical(exportTickRate),
                              tracks: tracks)
     }
 
@@ -250,12 +278,12 @@ extension MIDI.Exporter {
     // counterpart to fall back to (unlike `velocity`, which always has
     // `Dynamic`'s own re-derivation to fall back to) — emitted only when
     // present, never synthesized.
-    private static func _expressionEvents(_ dynamicMap: DynamicMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+    private static func _expressionEvents(_ dynamicMap: DynamicMap<BeatTime>, channel: MIDI.Channel, tickMap: MIDI.TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
         dynamicMap.forEach { _, beatTime, _, extras in
             if let expression = intValue(extras, .expressionValue),
-               let eventTime = convertToMIDIEventTime(beatTime, exportTickRate) {
+               let eventTime = tickMap[beatTime] {
                 let raw = UInt(expression)
 
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
@@ -285,7 +313,7 @@ extension MIDI.Exporter {
     // explicit name that doesn't match its program's generic General MIDI
     // name (see `MIDI.Importer._makeInstrumentMap`) round-trips rather than
     // silently degrading to that generic name.
-    private static func _instrumentEvents(_ instrumentMap: InstrumentMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+    private static func _instrumentEvents(_ instrumentMap: InstrumentMap<BeatTime>, channel: MIDI.Channel, tickMap: MIDI.TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
         instrumentMap.forEach { _, beatTime, instrument, extras in
@@ -293,7 +321,7 @@ extension MIDI.Exporter {
                 $0 >= 1 ? MIDI.ProgramNumber(uintValue: UInt($0 - 1)) : nil
             }
 
-            if let eventTime = convertToMIDIEventTime(beatTime, exportTickRate),
+            if let eventTime = tickMap[beatTime],
                let program = exactProgram ?? convertToMIDIProgramNumber(instrument) {
                 if let bank = intValue(extras, .midiBank), bank >= 1 {
                     let raw = UInt(bank - 1)
@@ -328,11 +356,11 @@ extension MIDI.Exporter {
     // in emission order, not MIDI-standard byte order — already knows the
     // LSB by the time it processes the MSB that actually creates the
     // `PanMap` entry.
-    private static func _panEvents(_ panMap: PanMap<BeatTime>, channel: MIDI.Channel) -> [MIDI.Event] {
+    private static func _panEvents(_ panMap: PanMap<BeatTime>, channel: MIDI.Channel, tickMap: MIDI.TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
         panMap.forEach { _, beatTime, pan, extras in
-            guard let eventTime = convertToMIDIEventTime(beatTime, exportTickRate)
+            guard let eventTime = tickMap[beatTime]
             else { return }
 
             if let midiPan = intValue(extras, .midiPan) {
@@ -380,16 +408,49 @@ extension MIDI.Exporter {
         return intValue(firstExtras, .midiChannel) ?? _parseChannelName(part.name)
     }
 
-    private static func _tempoEvents(from tempoMap: TempoMap) -> [MIDI.Event] {
-        var events: [SMFEvent] = []
+    // An SMPTE Offset whose frame rate SMF can't encode is dropped, since
+    // the formatter would otherwise reject the whole sequence.
+    private static func _smpteOffset(_ startExtras: [Extras]) -> SMPTETime? {
+        for extras in startExtras {
+            guard let values = extras.elements.first(where: { $0.name == Extra.smpteOffset.name })?.values,
+                  values.count == 2,
+                  case let .string(frameRateString) = values[0],
+                  case let .string(timeString) = values[1],
+                  let frameRate = SMPTEFrameRate(string: frameRateString),
+                  MIDI.TimeCode.supports(frameRate)
+            else { continue }
+
+            return SMPTETime(string: timeString,
+                             frameRate: frameRate)
+        }
+
+        return nil
+    }
+
+    // The extras of every tempo map entry at beat zero, where
+    // `MIDI.Importer` records the SMPTE timing of the file it read.
+    private static func _startExtras(_ tempoMap: TempoMap?) -> [Extras] {
+        var result: [Extras] = []
+
+        tempoMap?.forEach { _, beatTime, _, extras in
+            if beatTime == .zero, let extras {
+                result.append(extras)
+            }
+        }
+
+        return result
+    }
+
+    private static func _tempoChanges(from tempoMap: TempoMap) -> [(beatTime: BeatTime, tempo: MIDI.Tempo)] {
+        var changes: [(beatTime: BeatTime, tempo: MIDI.Tempo)] = []
 
         guard !tempoMap.isEmpty
         else {
             if let midiTempo = convertToMIDITempo(tempoMap.defaultTempo) {
-                events.append(.meta(.zero, .tempo(midiTempo)))
+                changes.append((.zero, midiTempo))
             }
 
-            return events
+            return changes
         }
 
         // Collect the distinct beat times (last entry wins at any given
@@ -440,15 +501,35 @@ extension MIDI.Exporter {
 
             let exactMidiTempo = exactMicrosecondsByBeatTime[sampleBeatTime].flatMap { MIDI.Tempo(uintValue: UInt($0)) }
 
-            if let eventTime = convertToMIDIEventTime(sampleBeatTime, exportTickRate),
-               let midiTempo = exactMidiTempo ?? convertToMIDITempo(tempo) {
-                events.append(.meta(eventTime, .tempo(midiTempo)))
+            if let midiTempo = exactMidiTempo ?? convertToMIDITempo(tempo) {
+                changes.append((sampleBeatTime, midiTempo))
 
                 lastEmittedTempo = tempo
             }
         }
 
-        return events
+        return changes
+    }
+
+    // A timecode division SMF can't encode — an unsupported frame rate, or
+    // a number of ticks per frame outside 1–255 — is skipped, so the work
+    // falls back to a metrical division.
+    private static func _timeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
+        for extras in startExtras {
+            guard let values = extras.elements.first(where: { $0.name == Extra.midiTimeCode.name })?.values,
+                  values.count == 2,
+                  case let .string(frameRateString) = values[0],
+                  case let .int(ticksPerFrameValue) = values[1],
+                  let frameRate = SMPTEFrameRate(string: frameRateString),
+                  let ticksPerFrame = UInt(exactly: ticksPerFrameValue),
+                  let timeCode = MIDI.TimeCode(frameRate: frameRate,
+                                               ticksPerFrame: ticksPerFrame)
+            else { continue }
+
+            return timeCode
+        }
+
+        return nil
     }
 }
 

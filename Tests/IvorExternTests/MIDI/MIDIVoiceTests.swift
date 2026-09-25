@@ -2,6 +2,7 @@
 
 @testable import IvorExtern
 import IvorMIDI
+import IvorSMF
 import Testing
 import XestiTools
 
