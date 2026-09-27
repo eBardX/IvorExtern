@@ -98,7 +98,7 @@ extension MIDIBeatMapTests {
 
     @Test
     func init_timeCode_dropFrame() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997, ticksPerFrame: 4))
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 4))
         let beatMap = try MIDI.BeatMap(division: .timeCode(timeCode))
 
         // 120 ticks at 30000/1001 × 4 ticks per second is exactly 1.001 seconds.

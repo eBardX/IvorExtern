@@ -13,12 +13,12 @@ extension MIDI.Importer {
 
     // MARK: Internal Nested Types
 
-    internal struct Context {
+    internal struct Context<TimeMap: MIDI.ImportTimeMap> {
 
         // MARK: Internal Initializers
 
-        internal init(beatMap: MIDI.BeatMap) {
-            self.beatMap = beatMap
+        internal init(timeMap: TimeMap) {
+            self.timeMap = timeMap
             self.dynamicMap = DynamicMap()
             self.noteTable = NoteTable()
             self.panMap = PanMap()
@@ -26,10 +26,10 @@ extension MIDI.Importer {
 
         // MARK: Internal Instance Properties
 
-        internal var beatMap: MIDI.BeatMap
-        internal var dynamicMap: DynamicMap<BeatTime>
-        internal var noteTable: NoteTable<BeatTime, NoteNumber>
-        internal var panMap: PanMap<BeatTime>
+        internal var dynamicMap: DynamicMap<TimeMap.TimeType>
+        internal var noteTable: NoteTable<TimeMap.TimeType, NoteNumber>
+        internal var panMap: PanMap<TimeMap.TimeType>
+        internal var timeMap: TimeMap
     }
 }
 
@@ -47,23 +47,23 @@ extension MIDI.Importer.Context {
     // `Extra+DynamicMap.swift`.
     internal mutating func handleExpression(_ eventTime: MIDI.EventTime,
                                             _ value: Int) {
-        let (beatTime, _) = beatMap[eventTime]
+        let time = timeMap.time(at: eventTime)
 
-        dynamicMap.insert(time: beatTime,
-                          dynamic: dynamicMap[beatTime],
+        dynamicMap.insert(time: time,
+                          dynamic: dynamicMap[time],
                           extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(value)])]))
     }
 
     internal mutating func handleNote(_ note: MIDI.Note) {
-        let (attack, _) = beatMap[note.startTime]
-        let (release, _) = beatMap[MIDI.EventTime(note.startTime.uintValue + note.duration)]
+        let (attack, duration) = timeMap.timeSpan(at: note.startTime,
+                                                  ticks: note.duration)
 
         let extras = note.peakKeyPressure.map {
             Extras(elements: [Extra(name: Extra.midiKeyPressure.name, values: [.int(Int($0.uintValue))])])
         }
 
         noteTable.insert(attack: attack,
-                         duration: release - attack,
+                         duration: duration,
                          pitch: convertToNoteNumber(note.key),
                          extras: extras)
 
@@ -83,7 +83,7 @@ extension MIDI.Importer.Context {
     internal mutating func handlePan(_ eventTime: MIDI.EventTime,
                                      _ panValue: MIDI.PanValue,
                                      _ panLSB: UInt?) {
-        let (beatTime, _) = beatMap[eventTime]
+        let time = timeMap.time(at: eventTime)
 
         guard let pan = convertToPan(panValue)
         else { return }
@@ -93,7 +93,7 @@ extension MIDI.Importer.Context {
                                     values: [.int(Int((panValue.uintValue << 7) | $0))])])
         }
 
-        panMap.insert(time: beatTime,
+        panMap.insert(time: time,
                       pan: pan,
                       extras: extras)
     }

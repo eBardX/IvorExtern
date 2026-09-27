@@ -74,6 +74,13 @@ extension MIDIErrorTests {
     }
 
     @Test
+    func invalidWallDuration_message() {
+        let error = MIDI.Error.invalidWallDuration(.zero)
+
+        #expect(error.message.hasPrefix("Invalid wall duration:"))
+    }
+
+    @Test
     func multipleWorksNotSupported_message() {
         let error = MIDI.Error.multipleWorksNotSupported
 
@@ -139,13 +146,6 @@ extension MIDIErrorTests {
         let error = MIDI.Error.unsupportedPitchNotation(.absolute)
 
         #expect(error.message.hasPrefix("Unsupported pitch notation:"))
-    }
-
-    @Test
-    func unsupportedTimeBasis_message() {
-        let error = MIDI.Error.unsupportedTimeBasis(.beat)
-
-        #expect(error.message == "Unsupported time basis: beat")
     }
 
     @Test

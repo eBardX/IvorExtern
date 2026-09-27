@@ -16,6 +16,7 @@ extension MIDI {
         case invalidEventTime(EventTime)
         case invalidNoteNumber(IvorTuning.NoteNumber)
         case invalidTempo(UInt)
+        case invalidWallDuration(WallDuration)
         case multipleWorksNotSupported
         case noWorksToExport
         case parseFailure((any EnhancedError)?)
@@ -25,7 +26,6 @@ extension MIDI {
         case unsupportedDivision(Division)
         case unsupportedFileFormat(String)
         case unsupportedPitchNotation(PitchNotation)
-        case unsupportedTimeBasis(TimeBasis)
         case validationFailure([MIDI.Validator.Issue])
     }
 }
@@ -75,6 +75,9 @@ extension MIDI.Error: EnhancedError {
         case let .invalidTempo(tempo):
             "Invalid SMF tempo: \(tempo) microseconds per quarter note"
 
+        case let .invalidWallDuration(wallDuration):
+            "Invalid wall duration: \(wallDuration)"
+
         case .multipleWorksNotSupported:
             "Multiple works are not supported"
 
@@ -101,9 +104,6 @@ extension MIDI.Error: EnhancedError {
 
         case let .unsupportedPitchNotation(pitchNotation):
             "Unsupported pitch notation: \(pitchNotation)"
-
-        case let .unsupportedTimeBasis(timeBasis):
-            "Unsupported time basis: \(timeBasis)"
 
         case let .validationFailure(issues):
             "SMF sequence failed validation: \(issues.map(\.message).joined(separator: "; "))"

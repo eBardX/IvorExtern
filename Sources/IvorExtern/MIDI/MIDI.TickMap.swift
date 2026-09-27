@@ -98,6 +98,25 @@ extension MIDI.TickMap {
     }
 }
 
+// MARK: - MIDI.ExportTimeMap
+
+extension MIDI.TickMap: MIDI.ExportTimeMap {
+
+    // MARK: Internal Instance Methods
+
+    internal func eventTime(at time: BeatTime) -> MIDI.EventTime? {
+        self[time]
+    }
+
+    internal func releaseTime(attack: BeatTime,
+                              duration: BeatDuration) throws(MIDI.Error) -> BeatTime {
+        guard duration > 0
+        else { throw MIDI.Error.invalidBeatDuration(duration) }
+
+        return attack + duration
+    }
+}
+
 // MARK: - Sendable
 
 extension MIDI.TickMap: Sendable {

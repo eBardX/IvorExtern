@@ -32,7 +32,7 @@ extension MIDITickMapTests {
 
     @Test
     func subscript_timeCode_dropFrame_roundsToNearestTick() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997, ticksPerFrame: 4))
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 4))
         let tickMap = MIDI.TickMap(timeCode: timeCode, tempoChanges: [])
 
         // Two beats at 120 BPM is one second: 119.88 ticks.
@@ -53,7 +53,7 @@ extension MIDITickMapTests {
 
     @Test
     func subscript_timeCode_invertsBeatMap() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997, ticksPerFrame: 80))
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
         var beatMap = try MIDI.BeatMap(division: .timeCode(timeCode))
 
         try beatMap.append(eventTime: SMFEventTime(1_234), tempo: 461_538)

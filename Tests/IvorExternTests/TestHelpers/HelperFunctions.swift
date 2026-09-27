@@ -76,6 +76,13 @@ internal func keyboardBeatParts(of work: Work) -> [Part<BeatTime, NoteNumber>]? 
     return parts
 }
 
+internal func keyboardWallParts(of work: Work) -> [Part<WallTime, NoteNumber>]? {
+    guard case let .keyboardWall(parts) = work.content
+    else { return nil }
+
+    return parts
+}
+
 internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
     guard case let .standardBeat(parts, _) = work.content
     else { return nil }

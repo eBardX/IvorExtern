@@ -23,7 +23,6 @@ internal struct MIDI {
     internal typealias Text          = SMFText
     internal typealias TickRate      = SMFTickRate
     internal typealias TimeCode      = SMFTimeCode
-    internal typealias TimelineEvent = SMFEvent
     internal typealias TimeSignature = SMFTimeSignature
     internal typealias Track         = SMFTrack
     internal typealias Validator     = SMFValidator

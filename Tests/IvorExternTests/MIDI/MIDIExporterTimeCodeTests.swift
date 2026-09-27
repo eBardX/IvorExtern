@@ -95,8 +95,8 @@ extension MIDIExporterTimeCodeTests {
 
     @Test
     func convert_timeCode_roundTrips() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997, ticksPerFrame: 80))
-        let offset = try #require(SMPTETime(string: "00:59:58;00", frameRate: .fps2997))
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
+        let offset = try #require(SMPTETime(string: "00:59:58;00", frameRate: .fps2997Drop))
         let key = MIDIData1Value(60)
         let tempoTrack = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
                                            .meta(.zero, .tempo(SMFTempo(461_538))),
@@ -172,5 +172,77 @@ extension MIDIExporterTimeCodeTests {
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(try sequence.division == .timeCode(#require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))))
+    }
+
+    @Test
+    func convert_wall_defaultTimeCode() throws {
+        var table = NoteTable<WallTime, NoteNumber>()
+
+        table.insert(attack: WallTime(1_000_000), duration: WallDuration(500_000), pitch: NoteNumber(60))
+
+        let work = Work(name: "Wall", content: .keyboardWall([Part(name: "Piano", noteTable: table)]))
+        let sequence = try MIDI.Exporter().convert(work)
+        let noteTimes = sequence.tracks[1].events.compactMap { event -> UInt? in
+            guard case let .midi(eventTime, .noteOn) = event
+            else { return nil }
+
+            return eventTime.uintValue
+        }
+        let conductorEvents = sequence.tracks[0].events.filter {
+            switch $0 {
+            case .meta(_, .tempo),
+                 .meta(_, .timeSignature):
+                true
+
+            default:
+                false
+            }
+        }
+
+        #expect(try sequence.division == .timeCode(#require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))))
+        #expect(noteTimes == [1_000])
+        #expect(conductorEvents.isEmpty)
+    }
+
+    @Test
+    func convert_wall_roundTrips() throws {
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
+        let offset = try #require(SMPTETime(string: "00:59:58;00", frameRate: .fps2997Drop))
+        let key = MIDIData1Value(60)
+        let conductorTrack = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
+                                               .meta(.zero, .endOfTrack)])
+        let noteTrack = SMFTrack(events: [.midi(SMFEventTime(1_001), .noteOn(MIDIChannel(5), key, MIDIData1Value(100))),
+                                          .midi(SMFEventTime(9_999), .noteOff(MIDIChannel(5), key, MIDIData1Value(64))),
+                                          .meta(SMFEventTime(9_999), .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .timeCode(timeCode),
+                                   tracks: [conductorTrack, noteTrack])
+        let work = try MIDI.Importer().convert(sequence)
+        let exported = try MIDI.Exporter().convert(work)
+        let notes = exported.tracks[1].events.compactMap { event -> (UInt, UInt)? in
+            guard case let .midi(eventTime, message) = event
+            else { return nil }
+
+            switch message {
+            case let .noteOff(channel, _, _),
+                 let .noteOn(channel, _, _):
+                return (eventTime.uintValue, channel.uintValue)
+
+            default:
+                return nil
+            }
+        }
+        let offsets = exported.tracks[0].events.compactMap { event -> SMPTETime? in
+            guard case let .meta(_, .smpteOffset(offset)) = event
+            else { return nil }
+
+            return offset
+        }
+
+        #expect(keyboardWallParts(of: work) != nil)
+        #expect(exported.division == .timeCode(timeCode))
+        #expect(offsets == [offset])
+        #expect(notes.map(\.0) == [1_001, 9_999])
+        #expect(notes.map(\.1) == [5, 5])
     }
 }

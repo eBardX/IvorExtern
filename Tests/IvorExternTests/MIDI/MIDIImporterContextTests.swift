@@ -18,7 +18,7 @@ extension MIDIImporterContextTests {
     @Test
     func handlePan_insertsPanValue() throws {
         let beatMap = try MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
-        var context = MIDI.Importer.Context(beatMap: beatMap)
+        var context = MIDI.Importer.Context(timeMap: beatMap)
 
         context.handlePan(SMFEventTime(0), MIDI.PanValue(64), nil)
 
@@ -28,7 +28,7 @@ extension MIDIImporterContextTests {
     @Test
     func init_emptyState() throws {
         let beatMap = try MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
-        let context = MIDI.Importer.Context(beatMap: beatMap)
+        let context = MIDI.Importer.Context(timeMap: beatMap)
 
         #expect(context.noteTable.isEmpty)
         #expect(context.dynamicMap.isEmpty)

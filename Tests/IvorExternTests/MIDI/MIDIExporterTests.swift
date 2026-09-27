@@ -385,7 +385,7 @@ extension MIDIExporterTests {
     @Test
     func convert_unsupportedContent_throws() {
         let work = Work(name: "Wall",
-                        content: .keyboardWall([]))
+                        content: .standardWall([]))
 
         #expect(throws: (any Error).self) {
             try MIDI.Exporter().convert(work)

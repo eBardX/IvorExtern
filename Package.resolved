@@ -52,7 +52,7 @@
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "895ab1e850ba8c1adae6ade0f411c0839c07ccd1"
+        "revision" : "796de8d0e76c1dcb4f2af3c1fdd32b363b0e0a47"
       }
     },
     {
@@ -70,7 +70,7 @@
       "location" : "https://github.com/eBardX/IvorSMF.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "b291676e90e57234ab7e21f448232afbe72cd0ed"
+        "revision" : "01f165dc0f580465297d842a21c53550adff7e5b"
       }
     },
     {
@@ -79,7 +79,7 @@
       "location" : "https://github.com/eBardX/IvorSMPTE.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "8d31137b34ceb47c0e5fd2040a6cf2e1884c9a2a"
+        "revision" : "b1c4593b5917807c5cdc0a5eeeb19fac0655b5ac"
       }
     },
     {
@@ -88,7 +88,7 @@
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
         "branch" : "develop",
-        "revision" : "9800ad59e4080db6aec0b5e8833b16fdb71d232c"
+        "revision" : "2f6494512fea65efc85ffd1e8a85533ff88987df"
       }
     },
     {

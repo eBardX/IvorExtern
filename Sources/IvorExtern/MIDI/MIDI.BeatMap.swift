@@ -157,3 +157,22 @@ extension MIDI.BeatMap {
                       denominator: tickRate ?? 1)
     }
 }
+
+// MARK: - MIDI.ImportTimeMap
+
+extension MIDI.BeatMap: MIDI.ImportTimeMap {
+
+    // MARK: Internal Instance Methods
+
+    internal func time(at eventTime: MIDI.EventTime) -> BeatTime {
+        self[eventTime].0
+    }
+
+    internal func timeSpan(at eventTime: MIDI.EventTime,
+                           ticks: UInt) -> (BeatTime, BeatDuration) {
+        let attack = time(at: eventTime)
+        let release = time(at: MIDI.EventTime(eventTime.uintValue + ticks))
+
+        return (attack, release - attack)
+    }
+}
