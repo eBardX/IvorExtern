@@ -348,7 +348,7 @@ extension MIDIImporterTests {
     }
 
     @Test
-    func convert_smpteOffset_recordedAsTempoMapExtra() throws {
+    func convert_smpteOffset_setsStartTimeNotTempoMapExtra() throws {
         let offset = try #require(SMPTETime(string: "01:00:00;00", frameRate: .fps2997Drop))
         let key = MIDIData1Value(60)
         let track = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
@@ -362,14 +362,13 @@ extension MIDIImporterTests {
         let work = try MIDI.Importer().convert(sequence)
         let startExtras = try #require(tempoMapExtras(work, at: .zero))
 
+        #expect(work.smpteStartTime == offset)
         #expect(intValue(startExtras, .midiTempo) == 600_000)
-        #expect(startExtras.elements.first { $0.name == Extra.smpteOffset.name }?.values == [.string("29.97DF"),
-                                                                                             .string("01:00:00;00")])
-        #expect(!hasFlag(startExtras, .midiTimeCode))
+        #expect(startExtras.elements.count == 1)
     }
 
     @Test
-    func convert_smpteOffset_withoutTempoEvents_insertsEntryAtBeatZero() throws {
+    func convert_smpteOffset_withoutTempoEvents_insertsNoEntry() throws {
         let offset = try #require(SMPTETime(string: "00:59:58:00", frameRate: .fps25))
         let track = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
                                       .meta(.zero, .endOfTrack)])
@@ -377,11 +376,10 @@ extension MIDIImporterTests {
                                    division: .metrical(SMFTickRate(480)),
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
-        let startExtras = try #require(tempoMapExtras(work, at: .zero))
 
+        #expect(work.smpteStartTime == offset)
         #expect(work.tempoMap?[.zero] == .default)
-        #expect(startExtras.elements.first { $0.name == Extra.smpteOffset.name }?.values == [.string("25"),
-                                                                                             .string("00:59:58:00")])
+        #expect(tempoMapExtras(work, at: .zero) == nil)
     }
 
     @Test
@@ -504,8 +502,8 @@ extension MIDIImporterTests {
         #expect(intValue(startExtras, .midiProgram) == 41)
         #expect(startExtras.elements.first { $0.name == Extra.midiTimeCode.name }?.values == [.string("30"),
                                                                                               .int(10)])
-        #expect(startExtras.elements.first { $0.name == Extra.smpteOffset.name }?.values == [.string("30"),
-                                                                                             .string("01:00:00:00")])
+        #expect(!startExtras.elements.contains { $0.name == "smpteOffset" })
+        #expect(work.smpteStartTime == offset)
     }
 
     private func instrumentMapExtras(_ part: Part<WallTime, NoteNumber>,

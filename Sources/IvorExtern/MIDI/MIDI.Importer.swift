@@ -34,8 +34,8 @@ extension MIDI.Importer {
 
     // MARK: Private Type Methods
 
-    // A wall-time work has no tempo map to carry the file's SMPTE timing
-    // (see `_makeStartElements`), so it's recorded on each part's
+    // A wall-time work has no tempo map to carry the file's timecode
+    // division (see `_makeStartElements`), so it's recorded on each part's
     // instrument map entry at time zero instead, where `MIDI.Exporter`
     // looks for it. When a part has no such entry, one holding the default
     // instrument is inserted for it, carrying the part's `midiChannel`
@@ -80,14 +80,17 @@ extension MIDI.Importer {
         return try Work(name: determineWorkName(validated),
                         content: _convert(voices,
                                           timeline,
-                                          validated.division))
+                                          validated.division),
+                        smpteStartTime: _makeStartTime(timeline,
+                                                       validated.division))
     }
 
     // A file with a timecode division and no tempo events has no beats to
     // speak of — its ticks measure wall time alone — so it's imported as
-    // wall time, with its SMPTE timing recorded on each part instead of on
-    // a tempo map (see `_addStartElements`). Every other file is imported
-    // as beat time.
+    // wall time, with its timecode division recorded on each part instead
+    // of on a tempo map (see `_addStartElements`). Every other file is
+    // imported as beat time. Either way, the work's SMPTE start time comes
+    // from the file's SMPTE Offset (see `_makeStartTime`).
     private static func _convert(_ voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])],
                                  _ timeline: [MIDI.Event],
                                  _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
@@ -95,8 +98,7 @@ extension MIDI.Importer {
            !timeline.contains(where: { if case .meta(_, .tempo) = $0 { true } else { false } }) {
             return .keyboardWall(_convert(voices,
                                           MIDI.WallMap(timeCode: timeCode),
-                                          startElements: _makeStartElements(timeline,
-                                                                            division)))
+                                          startElements: _makeStartElements(division)))
         }
 
         let beatMap = try _makeBeatMap(division,
@@ -110,19 +112,16 @@ extension MIDI.Importer {
                                       beatMap))
     }
 
-    // The SMPTE timing of the file — its timecode division, if any, and its
-    // SMPTE Offset (`FF 54`) meta event, if any — is recorded as extras on
-    // the tempo map entry at beat zero, so that `MIDI.Exporter` can write it
-    // back and an `SMPTETimeConverter` can label the work's wall times. When
-    // there's no tempo event at tick zero to carry them, an entry at beat
-    // zero holding the default tempo is inserted for them.
+    // The file's timecode division, if any, is recorded as an extra on the
+    // tempo map entry at beat zero, so that `MIDI.Exporter` can write it
+    // back. When there's no tempo event at tick zero to carry it, an entry
+    // at beat zero holding the default tempo is inserted for it.
     private static func _convert(_ timeline: [MIDI.Event],
                                  _ division: MIDI.Division,
                                  _ beatMap: MIDI.BeatMap) -> TempoMap {
         var tempoMap = TempoMap()
         var prevTempo: Tempo = .default
-        var startElements = _makeStartElements(timeline,
-                                               division)
+        var startElements = _makeStartElements(division)
 
         for event in timeline {
             guard case let .meta(eventTime, .tempo(tempo)) = event
@@ -329,33 +328,20 @@ extension MIDI.Importer {
         return instrumentMap
     }
 
-    // Only the first SMPTE Offset at tick zero counts: the SMF specification
-    // requires the event to precede any nonzero delta time, and in a
-    // format 1 file the one on the first track (the tempo map) applies to
-    // them all.
-    private static func _makeStartElements(_ timeline: [MIDI.Event],
-                                           _ division: MIDI.Division) -> [Extra] {
-        var elements: [Extra] = []
+    private static func _makeStartElements(_ division: MIDI.Division) -> [Extra] {
+        guard case let .timeCode(timeCode) = division
+        else { return [] }
 
-        if case let .timeCode(timeCode) = division {
-            elements.append(Extra(name: Extra.midiTimeCode.name,
-                                  values: [.string(timeCode.frameRate.description),
-                                           .int(Int(timeCode.ticksPerFrame))]))
-        }
+        return [Extra(name: Extra.midiTimeCode.name,
+                      values: [.string(timeCode.frameRate.description),
+                               .int(Int(timeCode.ticksPerFrame))])]
+    }
 
-        for event in timeline {
-            guard case let .meta(eventTime, .smpteOffset(offset)) = event,
-                  eventTime == .zero
-            else { continue }
-
-            elements.append(Extra(name: Extra.smpteOffset.name,
-                                  values: [.string(offset.frameRate.description),
-                                           .string(offset.description)]))
-
-            break
-        }
-
-        return elements
+    // The work's SMPTE start time is the file's SMPTE Offset, if it has
+    // one, or else the one its division implies.
+    private static func _makeStartTime(_ timeline: [MIDI.Event],
+                                       _ division: MIDI.Division) -> SMPTETime {
+        _startOffset(timeline) ?? impliedSMPTEStartTime(division)
     }
 
     // A voice from an unnamed track is named after its first instrument —
@@ -475,6 +461,21 @@ extension MIDI.Importer {
     // on track 0. End-of-track meta events and system exclusive events are
     // both dropped — the former is a track-boundary wire artifact, the
     // latter is never read.
+    // Only the first SMPTE Offset at tick zero counts: the SMF specification
+    // requires the event to precede any nonzero delta time, and in a
+    // format 1 file the one on the first track (the tempo map) applies to
+    // them all.
+    private static func _startOffset(_ timeline: [MIDI.Event]) -> SMPTETime? {
+        for event in timeline {
+            if case let .meta(eventTime, .smpteOffset(offset)) = event,
+               eventTime == .zero {
+                return offset
+            }
+        }
+
+        return nil
+    }
+
     private static func _timeline(_ tracks: [MIDI.Track]) -> [MIDI.Event] {
         var timeline: [MIDI.Event] = []
 

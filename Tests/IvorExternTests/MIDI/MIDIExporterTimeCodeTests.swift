@@ -18,43 +18,68 @@ struct MIDIExporterTimeCodeTests {
 
 extension MIDIExporterTimeCodeTests {
     @Test
+    func convert_smpteOffset_impliedByMetricalDivision_omitted() throws {
+        let work = Work(name: "Offset", content: .keyboardBeat([], TempoMap()))
+
+        #expect(try _offsets(in: MIDI.Exporter().convert(work)).isEmpty)
+    }
+
+    @Test
+    func convert_smpteOffset_impliedByTimeCodeDivision_omitted() throws {
+        let work = try Work(name: "Offset",
+                            content: .keyboardWall([]),
+                            smpteStartTime: #require(SMPTETime(string: "00:00:00:00", frameRate: .fps25)))
+
+        #expect(try _offsets(in: MIDI.Exporter().convert(work)).isEmpty)
+    }
+
+    @Test
+    func convert_smpteOffset_unimpliedZero_written() throws {
+        let startTime = try #require(SMPTETime(string: "00:00:00:00", frameRate: .fps30))
+        let work = Work(name: "Offset",
+                        content: .keyboardBeat([], TempoMap()),
+                        smpteStartTime: startTime)
+
+        #expect(try _offsets(in: MIDI.Exporter().convert(work)) == [startTime])
+    }
+
+    @Test
     func convert_smpteOffset_unsupportedFrameRate_omitted() throws {
-        var tempoMap = TempoMap()
-
-        tempoMap.insert(beatTime: .zero,
-                        tempo: 120,
-                        extras: Extras(elements: [Extra(name: Extra.smpteOffset.name,
-                                                        values: [.string("50"), .string("01:00:00:00")])]))
-
-        let work = Work(name: "Offset", content: .keyboardBeat([], tempoMap))
+        let work = try Work(name: "Offset",
+                            content: .keyboardBeat([], TempoMap()),
+                            smpteStartTime: #require(SMPTETime(string: "01:00:00:00", frameRate: .fps50)))
         let sequence = try MIDI.Exporter().convert(work)
-        let hasOffset = sequence.tracks[0].events.contains {
-            if case .meta(_, .smpteOffset) = $0 { true } else { false }
-        }
 
-        #expect(!hasOffset)
+        #expect(_offsets(in: sequence).isEmpty)
         #expect(sequence.division == .metrical(SMFTickRate(480)))
     }
 
     @Test
+    func convert_smpteOffset_withoutOffset_roundTrips() throws {
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps30, ticksPerFrame: 10))
+        let key = MIDIData1Value(60)
+        let track = SMFTrack(events: [.midi(.zero, .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
+                                      .midi(SMFEventTime(300), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
+                                      .meta(SMFEventTime(300), .endOfTrack)])
+        let sequence = SMFSequence(format: .format0,
+                                   division: .timeCode(timeCode),
+                                   tracks: [track])
+        let work = try MIDI.Importer().convert(sequence)
+        let exported = try MIDI.Exporter().convert(work)
+
+        #expect(exported.division == .timeCode(timeCode))
+        #expect(_offsets(in: exported).isEmpty)
+    }
+
+    @Test
     func convert_smpteOffset_writesMetaEvent() throws {
-        var tempoMap = TempoMap()
-
-        tempoMap.insert(beatTime: .zero,
-                        tempo: 120,
-                        extras: Extras(elements: [Extra(name: Extra.smpteOffset.name,
-                                                        values: [.string("25"), .string("01:00:00:00")])]))
-
-        let work = Work(name: "Offset", content: .keyboardBeat([], tempoMap))
+        let startTime = try #require(SMPTETime(string: "01:00:00:00", frameRate: .fps25))
+        let work = Work(name: "Offset",
+                        content: .keyboardBeat([], TempoMap()),
+                        smpteStartTime: startTime)
         let sequence = try MIDI.Exporter().convert(work)
-        let offsets = sequence.tracks[0].events.compactMap { event -> SMPTETime? in
-            guard case let .meta(.zero, .smpteOffset(offset)) = event
-            else { return nil }
 
-            return offset
-        }
-
-        #expect(offsets == [SMPTETime(string: "01:00:00:00", frameRate: .fps25)])
+        #expect(_offsets(in: sequence) == [startTime])
         #expect(sequence.division == .metrical(SMFTickRate(480)))
     }
 
@@ -244,5 +269,18 @@ extension MIDIExporterTimeCodeTests {
         #expect(offsets == [offset])
         #expect(notes.map(\.0) == [1_001, 9_999])
         #expect(notes.map(\.1) == [5, 5])
+    }
+}
+
+// MARK: -
+
+extension MIDIExporterTimeCodeTests {
+    private func _offsets(in sequence: MIDI.Sequence) -> [SMPTETime] {
+        sequence.tracks[0].events.compactMap { event -> SMPTETime? in
+            guard case let .meta(.zero, .smpteOffset(offset)) = event
+            else { return nil }
+
+            return offset
+        }
     }
 }

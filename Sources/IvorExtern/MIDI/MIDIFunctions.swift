@@ -1,6 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorModel
+internal import IvorSMPTE
 internal import IvorTiming
 internal import IvorTuning
 
@@ -85,4 +86,19 @@ internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {
     else { return "" }
 
     return determineTrackName(track0) ?? ""
+}
+
+// The start time a file with this division implies when it has no SMPTE
+// Offset: 00:00:00:00 at a timecode division's frame rate, or the default
+// under a metrical one. `MIDI.Importer` gives such a file's work this start
+// time, so `MIDI.Exporter` can leave out an offset that would only restate
+// it.
+internal func impliedSMPTEStartTime(_ division: MIDI.Division) -> SMPTETime {
+    guard case let .timeCode(timeCode) = division,
+          let startTime = SMPTETime(frameRate: timeCode.frameRate,
+                                    frameCount: 0,
+                                    subframe: 0)
+    else { return Work.defaultSMPTEStartTime }
+
+    return startTime
 }
