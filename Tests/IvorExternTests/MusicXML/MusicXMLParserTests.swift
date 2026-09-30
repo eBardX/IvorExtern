@@ -2,7 +2,7 @@
 
 import Foundation
 @testable import IvorExtern
-import IvorMusicXML
+import IvorMXL
 import Testing
 
 struct MusicXMLParserTests {

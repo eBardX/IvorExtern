@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-internal import IvorMusicXML
+internal import IvorMXL
 
 // The pitch arithmetic behind sounding-pitch resolution, ported from
 // upstream's own pitch transposer: given a written pitch and the

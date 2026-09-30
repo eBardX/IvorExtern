@@ -1,7 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 @testable import IvorExtern
-import IvorGuido
+import IvorGMN
 import Testing
 
 struct GuidoPitchTests {

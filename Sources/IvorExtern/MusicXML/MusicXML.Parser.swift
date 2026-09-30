@@ -2,7 +2,7 @@
 
 internal import Foundation
 
-private import IvorMusicXML
+private import IvorMXL
 private import XestiTools
 
 extension MusicXML {

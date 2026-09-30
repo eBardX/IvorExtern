@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 @testable import IvorExtern
-import IvorMusicXML
+import IvorMXL
 import Testing
 import XestiNumbers
 

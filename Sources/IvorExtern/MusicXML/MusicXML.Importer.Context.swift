@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorModel
-internal import IvorMusicXML
+internal import IvorMXL
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools

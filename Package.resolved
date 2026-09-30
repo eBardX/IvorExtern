@@ -1,5 +1,5 @@
 {
-  "originHash" : "b996afbe0c7cc54c7c8417255dc10cf9cf65894915a638401573862f6cadcfb8",
+  "originHash" : "690a38ac3fe22b5cb7313f0c7cd18d6e2dae6d51995de8871a44a4efa3ae7421",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,26 +15,26 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorABC.git",
       "state" : {
-        "branch" : "v2-main",
-        "revision" : "21e8c1977702382474386077d471bc5c743d3f1b"
+        "revision" : "dca5802491341ce0f0ac513e38c3d6924483d0ad",
+        "version" : "0.1.0"
       }
     },
     {
-      "identity" : "ivorguido",
+      "identity" : "ivordkm",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eBardX/IvorGuido.git",
+      "location" : "https://github.com/eBardX/IvorDKM.git",
       "state" : {
-        "branch" : "v2-main",
-        "revision" : "339cd20377874883af76400987fa8f7504fbd9ac"
+        "revision" : "a001b5dedec1e3acb7bd5927b5620345dc1045aa",
+        "version" : "0.1.0"
       }
     },
     {
-      "identity" : "ivorjohnnysonic",
+      "identity" : "ivorgmn",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eBardX/IvorJohnnySonic.git",
+      "location" : "https://github.com/eBardX/IvorGMN.git",
       "state" : {
-        "branch" : "v3-main",
-        "revision" : "6f2d7a2dfdd988c8cd3361713e536d22789dc592"
+        "revision" : "907d6a01c3f60c46aa7e857f62e82d4d05f2ae63",
+        "version" : "0.1.0"
       }
     },
     {
@@ -42,8 +42,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMIDI.git",
       "state" : {
-        "branch" : "v2-main",
-        "revision" : "2994b12e62d0cb20626e1d910c9de98f14669b43"
+        "revision" : "0d83c46356254a7853ad83b32e6f5b424740438f",
+        "version" : "0.1.0"
       }
     },
     {
@@ -51,17 +51,17 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "b01032842f289d6a2986bb54c36b9c8d5d5ffa17"
+        "revision" : "b01032842f289d6a2986bb54c36b9c8d5d5ffa17",
+        "version" : "0.21.0"
       }
     },
     {
-      "identity" : "ivormusicxml",
+      "identity" : "ivormxl",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/eBardX/IvorMusicXML.git",
+      "location" : "https://github.com/eBardX/IvorMXL.git",
       "state" : {
-        "branch" : "v2-main",
-        "revision" : "92d7684a6e396309961c315d9b7720351a41f22f"
+        "revision" : "f005826b9ff2370878cbf544b3d78cda484d990b",
+        "version" : "0.1.0"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorSMF.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "01f165dc0f580465297d842a21c53550adff7e5b"
+        "revision" : "6cc719590e2d042984f548658a53de4088c4e3e4",
+        "version" : "0.3.1"
       }
     },
     {
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorSMPTE.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "b1c4593b5917807c5cdc0a5eeeb19fac0655b5ac"
+        "revision" : "b1c4593b5917807c5cdc0a5eeeb19fac0655b5ac",
+        "version" : "0.2.0"
       }
     },
     {
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "2f6494512fea65efc85ffd1e8a85533ff88987df"
+        "revision" : "2f6494512fea65efc85ffd1e8a85533ff88987df",
+        "version" : "0.16.0"
       }
     },
     {
@@ -96,8 +96,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTuning.git",
       "state" : {
-        "branch" : "develop",
-        "revision" : "be524d192709441d60518a82fb8e495d0e53c118"
+        "revision" : "be524d192709441d60518a82fb8e495d0e53c118",
+        "version" : "0.8.0"
       }
     },
     {

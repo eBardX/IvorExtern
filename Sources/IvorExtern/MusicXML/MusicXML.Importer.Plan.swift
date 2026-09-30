@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-private import IvorMusicXML
+private import IvorMXL
 
 // The measure-visit order for one score: a list of measure indices, honoring
 // repeats (with `times`), numbered `<ending>`s played only on their pass, and

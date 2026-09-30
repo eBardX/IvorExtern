@@ -4,7 +4,7 @@ internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
 
-private import IvorJohnnySonic
+private import IvorDKM
 private import XestiNumbers
 
 // MARK: Internal Functions

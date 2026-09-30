@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-private import IvorMusicXML
+private import IvorMXL
 
 // A single walked part: its retained `<score-part>` metadata plus the voices
 // resolved from its measures, sorted by voice ID (see

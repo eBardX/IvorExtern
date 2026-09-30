@@ -3,7 +3,7 @@
 internal import Foundation
 internal import IvorModel
 
-private import IvorJohnnySonic
+private import IvorDKM
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers

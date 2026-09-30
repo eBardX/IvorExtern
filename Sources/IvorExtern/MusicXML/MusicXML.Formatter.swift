@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import Foundation
-internal import IvorMusicXML
+internal import IvorMXL
 
 private import XestiTools
 

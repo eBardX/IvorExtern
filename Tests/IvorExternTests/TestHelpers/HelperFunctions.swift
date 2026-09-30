@@ -3,9 +3,9 @@
 import Foundation
 import IvorABC
 @testable import IvorExtern
-import IvorGuido
+import IvorGMN
 import IvorModel
-import IvorMusicXML
+import IvorMXL
 import IvorTiming
 import IvorTuning
 import Testing

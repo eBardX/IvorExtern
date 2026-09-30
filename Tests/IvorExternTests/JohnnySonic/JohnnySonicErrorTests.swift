@@ -1,7 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+import IvorDKM
 @testable import IvorExtern
-import IvorJohnnySonic
 import IvorTiming
 import IvorTuning
 import Testing

@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-internal import IvorGuido
+internal import IvorGMN
 
 extension Guido {
 

@@ -1,7 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import Foundation
-internal import IvorGuido
+internal import IvorGMN
 internal import IvorModel
 
 private import IvorTiming

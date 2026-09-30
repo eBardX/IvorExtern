@@ -1,6 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
-internal import IvorMusicXML
+internal import IvorMXL
 
 internal struct MusicXML {
 

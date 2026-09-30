@@ -2,7 +2,7 @@
 
 @testable import IvorExtern
 import IvorModel
-import IvorMusicXML
+import IvorMXL
 import IvorTiming
 import IvorTuning
 import Testing

@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import Foundation
-internal import IvorGuido
+internal import IvorGMN
 internal import IvorModel
 internal import IvorTiming
 
@@ -24,7 +24,7 @@ private import XestiTools
 // table same as unwrapped ones.
 //
 // `$variable` expansion has no access to `GMNVariable`'s declaration-time
-// symbol stash (an `internal` property of `IvorGuido`, invisible outside
+// symbol stash (an `internal` property of `IvorGMN`, invisible outside
 // it), so it takes a different, arguably more faithful route: it
 // re-lexes the variable's raw string body at each reference, prefixed by
 // every other declared variable's own text so a nested `$variable`

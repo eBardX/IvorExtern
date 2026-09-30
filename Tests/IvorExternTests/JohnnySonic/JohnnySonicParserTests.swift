@@ -1,8 +1,8 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 import Foundation
+import IvorDKM
 @testable import IvorExtern
-import IvorJohnnySonic
 import Testing
 
 struct JohnnySonicParserTests {

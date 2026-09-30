@@ -3,7 +3,7 @@
 internal import Foundation
 internal import IvorModel
 
-private import IvorGuido
+private import IvorGMN
 private import IvorTiming
 private import IvorTuning
 private import XestiTools

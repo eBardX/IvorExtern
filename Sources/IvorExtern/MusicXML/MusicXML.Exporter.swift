@@ -2,7 +2,7 @@
 
 internal import Foundation
 internal import IvorModel
-internal import IvorMusicXML
+internal import IvorMXL
 
 private import IvorTiming
 private import IvorTuning

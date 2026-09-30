@@ -2,7 +2,7 @@
 
 internal import Foundation
 
-private import IvorJohnnySonic
+private import IvorDKM
 private import XestiTools
 
 extension JohnnySonic {

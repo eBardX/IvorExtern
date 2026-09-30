@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 internal import Foundation
-internal import IvorJohnnySonic
+internal import IvorDKM
 
 extension JohnnySonic.Importer {
 

@@ -2,7 +2,7 @@
 
 internal import Foundation
 
-private import IvorGuido
+private import IvorGMN
 private import XestiTools
 
 extension Guido {

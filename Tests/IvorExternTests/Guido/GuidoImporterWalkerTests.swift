@@ -1,7 +1,7 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 @testable import IvorExtern
-import IvorGuido
+import IvorGMN
 import IvorModel
 import IvorTiming
 import Testing

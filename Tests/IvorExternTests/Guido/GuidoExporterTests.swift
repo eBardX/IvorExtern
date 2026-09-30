@@ -2,7 +2,7 @@
 
 import Foundation
 @testable import IvorExtern
-import IvorGuido
+import IvorGMN
 import IvorModel
 import IvorTiming
 import IvorTuning

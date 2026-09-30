@@ -1,6 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
-internal import IvorMusicXML
+internal import IvorMXL
 
 // Turns the count-based `<measure-style>` shorthands — `<measure-repeat>` and
 // `<multiple-rest>` — into literal content, once per part in document order,
