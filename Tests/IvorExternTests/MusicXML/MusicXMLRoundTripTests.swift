@@ -40,8 +40,8 @@ extension MusicXMLRoundTripTests {
 
         var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
 
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        for note in recoveredPart.noteTable {
+            flags.append((hasFlag(note.extras, .accent), stringValue(note.extras, .slurStart), stringValue(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)
@@ -109,7 +109,9 @@ extension MusicXMLRoundTripTests {
 
         var instruments: [Instrument] = []
 
-        recoveredPart.instrumentMap.forEach { _, _, instrument, _ in instruments.append(instrument) }
+        for entry in recoveredPart.instrumentMap {
+            instruments.append(entry.instrument)
+        }
 
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
     }
@@ -162,7 +164,9 @@ extension MusicXMLRoundTripTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
         var verticals: [Pan.Angle] = []
 
-        recoveredPart.panMap.forEach { _, _, pan, _ in verticals.append(pan.vertical) }
+        for entry in recoveredPart.panMap {
+            verticals.append(entry.pan.vertical)
+        }
 
         #expect(!verticals.isEmpty)
         #expect(verticals.allSatisfy { $0 == 30 })
@@ -196,10 +200,10 @@ extension MusicXMLRoundTripTests {
         var volume: Double?
         var unpitched: Int?
 
-        recoveredPart.instrumentMap.forEach { _, _, _, extras in
-            program = intValue(extras, .midiProgram)
-            volume = doubleValue(extras, .midiVolume)
-            unpitched = intValue(extras, .midiUnpitched)
+        for entry in recoveredPart.instrumentMap {
+            program = intValue(entry.extras, .midiProgram)
+            volume = doubleValue(entry.extras, .midiVolume)
+            unpitched = intValue(entry.extras, .midiUnpitched)
         }
 
         #expect(program == 1)

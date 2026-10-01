@@ -34,8 +34,8 @@ extension ABCImporterTests {
 
         var foundChannel: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
         }
 
         #expect(foundChannel == 3)
@@ -142,8 +142,8 @@ extension ABCImporterTests {
 
         var foundChannel: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
         }
 
         #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
@@ -185,8 +185,8 @@ extension ABCImporterTests {
 
         var foundChannel: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
         }
 
         #expect(foundChannel == 5)

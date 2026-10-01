@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "b01032842f289d6a2986bb54c36b9c8d5d5ffa17",
-        "version" : "0.21.0"
+        "revision" : "83b6a626779f8557b663f11df7dff6c0a1b5620d",
+        "version" : "0.23.0"
       }
     },
     {
@@ -87,8 +87,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTiming.git",
       "state" : {
-        "revision" : "2f6494512fea65efc85ffd1e8a85533ff88987df",
-        "version" : "0.16.0"
+        "revision" : "8932dd49f0db9b2ffa44d323f947c9542a0f7eab",
+        "version" : "0.17.0"
       }
     },
     {

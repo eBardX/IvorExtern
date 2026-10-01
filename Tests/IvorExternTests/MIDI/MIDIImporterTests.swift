@@ -38,8 +38,8 @@ extension MIDIImporterTests {
 
         var foundBank: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundBank = intValue(extras, .midiBank)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundBank = intValue(entry.extras, .midiBank)
         }
 
         // MSB 1, LSB 2 -> (1 << 7) | 2 == 130, plus the 1-based convention.
@@ -207,8 +207,8 @@ extension MIDIImporterTests {
 
         var foundChannel: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
         }
 
         #expect(foundChannel == 3)
@@ -399,8 +399,8 @@ extension MIDIImporterTests {
         let parts = try #require(keyboardBeatParts(of: work))
         var notes: [(BeatTime, BeatDuration)] = []
 
-        parts.first?.noteTable.forEach { _, beatTime, beatDuration, _, _, _ in
-            notes.append((beatTime, beatDuration))
+        for note in parts.first?.noteTable ?? NoteTable() {
+            notes.append((note.attack, note.duration))
         }
 
         // 1,000 ticks per second: one second at 120 BPM, then one at 60 BPM.
@@ -430,8 +430,8 @@ extension MIDIImporterTests {
         let parts = try #require(keyboardBeatParts(of: work))
         var attack: BeatTime?
 
-        parts.first?.noteTable.forEach { _, beatTime, _, _, _, _ in
-            attack = beatTime
+        for note in parts.first?.noteTable ?? NoteTable() {
+            attack = note.attack
         }
 
         // Tick 24,000 is frame 300: 00:00:10;00 in drop-frame timecode.
@@ -456,8 +456,8 @@ extension MIDIImporterTests {
         let parts = try #require(keyboardWallParts(of: work))
         var notes: [(WallTime, WallDuration)] = []
 
-        parts.first?.noteTable.forEach { _, wallTime, wallDuration, _, _, _ in
-            notes.append((wallTime, wallDuration))
+        for note in parts.first?.noteTable ?? NoteTable() {
+            notes.append((note.attack, note.duration))
         }
 
         // 1,000 ticks per second.
@@ -492,7 +492,7 @@ extension MIDIImporterTests {
         let parts = try #require(keyboardWallParts(of: work))
         var entryCount = 0
 
-        parts[0].instrumentMap.forEach { _, _, _, _ in
+        for _ in parts[0].instrumentMap {
             entryCount += 1
         }
 
@@ -510,9 +510,9 @@ extension MIDIImporterTests {
                                      at wallTime: WallTime) -> Extras? {
         var result: Extras?
 
-        part.instrumentMap.forEach { _, entryWallTime, _, extras in
-            if result == nil, entryWallTime == wallTime {
-                result = extras
+        for entry in part.instrumentMap {
+            if result == nil, entry.time == wallTime {
+                result = entry.extras
             }
         }
 
@@ -521,14 +521,6 @@ extension MIDIImporterTests {
 
     private func tempoMapExtras(_ work: Work,
                                 at beatTime: BeatTime) -> Extras? {
-        var result: Extras?
-
-        work.tempoMap?.forEach { _, entryBeatTime, _, extras in
-            if result == nil, entryBeatTime == beatTime {
-                result = extras
-            }
-        }
-
-        return result
+        work.tempoMap?.first { $0.beatTime == beatTime }?.extras
     }
 }

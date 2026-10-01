@@ -40,8 +40,8 @@ extension GuidoRoundTripTests {
 
         var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
 
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        for note in recoveredPart.noteTable {
+            flags.append((hasFlag(note.extras, .accent), stringValue(note.extras, .slurStart), stringValue(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)
@@ -91,7 +91,9 @@ extension GuidoRoundTripTests {
 
         var instruments: [Instrument] = []
 
-        recoveredPart.instrumentMap.forEach { _, _, instrument, _ in instruments.append(instrument) }
+        for entry in recoveredPart.instrumentMap {
+            instruments.append(entry.instrument)
+        }
 
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
     }
@@ -214,10 +216,8 @@ extension GuidoRoundTripTests {
 
         var foundText: String?
 
-        recoveredTempoMap.forEach { _, time, _, extras in
-            if time == BeatTime(0) {
-                foundText = stringValue(extras, .tempoText)
-            }
+        for entry in recoveredTempoMap where entry.beatTime == BeatTime(0) {
+            foundText = stringValue(entry.extras, .tempoText)
         }
 
         #expect(foundText == "Allegro")

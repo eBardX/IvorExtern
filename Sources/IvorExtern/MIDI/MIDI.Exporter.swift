@@ -151,8 +151,6 @@ extension MIDI.Exporter {
 
         events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
-        var noteError: MIDI.Error?
-
         // Note-off velocity is sampled from `dynamicMap` at the note's
         // *release* time. For a multi-note ramp this yields an
         // interpolated blend rather than a genuine "release velocity"
@@ -160,22 +158,13 @@ extension MIDI.Exporter {
         // (see `Context.handleNote`) and stored nowhere in the model.
         // Harmless for most playback, but semantically odd; not fixable
         // here without a model change.
-        part.noteTable.forEach { _, attTime, duration, startPitch, _, extras in
-            guard noteError == nil
-            else { return }
+        for note in part.noteTable {
+            let attTime = note.attack
+            let relTime = try tickMap.releaseTime(attack: attTime,
+                                                  duration: note.duration)
 
-            let relTime: TickMap.TimeType
-
-            do throws(MIDI.Error) {
-                relTime = try tickMap.releaseTime(attack: attTime,
-                                                  duration: duration)
-            } catch {
-                noteError = error
-                return
-            }
-
-            guard let noteNumber = convertToMIDINoteNumber(startPitch)
-            else { noteError = MIDI.Error.invalidNoteNumber(startPitch); return }
+            guard let noteNumber = convertToMIDINoteNumber(note.startPitch)
+            else { throw MIDI.Error.invalidNoteNumber(note.startPitch) }
 
             if let attEventTime = tickMap.eventTime(at: attTime),
                let relEventTime = tickMap.eventTime(at: relTime) {
@@ -188,17 +177,13 @@ extension MIDI.Exporter {
 
                 events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
 
-                if let pressure = intValue(extras, .midiKeyPressure),
+                if let pressure = intValue(note.extras, .midiKeyPressure),
                    let value = MIDIData1Value(uintValue: UInt(pressure)) {
                     events.append(.midi(attEventTime, .polyphonicPressure(channel, noteNumber, value)))
                 }
 
                 events.append(.midi(relEventTime, .noteOff(channel, noteNumber, relKeyVelocity)))
             }
-        }
-
-        if let noteError {
-            throw noteError
         }
 
         return MIDI.Track(events: events)
@@ -297,10 +282,10 @@ extension MIDI.Exporter {
     private static func _exactVelocityByTime<TimeType: TimeProtocol>(_ dynamicMap: DynamicMap<TimeType>) -> [TimeType: MIDI.KeyVelocity] {
         var result: [TimeType: MIDI.KeyVelocity] = [:]
 
-        dynamicMap.forEach { _, time, _, extras in
-            if let velocity = intValue(extras, .velocity),
+        for entry in dynamicMap {
+            if let velocity = intValue(entry.extras, .velocity),
                let value = MIDI.KeyVelocity(uintValue: UInt(velocity)) {
-                result[time] = value
+                result[entry.time] = value
             }
         }
 
@@ -316,9 +301,9 @@ extension MIDI.Exporter {
                                                                        tickMap: TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        dynamicMap.forEach { _, time, _, extras in
-            if let expression = intValue(extras, .expressionValue),
-               let eventTime = tickMap.eventTime(at: time) {
+        for entry in dynamicMap {
+            if let expression = intValue(entry.extras, .expressionValue),
+               let eventTime = tickMap.eventTime(at: entry.time) {
                 let raw = UInt(expression)
 
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
@@ -370,14 +355,14 @@ extension MIDI.Exporter {
                                                                        tickMap: TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        instrumentMap.forEach { _, time, instrument, extras in
-            let exactProgram = intValue(extras, .midiProgram).flatMap {
+        for entry in instrumentMap {
+            let exactProgram = intValue(entry.extras, .midiProgram).flatMap {
                 $0 >= 1 ? MIDI.ProgramNumber(uintValue: UInt($0 - 1)) : nil
             }
 
-            if let eventTime = tickMap.eventTime(at: time),
-               let program = exactProgram ?? convertToMIDIProgramNumber(instrument) {
-                if let bank = intValue(extras, .midiBank), bank >= 1 {
+            if let eventTime = tickMap.eventTime(at: entry.time),
+               let program = exactProgram ?? convertToMIDIProgramNumber(entry.instrument) {
+                if let bank = intValue(entry.extras, .midiBank), bank >= 1 {
                     let raw = UInt(bank - 1)
 
                     if let msb = MIDIData1Value(uintValue: raw >> 7),
@@ -387,12 +372,12 @@ extension MIDI.Exporter {
                     }
                 }
 
-                if let volume = doubleValue(extras, .midiVolume),
+                if let volume = doubleValue(entry.extras, .midiVolume),
                    let value = MIDIData1Value(uintValue: UInt((volume / 100.0 * 127.0).rounded())) {
                     events.append(.midi(eventTime, .controlChange(channel, .channelVolumeMSB, value)))
                 }
 
-                if let instrumentName = convertToMIDIText(instrument.stringValue) {
+                if let instrumentName = convertToMIDIText(entry.instrument.stringValue) {
                     events.append(.meta(eventTime, .instrumentName(instrumentName)))
                 }
 
@@ -415,11 +400,11 @@ extension MIDI.Exporter {
                                                                 tickMap: TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        panMap.forEach { _, time, pan, extras in
-            guard let eventTime = tickMap.eventTime(at: time)
-            else { return }
+        for entry in panMap {
+            guard let eventTime = tickMap.eventTime(at: entry.time)
+            else { continue }
 
-            if let midiPan = intValue(extras, .midiPan) {
+            if let midiPan = intValue(entry.extras, .midiPan) {
                 let raw = UInt(midiPan)
 
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
@@ -427,7 +412,7 @@ extension MIDI.Exporter {
                     events.append(.midi(eventTime, .controlChange(channel, .panLSB, lsb)))
                     events.append(.midi(eventTime, .controlChange(channel, .panMSB, msb)))
                 }
-            } else if let panValue = convertToMIDIPanValue(pan) {
+            } else if let panValue = convertToMIDIPanValue(entry.pan) {
                 events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
             }
         }
@@ -451,17 +436,7 @@ extension MIDI.Exporter {
     // entry's `midiChannel` extra, if any, otherwise the "Channel N" name
     // convention `_parseChannelName(_:)` reads.
     private static func _preferredChannel(_ part: Part<some TimeProtocol, NoteNumber>) -> Int? {
-        var firstExtras: Extras?
-        var seen = false
-
-        part.instrumentMap.forEach { _, _, _, extras in
-            if !seen {
-                firstExtras = extras
-                seen = true
-            }
-        }
-
-        return intValue(firstExtras, .midiChannel) ?? _parseChannelName(part.name)
+        intValue(part.instrumentMap.first?.extras, .midiChannel) ?? _parseChannelName(part.name)
     }
 
     // The work's SMPTE start time is written as an SMPTE Offset unless
@@ -482,32 +457,34 @@ extension MIDI.Exporter {
     // where `MIDI.Importer` records the timecode division of a file it read
     // as wall time.
     private static func _startExtras(_ parts: [Part<WallTime, NoteNumber>]) -> [Extras] {
-        var result: [Extras] = []
-
-        for part in parts {
-            part.instrumentMap.forEach { _, time, _, extras in
-                if time == .zero, let extras {
-                    result.append(extras)
-                }
-            }
+        parts.flatMap { part in
+            part.instrumentMap.compactMap { $0.time == .zero ? $0.extras : nil }
         }
-
-        return result
     }
 
     // The extras of every tempo map entry at beat zero, where
     // `MIDI.Importer` records the timecode division of a file it read as
     // beat time.
     private static func _startExtras(_ tempoMap: TempoMap) -> [Extras] {
-        var result: [Extras] = []
+        tempoMap.compactMap { $0.beatTime == .zero ? $0.extras : nil }
+    }
 
-        tempoMap.forEach { _, beatTime, _, extras in
-            if beatTime == .zero, let extras {
-                result.append(extras)
+    // The distinct beat times in `tempoMap` (last entry wins at any given
+    // beat time, per the step-change convention), along with the exact
+    // microseconds-per-quarter value (if any) held at each one.
+    private static func _tempoAnchors(_ tempoMap: TempoMap) -> (beatTimes: [BeatTime], exactMicroseconds: [BeatTime: Int]) {
+        var beatTimes: [BeatTime] = []
+        var exactMicroseconds: [BeatTime: Int] = [:]
+
+        for entry in tempoMap {
+            if beatTimes.last != entry.beatTime {
+                beatTimes.append(entry.beatTime)
             }
+
+            exactMicroseconds[entry.beatTime] = intValue(entry.extras, .midiTempo)
         }
 
-        return result
+        return (beatTimes, exactMicroseconds)
     }
 
     private static func _tempoChanges(from tempoMap: TempoMap) -> [(beatTime: BeatTime, tempo: MIDI.Tempo)] {
@@ -522,19 +499,7 @@ extension MIDI.Exporter {
             return changes
         }
 
-        // Collect the distinct beat times (last entry wins at any given
-        // beat time, per the step-change convention), along with the exact
-        // microseconds-per-quarter value (if any) held at each one.
-        var anchorBeatTimes: [BeatTime] = []
-        var exactMicrosecondsByBeatTime: [BeatTime: Int] = [:]
-
-        tempoMap.forEach { _, beatTime, _, extras in
-            if anchorBeatTimes.last != beatTime {
-                anchorBeatTimes.append(beatTime)
-            }
-
-            exactMicrosecondsByBeatTime[beatTime] = intValue(extras, .midiTempo)
-        }
+        let (anchorBeatTimes, exactMicrosecondsByBeatTime) = _tempoAnchors(tempoMap)
 
         // Build the ordered list of beat times to sample: the anchors
         // plus every integer beat in the open interval between

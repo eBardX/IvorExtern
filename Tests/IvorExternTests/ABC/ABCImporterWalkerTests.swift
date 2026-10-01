@@ -29,15 +29,7 @@ extension ABCImporterWalkerTests {
 
         let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
 
-        var found = false
-
-        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
-            if hasFlag(extras, .accent) {
-                found = true
-            }
-        }
-
-        #expect(found)
+        #expect(results[0].context.noteTable.contains { hasFlag($0.extras, .accent) })
     }
 
     @Test
@@ -55,7 +47,9 @@ extension ABCImporterWalkerTests {
 
         var durations: [BeatDuration] = []
 
-        results[0].context.noteTable.forEach { _, _, duration, _, _, _ in durations.append(duration) }
+        for note in results[0].context.noteTable {
+            durations.append(note.duration)
+        }
 
         #expect(durations == [BeatDuration(Number(numerator: 3, denominator: 2)),
                               BeatDuration(Number(numerator: 1, denominator: 2))])
@@ -119,7 +113,9 @@ extension ABCImporterWalkerTests {
 
         var pitches: [Pitch] = []
 
-        results[0].context.noteTable.forEach { _, _, _, startPitch, _, _ in pitches.append(startPitch) }
+        for note in results[0].context.noteTable {
+            pitches.append(note.startPitch)
+        }
 
         #expect(pitches == ["D4", "E4"])
     }
@@ -148,8 +144,12 @@ extension ABCImporterWalkerTests {
         var voice1Pitches: [Pitch] = []
         var voice2Pitches: [Pitch] = []
 
-        results[1].context.noteTable.forEach { _, _, _, startPitch, _, _ in voice1Pitches.append(startPitch) }
-        results[2].context.noteTable.forEach { _, _, _, startPitch, _, _ in voice2Pitches.append(startPitch) }
+        for note in results[1].context.noteTable {
+            voice1Pitches.append(note.startPitch)
+        }
+        for note in results[2].context.noteTable {
+            voice2Pitches.append(note.startPitch)
+        }
 
         #expect(voice1Pitches == ["C4", "D4"])
         #expect(voice2Pitches == ["E4", "F4"])
@@ -173,7 +173,9 @@ extension ABCImporterWalkerTests {
 
         var pitches: [Pitch] = []
 
-        results[0].context.noteTable.forEach { _, _, _, startPitch, _, _ in pitches.append(startPitch) }
+        for note in results[0].context.noteTable {
+            pitches.append(note.startPitch)
+        }
 
         #expect(pitches == ["C4", "D4", "E4", "F4"])
     }
@@ -193,8 +195,8 @@ extension ABCImporterWalkerTests {
 
         var flags: [(start: Bool, end: Bool)] = []
 
-        results[0].context.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
+        for note in results[0].context.noteTable {
+            flags.append((hasFlag(note.extras, .slurStart), hasFlag(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)
@@ -234,7 +236,9 @@ extension ABCImporterWalkerTests {
 
         var notes: [(pitch: Pitch, duration: BeatDuration)] = []
 
-        results[0].context.noteTable.forEach { _, _, duration, startPitch, _, _ in notes.append((startPitch, duration)) }
+        for note in results[0].context.noteTable {
+            notes.append((note.startPitch, note.duration))
+        }
 
         #expect(notes.count == 2)
         #expect(notes[0].pitch == "C4")

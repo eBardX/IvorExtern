@@ -45,9 +45,9 @@ extension MusicXMLImporterInstrumentTests {
         var foundChannel: Int?
         var foundBank: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
-            foundBank = intValue(extras, .midiBank)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
+            foundBank = intValue(entry.extras, .midiBank)
         }
 
         #expect(foundChannel == 3)
@@ -84,8 +84,8 @@ extension MusicXMLImporterInstrumentTests {
 
         var foundChannel: Int?
 
-        parts.first?.instrumentMap.forEach { _, _, _, extras in
-            foundChannel = intValue(extras, .midiChannel)
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundChannel = intValue(entry.extras, .midiChannel)
         }
 
         #expect(foundChannel == 5)

@@ -40,7 +40,9 @@ extension JohnnySonicImporterTests {
 
         var attacks: [BeatTime] = []
 
-        parts[0].noteTable.forEach { _, attack, _, _, _, _ in attacks.append(attack) }
+        for note in parts[0].noteTable {
+            attacks.append(note.attack)
+        }
 
         #expect(attacks == [BeatTime(0)])
     }
@@ -72,7 +74,9 @@ extension JohnnySonicImporterTests {
         // first note's instrument speaks for the whole part.
         var entries: [(beatTime: BeatTime, instrument: Instrument)] = []
 
-        parts.first?.instrumentMap.forEach { _, time, instrument, _ in entries.append((time, instrument)) }
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            entries.append((entry.time, entry.instrument))
+        }
 
         #expect(entries.map(\.beatTime) == [convertToBeatTime(2), convertToBeatTime(5)])
         #expect(entries.allSatisfy { $0.instrument == Instrument("Piano") })
@@ -120,7 +124,9 @@ extension JohnnySonicImporterTests {
 
         var attacks: [BeatTime] = []
 
-        parts[0].noteTable.forEach { _, attack, _, _, _, _ in attacks.append(attack) }
+        for note in parts[0].noteTable {
+            attacks.append(note.attack)
+        }
 
         #expect(attacks == [BeatTime(0)])
     }

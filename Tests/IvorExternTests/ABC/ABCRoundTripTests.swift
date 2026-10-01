@@ -49,8 +49,8 @@ extension ABCRoundTripTests {
 
         var flags: [(accent: Bool, slurStart: Bool, slurEnd: Bool)] = []
 
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
+        for note in recoveredPart.noteTable {
+            flags.append((hasFlag(note.extras, .accent), hasFlag(note.extras, .slurStart), hasFlag(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)
@@ -100,7 +100,9 @@ extension ABCRoundTripTests {
 
         var instruments: [Instrument] = []
 
-        recoveredPart.instrumentMap.forEach { _, _, instrument, _ in instruments.append(instrument) }
+        for entry in recoveredPart.instrumentMap {
+            instruments.append(entry.instrument)
+        }
 
         #expect(instruments.first?.stringValue == "Acoustic Grand Piano")
     }
@@ -231,10 +233,8 @@ extension ABCRoundTripTests {
 
         var foundText: String?
 
-        recoveredTempoMap.forEach { _, time, _, extras in
-            if time == BeatTime(0) {
-                foundText = stringValue(extras, .tempoText)
-            }
+        for entry in recoveredTempoMap where entry.beatTime == BeatTime(0) {
+            foundText = stringValue(entry.extras, .tempoText)
         }
 
         #expect(foundText == "Allegro")

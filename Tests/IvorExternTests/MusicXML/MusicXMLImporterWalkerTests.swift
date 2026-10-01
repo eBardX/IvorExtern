@@ -49,7 +49,9 @@ extension MusicXMLImporterWalkerTests {
         let firstVoice = try #require(part.voices.first { $0.id == "2" })
         var attacks: [BeatTime] = []
 
-        firstVoice.noteTable.forEach { _, attack, _, _, _, _ in attacks.append(attack) }
+        for note in firstVoice.noteTable {
+            attacks.append(note.attack)
+        }
 
         #expect(attacks == [.zero])
     }
@@ -85,7 +87,9 @@ extension MusicXMLImporterWalkerTests {
 
         var notes: [(attack: BeatTime, duration: BeatDuration)] = []
 
-        voice.noteTable.forEach { _, attack, duration, _, _, _ in notes.append((attack, duration)) }
+        for note in voice.noteTable {
+            notes.append((note.attack, note.duration))
+        }
 
         #expect(notes.count == 2)
         #expect(notes.allSatisfy { $0.attack == .zero && $0.duration == BeatDuration(2) })
@@ -301,7 +305,9 @@ extension MusicXMLImporterWalkerTests {
 
         var notes: [(attack: BeatTime, duration: BeatDuration)] = []
 
-        voice.noteTable.forEach { _, attack, duration, _, _, _ in notes.append((attack, duration)) }
+        for note in voice.noteTable {
+            notes.append((note.attack, note.duration))
+        }
 
         #expect(notes.count == 1)
         #expect(notes.first?.attack == .zero)
@@ -338,7 +344,9 @@ extension MusicXMLImporterWalkerTests {
 
         var pitches: [Pitch] = []
 
-        voice.noteTable.forEach { _, _, _, startPitch, _, _ in pitches.append(startPitch) }
+        for note in voice.noteTable {
+            pitches.append(note.startPitch)
+        }
 
         #expect(pitches.first?.pitchClass.letter == .a)
         #expect(pitches.first?.pitchClass.accidental == .sharp)

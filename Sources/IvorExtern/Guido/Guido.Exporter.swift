@@ -152,8 +152,8 @@ extension Guido.Exporter {
 
         var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, extras in
-            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        for entry in dynamicMap {
+            entries.append((entry.time, entry.dynamic, stringValue(entry.extras, .dynamicMark)))
         }
 
         var annotations: [DynamicAnnotation] = []
@@ -193,17 +193,17 @@ extension Guido.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, extras in
+        for note in noteTable {
             if let last = events.last,
-               last.attack == attack,
-               last.duration == duration {
-                events[events.count - 1].pitches.append(startPitch)
-                events[events.count - 1].extrasList.append(extras)
+               last.attack == note.attack,
+               last.duration == note.duration {
+                events[events.count - 1].pitches.append(note.startPitch)
+                events[events.count - 1].extrasList.append(note.extras)
             } else {
-                events.append(Event(attack: attack,
-                                    duration: duration,
-                                    extrasList: [extras],
-                                    pitches: [startPitch]))
+                events.append(Event(attack: note.attack,
+                                    duration: note.duration,
+                                    extrasList: [note.extras],
+                                    pitches: [note.startPitch]))
             }
         }
 
@@ -213,10 +213,10 @@ extension Guido.Exporter {
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, GMNInstrument)] {
         var directives: [(BeatTime, GMNInstrument)] = []
 
-        instrumentMap.forEach { _, time, instrument, extras in
-            let midi = intValue(extras, .midiProgram).map { $0 - 1 } ?? generalMIDIProgramNumber(name: instrument.stringValue)
+        for entry in instrumentMap {
+            let midi = intValue(entry.extras, .midiProgram).map { $0 - 1 } ?? generalMIDIProgramNumber(name: entry.instrument.stringValue)
 
-            directives.append((time, GMNInstrument(name: instrument.stringValue, midi: midi)))
+            directives.append((entry.time, GMNInstrument(name: entry.instrument.stringValue, midi: midi)))
         }
 
         return directives
@@ -476,9 +476,9 @@ extension Guido.Exporter {
     private static func _tempoDirectives(_ tempoMap: TempoMap) -> [(BeatTime, GMNTempo)] {
         var directives: [(BeatTime, GMNTempo)] = []
 
-        tempoMap.forEach { _, time, tempo, extras in
-            if let gTempo = convertToGuidoTempo(tempo, text: stringValue(extras, .tempoText)) {
-                directives.append((time, gTempo))
+        for entry in tempoMap {
+            if let gTempo = convertToGuidoTempo(entry.tempo, text: stringValue(entry.extras, .tempoText)) {
+                directives.append((entry.beatTime, gTempo))
             }
         }
 

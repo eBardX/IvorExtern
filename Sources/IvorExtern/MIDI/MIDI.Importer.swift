@@ -49,9 +49,9 @@ extension MIDI.Importer {
 
         var startEntry: (entryID: EntryID, instrument: Instrument, extras: Extras?)?
 
-        instrumentMap.forEach { entryID, time, instrument, extras in
-            if startEntry == nil, time == .zero {
-                startEntry = (entryID, instrument, extras)
+        for entry in instrumentMap {
+            if startEntry == nil, entry.time == .zero {
+                startEntry = (entry.entryID, entry.instrument, entry.extras)
             }
         }
 
@@ -357,10 +357,8 @@ extension MIDI.Importer {
                                              channel: MIDI.Channel) -> String {
         var firstInstrument: Instrument?
 
-        instrumentMap.forEach { _, _, instrument, _ in
-            if firstInstrument == nil {
-                firstInstrument = instrument
-            }
+        for entry in instrumentMap where firstInstrument == nil {
+            firstInstrument = entry.instrument
         }
 
         guard let firstInstrument

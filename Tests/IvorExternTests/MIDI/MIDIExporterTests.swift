@@ -456,8 +456,8 @@ extension MIDIExporterTests {
 
         var entries1: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        tempoMap1.forEach { _, beatTime, tempo, _ in
-            entries1.append((beatTime, tempo))
+        for entry in tempoMap1 {
+            entries1.append((entry.beatTime, entry.tempo))
         }
 
         let sequence2 = try MIDI.Exporter().convert(work1)
@@ -467,8 +467,8 @@ extension MIDIExporterTests {
 
         var entries2: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        tempoMap2.forEach { _, beatTime, tempo, _ in
-            entries2.append((beatTime, tempo))
+        for entry in tempoMap2 {
+            entries2.append((entry.beatTime, entry.tempo))
         }
 
         #expect(entries2.count == entries1.count)
@@ -496,8 +496,8 @@ extension MIDIExporterTests {
 
         var originalEntries: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        canonicalTempoMap.forEach { _, beatTime, tempo, _ in
-            originalEntries.append((beatTime, tempo))
+        for entry in canonicalTempoMap {
+            originalEntries.append((entry.beatTime, entry.tempo))
         }
 
         let sequence = try MIDI.Exporter().convert(originalWork)
@@ -507,8 +507,8 @@ extension MIDIExporterTests {
 
         var recoveredEntries: [(beatTime: BeatTime, tempo: Tempo)] = []
 
-        recoveredTempoMap.forEach { _, beatTime, tempo, _ in
-            recoveredEntries.append((beatTime, tempo))
+        for entry in recoveredTempoMap {
+            recoveredEntries.append((entry.beatTime, entry.tempo))
         }
 
         #expect(recoveredEntries.count == originalEntries.count)

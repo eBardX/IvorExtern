@@ -52,11 +52,11 @@ internal func notes(in part: Part<BeatTime, Pitch>,
                     sourceLocation: SourceLocation = #_sourceLocation) -> [(attack: BeatTime, duration: BeatDuration, pitch: Pitch)] {
     var notes: [(attack: BeatTime, duration: BeatDuration, pitch: Pitch)] = []
 
-    part.noteTable.forEach { _, attack, duration, startPitch, endPitch, _ in
-        #expect(startPitch == endPitch,
+    for note in part.noteTable {
+        #expect(note.startPitch == note.endPitch,
                 sourceLocation: sourceLocation)
 
-        notes.append((attack, duration, startPitch))
+        notes.append((note.attack, note.duration, note.startPitch))
     }
 
     return notes
@@ -254,8 +254,8 @@ internal func asNoteNumbers(_ noteTable: NoteTable<BeatTime, Pitch>,
                             sourceLocation: SourceLocation = #_sourceLocation) throws -> NoteTable<BeatTime, NoteNumber> {
     var entries: [(attack: BeatTime, duration: BeatDuration, pitch: Pitch)] = []
 
-    noteTable.forEach { _, attack, duration, startPitch, _, _ in
-        entries.append((attack, duration, startPitch))
+    for note in noteTable {
+        entries.append((note.attack, note.duration, note.startPitch))
     }
 
     var result = NoteTable<BeatTime, NoteNumber>()

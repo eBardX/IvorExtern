@@ -60,10 +60,8 @@ extension MIDIRoundTripTests {
 
         var found: Int?
 
-        recoveredTempoMap.forEach { _, time, _, extras in
-            if time == BeatTime(0) {
-                found = intValue(extras, .midiTempo)
-            }
+        for entry in recoveredTempoMap where entry.beatTime == BeatTime(0) {
+            found = intValue(entry.extras, .midiTempo)
         }
 
         #expect(found == 408_163)
@@ -92,8 +90,8 @@ extension MIDIRoundTripTests {
 
         var found: Int?
 
-        recoveredPart.dynamicMap.forEach { _, _, _, extras in
-            if let value = intValue(extras, .expressionValue) {
+        for entry in recoveredPart.dynamicMap {
+            if let value = intValue(entry.extras, .expressionValue) {
                 found = value
             }
         }
@@ -171,8 +169,8 @@ extension MIDIRoundTripTests {
 
         var pressure: Int?
 
-        recoveredPart.noteTable.forEach { _, _, _, _, _, extras in
-            pressure = intValue(extras, .midiKeyPressure)
+        for note in recoveredPart.noteTable {
+            pressure = intValue(note.extras, .midiKeyPressure)
         }
 
         #expect(pressure == 90)
@@ -199,8 +197,8 @@ extension MIDIRoundTripTests {
 
         var midiPan: Int?
 
-        recoveredPart.panMap.forEach { _, _, _, extras in
-            midiPan = intValue(extras, .midiPan)
+        for entry in recoveredPart.panMap {
+            midiPan = intValue(entry.extras, .midiPan)
         }
 
         #expect(midiPan == 9_001)
@@ -229,8 +227,8 @@ extension MIDIRoundTripTests {
 
         var volume: Double?
 
-        recoveredPart.instrumentMap.forEach { _, _, _, extras in
-            volume = doubleValue(extras, .midiVolume)
+        for entry in recoveredPart.instrumentMap {
+            volume = doubleValue(entry.extras, .midiVolume)
         }
 
         // CC 7 is 7-bit (0-127), so the round trip through the 0-100 percent
@@ -348,10 +346,8 @@ extension MIDIRoundTripTests {
 
         var found: Int?
 
-        recoveredPart.dynamicMap.forEach { _, time, _, extras in
-            if time == BeatTime(0) {
-                found = intValue(extras, .velocity)
-            }
+        for entry in recoveredPart.dynamicMap where entry.time == BeatTime(0) {
+            found = intValue(entry.extras, .velocity)
         }
 
         #expect(found == 77)

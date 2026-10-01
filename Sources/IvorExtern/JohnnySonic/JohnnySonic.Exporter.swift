@@ -51,20 +51,20 @@ extension JohnnySonic.Exporter {
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
         var exactVolumeByBeatTime: [BeatTime: Double] = [:]
 
-        part.dynamicMap.forEach { _, beatTime, _, extras in
-            if let velocity = intValue(extras, .velocity) {
-                exactVolumeByBeatTime[beatTime] = Double(velocity) / 12.7
+        for entry in part.dynamicMap {
+            if let velocity = intValue(entry.extras, .velocity) {
+                exactVolumeByBeatTime[entry.time] = Double(velocity) / 12.7
             }
         }
 
-        part.noteTable.forEach { _, btime, bdur, sfreq, efreq, _ in
-            let startBeat  = convertToJohnnySonicBeat(btime)
-            let duration   = convertToJohnnySonicDuration(bdur)
-            let volume     = exactVolumeByBeatTime[btime] ?? convertToJohnnySonicVolume(part.dynamicMap[btime])
-            let location   = convertToJohnnySonicLocation(part.panMap[btime])
-            let startPitch = convertToJohnnySonicPitch(sfreq)
-            let endPitch   = convertToJohnnySonicPitch(efreq)
-            let instrument = part.instrumentMap[btime].stringValue
+        for note in part.noteTable {
+            let startBeat  = convertToJohnnySonicBeat(note.attack)
+            let duration   = convertToJohnnySonicDuration(note.duration)
+            let volume     = exactVolumeByBeatTime[note.attack] ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
+            let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
+            let startPitch = convertToJohnnySonicPitch(note.startPitch)
+            let endPitch   = convertToJohnnySonicPitch(note.endPitch)
+            let instrument = part.instrumentMap[note.attack].stringValue
 
             if duration > 0 {
                 commands.append(.pitchesNote(DKMPitchesNote(startBeat: startBeat,
@@ -91,20 +91,20 @@ extension JohnnySonic.Exporter {
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
         var exactVolumeByBeatTime: [BeatTime: Double] = [:]
 
-        part.dynamicMap.forEach { _, beatTime, _, extras in
-            if let velocity = intValue(extras, .velocity) {
-                exactVolumeByBeatTime[beatTime] = Double(velocity) / 12.7
+        for entry in part.dynamicMap {
+            if let velocity = intValue(entry.extras, .velocity) {
+                exactVolumeByBeatTime[entry.time] = Double(velocity) / 12.7
             }
         }
 
-        part.noteTable.forEach { _, btime, bdur, snnum, ennum, _ in
-            let startBeat  = convertToJohnnySonicBeat(btime)
-            let duration   = convertToJohnnySonicDuration(bdur)
-            let volume     = exactVolumeByBeatTime[btime] ?? convertToJohnnySonicVolume(part.dynamicMap[btime])
-            let location   = convertToJohnnySonicLocation(part.panMap[btime])
-            let startPitch = convertToJohnnySonicPitch(snnum)
-            let endPitch   = convertToJohnnySonicPitch(ennum)
-            let instrument = part.instrumentMap[btime].stringValue
+        for note in part.noteTable {
+            let startBeat  = convertToJohnnySonicBeat(note.attack)
+            let duration   = convertToJohnnySonicDuration(note.duration)
+            let volume     = exactVolumeByBeatTime[note.attack] ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
+            let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
+            let startPitch = convertToJohnnySonicPitch(note.startPitch)
+            let endPitch   = convertToJohnnySonicPitch(note.endPitch)
+            let instrument = part.instrumentMap[note.attack].stringValue
 
             if duration > 0 {
                 commands.append(.pitchesNote(DKMPitchesNote(startBeat: startBeat,
@@ -155,8 +155,8 @@ extension JohnnySonic.Exporter {
 
         var tmpSeq: [(BeatTime, Tempo, Extras?)] = []
 
-        tempoMap.forEach { _, btime, tempo, extras in
-            tmpSeq.append((btime, tempo, extras))
+        for entry in tempoMap {
+            tmpSeq.append((entry.beatTime, entry.tempo, entry.extras))
         }
 
         var commands: [DKMCommand] = zip(tmpSeq.dropLast(),

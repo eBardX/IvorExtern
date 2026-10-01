@@ -25,15 +25,7 @@ extension GuidoImporterWalkerTests {
 
         let context = try walker.walk(voice)
 
-        var found = false
-
-        context.noteTable.forEach { _, _, _, _, _, extras in
-            if hasFlag(extras, .accent) {
-                found = true
-            }
-        }
-
-        #expect(found)
+        #expect(context.noteTable.contains { hasFlag($0.extras, .accent) })
     }
 
     @Test
@@ -49,7 +41,9 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, _, _, _, _, _ in count += 1 }
+        for _ in context.noteTable {
+            count += 1
+        }
 
         #expect(count == 1)
     }
@@ -71,7 +65,9 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, _, _, _, _, _ in count += 1 }
+        for _ in context.noteTable {
+            count += 1
+        }
 
         #expect(count == 2)
         #expect(context.currentBeatTime == BeatTime(2))
@@ -223,11 +219,11 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, attack, duration, _, _, _ in
+        for note in context.noteTable {
             count += 1
 
-            #expect(attack == .zero)
-            #expect(duration == BeatDuration(1))
+            #expect(note.attack == .zero)
+            #expect(note.duration == BeatDuration(1))
         }
 
         #expect(count == 1)
@@ -263,8 +259,8 @@ extension GuidoImporterWalkerTests {
 
         var flags: [(start: String?, end: String?)] = []
 
-        context.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        for note in context.noteTable {
+            flags.append((stringValue(note.extras, .slurStart), stringValue(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)
@@ -312,11 +308,11 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, attack, duration, _, _, _ in
+        for note in context.noteTable {
             count += 1
 
-            #expect(attack == .zero)
-            #expect(duration == BeatDuration(2))
+            #expect(note.attack == .zero)
+            #expect(note.duration == BeatDuration(2))
         }
 
         #expect(count == 1)
@@ -337,7 +333,9 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, _, _, _, _, _ in count += 1 }
+        for _ in context.noteTable {
+            count += 1
+        }
 
         #expect(count == 2)
     }
@@ -353,7 +351,9 @@ extension GuidoImporterWalkerTests {
 
         var count = 0
 
-        context.noteTable.forEach { _, _, _, _, _, _ in count += 1 }
+        for _ in context.noteTable {
+            count += 1
+        }
 
         #expect(count == 3)
         #expect(context.currentBeatTime == BeatTime(3))
@@ -374,8 +374,8 @@ extension GuidoImporterWalkerTests {
 
         var flags: [(start: Bool, end: Bool)] = []
 
-        context.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .slurStart), hasFlag(extras, .slurEnd)))
+        for note in context.noteTable {
+            flags.append((hasFlag(note.extras, .slurStart), hasFlag(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)

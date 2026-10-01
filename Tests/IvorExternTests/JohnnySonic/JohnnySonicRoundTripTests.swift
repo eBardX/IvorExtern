@@ -239,12 +239,10 @@ extension JohnnySonicRoundTripTests {
         var foundEnd: Double?
         var foundDuration: Double?
 
-        recoveredTempoMap.forEach { _, time, _, extras in
-            if time == BeatTime(0) {
-                foundStart = doubleValue(extras, .rampStartTempo)
-                foundEnd = doubleValue(extras, .rampEndTempo)
-                foundDuration = doubleValue(extras, .rampDuration)
-            }
+        for entry in recoveredTempoMap where entry.beatTime == BeatTime(0) {
+            foundStart = doubleValue(entry.extras, .rampStartTempo)
+            foundEnd = doubleValue(entry.extras, .rampEndTempo)
+            foundDuration = doubleValue(entry.extras, .rampDuration)
         }
 
         #expect(foundStart == 120)

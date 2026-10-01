@@ -57,7 +57,9 @@ extension MusicXMLImporterWalkerNoteTests {
 
         var notes: [(duration: BeatDuration, accent: Bool)] = []
 
-        voice.noteTable.forEach { _, _, duration, _, _, extras in notes.append((duration, hasFlag(extras, .accent))) }
+        for note in voice.noteTable {
+            notes.append((note.duration, hasFlag(note.extras, .accent)))
+        }
 
         // The whole tie chain collapses into one `NoteTable` entry summing
         // all three legs' durations — the middle leg's own `<accent/>`,
@@ -100,7 +102,9 @@ extension MusicXMLImporterWalkerNoteTests {
 
         var notes: [(attack: BeatTime, pitch: Pitch)] = []
 
-        voice.noteTable.forEach { _, attack, _, startPitch, _, _ in notes.append((attack, startPitch)) }
+        for note in voice.noteTable {
+            notes.append((note.attack, note.startPitch))
+        }
 
         // D4 never appears, but its 2-division duration still shifted C4.
         #expect(notes.count == 1)
@@ -140,7 +144,9 @@ extension MusicXMLImporterWalkerNoteTests {
 
         var notes: [(attack: BeatTime, pitch: Pitch)] = []
 
-        voice.noteTable.forEach { _, attack, _, startPitch, _, _ in notes.append((attack, startPitch)) }
+        for note in voice.noteTable {
+            notes.append((note.attack, note.startPitch))
+        }
 
         // D4 never appears, and — carrying no duration — doesn't shift C4.
         #expect(notes.count == 1)
@@ -187,8 +193,8 @@ extension MusicXMLImporterWalkerNoteTests {
 
         var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
 
-        voice.noteTable.forEach { _, _, _, _, _, extras in
-            flags.append((hasFlag(extras, .accent), stringValue(extras, .slurStart), stringValue(extras, .slurEnd)))
+        for note in voice.noteTable {
+            flags.append((hasFlag(note.extras, .accent), stringValue(note.extras, .slurStart), stringValue(note.extras, .slurEnd)))
         }
 
         #expect(flags.count == 2)

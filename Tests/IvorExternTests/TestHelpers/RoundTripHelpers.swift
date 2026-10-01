@@ -48,11 +48,8 @@ internal func expectDynamicMapsMatch<TimeType: TimeProtocol>(_ recovered: Dynami
 internal func expectInstrumentMapsMatch<TimeType: TimeProtocol>(_ recovered: InstrumentMap<TimeType>,
                                                                 _ original: InstrumentMap<TimeType>,
                                                                 sourceLocation: SourceLocation = #_sourceLocation) {
-    var recoveredEntries: [(TimeType, Instrument)] = []
-    var originalEntries: [(TimeType, Instrument)] = []
-
-    recovered.forEach { _, time, instrument, _ in recoveredEntries.append((time, instrument)) }
-    original.forEach { _, time, instrument, _ in originalEntries.append((time, instrument)) }
+    let recoveredEntries = recovered.map { ($0.time, $0.instrument) }
+    let originalEntries = original.map { ($0.time, $0.instrument) }
 
     #expect(recoveredEntries.count == originalEntries.count,
             "instrument map entry count mismatch",
@@ -99,11 +96,8 @@ internal func expectNoteTablesMatch<TimeType: TimeProtocol, PitchType: PitchProt
 internal func expectPanMapsMatch<TimeType: TimeProtocol>(_ recovered: PanMap<TimeType>,
                                                          _ original: PanMap<TimeType>,
                                                          sourceLocation: SourceLocation = #_sourceLocation) {
-    var recoveredEntries: [(TimeType, Pan)] = []
-    var originalEntries: [(TimeType, Pan)] = []
-
-    recovered.forEach { _, time, pan, _ in recoveredEntries.append((time, pan)) }
-    original.forEach { _, time, pan, _ in originalEntries.append((time, pan)) }
+    let recoveredEntries = recovered.map { ($0.time, $0.pan) }
+    let originalEntries = original.map { ($0.time, $0.pan) }
 
     #expect(recoveredEntries.count == originalEntries.count,
             "pan map entry count mismatch",
@@ -124,11 +118,8 @@ internal func expectPanMapsMatch<TimeType: TimeProtocol>(_ recovered: PanMap<Tim
 internal func expectTempoMapsMatch(_ recovered: TempoMap,
                                    _ original: TempoMap,
                                    sourceLocation: SourceLocation = #_sourceLocation) {
-    var recoveredEntries: [(BeatTime, Tempo)] = []
-    var originalEntries: [(BeatTime, Tempo)] = []
-
-    recovered.forEach { _, beatTime, tempo, _ in recoveredEntries.append((beatTime, tempo)) }
-    original.forEach { _, beatTime, tempo, _ in originalEntries.append((beatTime, tempo)) }
+    let recoveredEntries = recovered.map { ($0.beatTime, $0.tempo) }
+    let originalEntries = original.map { ($0.beatTime, $0.tempo) }
 
     #expect(recoveredEntries.count == originalEntries.count,
             "tempo map entry count mismatch",
@@ -163,7 +154,9 @@ internal func roundTrip(_ work: Work,
 private func _entries<TimeType: TimeProtocol>(in dynamicMap: DynamicMap<TimeType>) -> [(TimeType, Dynamic)] {
     var entries: [(TimeType, Dynamic)] = []
 
-    dynamicMap.forEach { _, time, dynamic, _ in entries.append((time, dynamic)) }
+    for entry in dynamicMap {
+        entries.append((entry.time, entry.dynamic))
+    }
 
     return entries
 }
@@ -173,8 +166,8 @@ private typealias Note<TimeType: TimeProtocol, PitchType: PitchProtocol> = (atta
 private func _notes<TimeType: TimeProtocol, PitchType: PitchProtocol>(in noteTable: NoteTable<TimeType, PitchType>) -> [Note<TimeType, PitchType>] {
     var notes: [Note<TimeType, PitchType>] = []
 
-    noteTable.forEach { _, attack, duration, startPitch, _, _ in
-        notes.append((attack, duration, startPitch))
+    for note in noteTable {
+        notes.append((note.attack, note.duration, note.startPitch))
     }
 
     return notes

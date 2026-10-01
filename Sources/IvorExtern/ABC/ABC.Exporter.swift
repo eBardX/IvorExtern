@@ -139,8 +139,8 @@ extension ABC.Exporter {
 
         var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, extras in
-            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        for entry in dynamicMap {
+            entries.append((entry.time, entry.dynamic, stringValue(entry.extras, .dynamicMark)))
         }
 
         var annotations: [BeatTime: [ABCDecoration.Name]] = [:]
@@ -187,17 +187,17 @@ extension ABC.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, extras in
+        for note in noteTable {
             if let last = events.last,
-               last.attack == attack,
-               last.duration == duration {
-                events[events.count - 1].pitches.append(startPitch)
-                events[events.count - 1].extrasList.append(extras)
+               last.attack == note.attack,
+               last.duration == note.duration {
+                events[events.count - 1].pitches.append(note.startPitch)
+                events[events.count - 1].extrasList.append(note.extras)
             } else {
-                events.append(Event(attack: attack,
-                                    duration: duration,
-                                    extrasList: [extras],
-                                    pitches: [startPitch]))
+                events.append(Event(attack: note.attack,
+                                    duration: note.duration,
+                                    extrasList: [note.extras],
+                                    pitches: [note.startPitch]))
             }
         }
 
@@ -217,20 +217,20 @@ extension ABC.Exporter {
         var directives: [(BeatTime, ABCDirective)] = []
         let name = ABCDirective.Name(stringValue: "MIDI").require()
 
-        instrumentMap.forEach { _, time, instrument, extras in
-            let exactProgram = intValue(extras, .midiProgram)
-            let derivedProgram = generalMIDIProgramNumber(name: instrument.stringValue).map { $0 + 1 }
+        for entry in instrumentMap {
+            let exactProgram = intValue(entry.extras, .midiProgram)
+            let derivedProgram = generalMIDIProgramNumber(name: entry.instrument.stringValue).map { $0 + 1 }
 
             if let program = exactProgram ?? derivedProgram {
-                let value = if let channel = intValue(extras, .midiChannel) {
+                let value = if let channel = intValue(entry.extras, .midiChannel) {
                     "program \(channel) \(program)"
                 } else {
                     "program \(program)"
                 }
 
-                directives.append((time, ABCDirective(name: name, value: value)))
-            } else if let channel = intValue(extras, .midiChannel) {
-                directives.append((time, ABCDirective(name: name, value: "channel \(channel)")))
+                directives.append((entry.time, ABCDirective(name: name, value: value)))
+            } else if let channel = intValue(entry.extras, .midiChannel) {
+                directives.append((entry.time, ABCDirective(name: name, value: "channel \(channel)")))
             }
         }
 
@@ -349,10 +349,8 @@ extension ABC.Exporter {
 
         var tempoTextAtZero: String?
 
-        tempoMap.forEach { _, time, _, extras in
-            if time == .zero {
-                tempoTextAtZero = stringValue(extras, .tempoText)
-            }
+        for entry in tempoMap where entry.beatTime == .zero {
+            tempoTextAtZero = stringValue(entry.extras, .tempoText)
         }
 
         if let tempo = convertToABCTempo(tempoMap[.zero], text: tempoTextAtZero) {

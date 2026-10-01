@@ -187,13 +187,15 @@ extension MusicXML.Exporter {
         }
 
         for part in parts {
-            part.noteTable.forEach { _, attack, duration, _, _, _ in
-                fold(attack.numberValue)
-                fold(duration.numberValue)
+            for note in part.noteTable {
+                fold(note.attack.numberValue)
+                fold(note.duration.numberValue)
             }
         }
 
-        tempoMap.forEach { _, time, _, _ in fold(time.numberValue) }
+        for entry in tempoMap {
+            fold(entry.beatTime.numberValue)
+        }
 
         return max(1, min(result.intValue, maxDivisions))
     }
@@ -210,8 +212,8 @@ extension MusicXML.Exporter {
 
         var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
 
-        dynamicMap.forEach { _, time, dynamic, extras in
-            entries.append((time, dynamic, stringValue(extras, .dynamicMark)))
+        for entry in dynamicMap {
+            entries.append((entry.time, entry.dynamic, stringValue(entry.extras, .dynamicMark)))
         }
 
         var annotations: [DynamicAnnotation] = []
@@ -251,17 +253,17 @@ extension MusicXML.Exporter {
     private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
         var events: [Event] = []
 
-        noteTable.forEach { _, attack, duration, startPitch, _, extras in
+        for note in noteTable {
             if let last = events.last,
-               last.attack == attack,
-               last.duration == duration {
-                events[events.count - 1].pitches.append(startPitch)
-                events[events.count - 1].extrasList.append(extras)
+               last.attack == note.attack,
+               last.duration == note.duration {
+                events[events.count - 1].pitches.append(note.startPitch)
+                events[events.count - 1].extrasList.append(note.extras)
             } else {
-                events.append(Event(attack: attack,
-                                    duration: duration,
-                                    extrasList: [extras],
-                                    pitches: [startPitch]))
+                events.append(Event(attack: note.attack,
+                                    duration: note.duration,
+                                    extrasList: [note.extras],
+                                    pitches: [note.startPitch]))
             }
         }
 
@@ -277,10 +279,8 @@ extension MusicXML.Exporter {
     private static func _firstInstrument(_ instrumentMap: InstrumentMap<BeatTime>) -> (instrument: Instrument, extras: Extras?)? {
         var first: (instrument: Instrument, extras: Extras?)?
 
-        instrumentMap.forEach { _, _, instrument, extras in
-            if first == nil {
-                first = (instrument, extras)
-            }
+        for entry in instrumentMap where first == nil {
+            first = (entry.instrument, entry.extras)
         }
 
         return first
@@ -293,10 +293,8 @@ extension MusicXML.Exporter {
     private static func _firstPan(_ panMap: PanMap<BeatTime>) -> Pan? {
         var first: Pan?
 
-        panMap.forEach { _, _, pan, _ in
-            if first == nil {
-                first = pan
-            }
+        for entry in panMap where first == nil {
+            first = entry.pan
         }
 
         return first
@@ -660,7 +658,9 @@ extension MusicXML.Exporter {
     private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan)] {
         var directives: [(BeatTime, Pan)] = []
 
-        panMap.forEach { _, time, pan, _ in directives.append((time, pan)) }
+        for entry in panMap {
+            directives.append((entry.time, entry.pan))
+        }
 
         return directives
     }
@@ -668,7 +668,9 @@ extension MusicXML.Exporter {
     private static func _tempoDirectives(_ tempoMap: TempoMap) -> [(BeatTime, Tempo)] {
         var directives: [(BeatTime, Tempo)] = []
 
-        tempoMap.forEach { _, time, tempo, _ in directives.append((time, tempo)) }
+        for entry in tempoMap {
+            directives.append((entry.beatTime, entry.tempo))
+        }
 
         return directives
     }

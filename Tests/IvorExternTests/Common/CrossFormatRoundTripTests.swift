@@ -144,8 +144,12 @@ extension CrossFormatRoundTripTests {
         var abcProgram: Int?
         var guidoProgram: Int?
 
-        abcPart.instrumentMap.forEach { _, _, _, extras in abcProgram = intValue(extras, .midiProgram) }
-        guidoPart.instrumentMap.forEach { _, _, _, extras in guidoProgram = intValue(extras, .midiProgram) }
+        for entry in abcPart.instrumentMap {
+            abcProgram = intValue(entry.extras, .midiProgram)
+        }
+        for entry in guidoPart.instrumentMap {
+            guidoProgram = intValue(entry.extras, .midiProgram)
+        }
 
         #expect(abcProgram != nil)
         #expect(abcProgram == guidoProgram)
