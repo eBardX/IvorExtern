@@ -43,6 +43,6 @@ extension FileFormatMIDITests {
 
     @Test
     func midi_timeBases() {
-        #expect(FileFormat.midi.timeBases == [.beat])
+        #expect(FileFormat.midi.timeBases == [.beat, .wall])
     }
 }

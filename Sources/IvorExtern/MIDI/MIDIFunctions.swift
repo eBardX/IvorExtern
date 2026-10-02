@@ -88,6 +88,31 @@ internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {
     return determineTrackName(track0) ?? ""
 }
 
+// The timecode division `MIDI.Importer` recorded on a work it read from a
+// file with one (see `MIDI.Importer._makeStartElements`), so that
+// `MIDI.Exporter` can write it back: in a `midiTimeCode` extra on the tempo
+// map entry at beat zero of a beat-time work, or on each part's instrument
+// map entry at time zero of a wall-time work. The first one SMF can encode
+// wins; a frame rate it can't, or a number of ticks per frame outside
+// 1–255, is skipped.
+internal func determineTimeCode(_ content: Work.Content) -> MIDI.TimeCode? {
+    switch content {
+    case let .absoluteBeat(_, tempoMap),
+         let .keyboardBeat(_, tempoMap),
+         let .standardBeat(_, tempoMap):
+        _determineTimeCode(_startExtras(tempoMap))
+
+    case let .absoluteWall(parts):
+        _determineTimeCode(_startExtras(parts))
+
+    case let .keyboardWall(parts):
+        _determineTimeCode(_startExtras(parts))
+
+    case let .standardWall(parts):
+        _determineTimeCode(_startExtras(parts))
+    }
+}
+
 // The start time a file with this division implies when it has no SMPTE
 // Offset: 00:00:00:00 at a timecode division's frame rate, or the default
 // under a metrical one. `MIDI.Importer` gives such a file's work this start
@@ -101,4 +126,36 @@ internal func impliedSMPTEStartTime(_ division: MIDI.Division) -> SMPTETime {
     else { return Work.defaultSMPTEStartTime }
 
     return startTime
+}
+
+// MARK: Private Functions
+
+private func _determineTimeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
+    for extras in startExtras {
+        guard let values = extras.elements.first(where: { $0.name == Extra.midiTimeCode.name })?.values,
+              values.count == 2,
+              case let .string(frameRateString) = values[0],
+              case let .int(ticksPerFrameValue) = values[1],
+              let frameRate = SMPTEFrameRate(string: frameRateString),
+              let ticksPerFrame = UInt(exactly: ticksPerFrameValue),
+              let timeCode = MIDI.TimeCode(frameRate: frameRate,
+                                           ticksPerFrame: ticksPerFrame)
+        else { continue }
+
+        return timeCode
+    }
+
+    return nil
+}
+
+// The extras of every instrument map entry at time zero, in part order.
+private func _startExtras(_ parts: [Part<WallTime, some PitchProtocol>]) -> [Extras] {
+    parts.flatMap { part in
+        part.instrumentMap.compactMap { $0.time == .zero ? $0.extras : nil }
+    }
+}
+
+// The extras of every tempo map entry at beat zero.
+private func _startExtras(_ tempoMap: TempoMap) -> [Extras] {
+    tempoMap.compactMap { $0.beatTime == .zero ? $0.extras : nil }
 }

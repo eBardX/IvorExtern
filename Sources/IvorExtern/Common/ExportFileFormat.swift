@@ -90,6 +90,18 @@ extension ExportFileFormat {
 
     // MARK: Public Instance Methods
 
+    /// Returns a Boolean value indicating whether this format can write the given work.
+    ///
+    /// A format can write a work if it supports both the work’s time basis and its pitch notation.
+    ///
+    /// - Parameter work:   The work to check.
+    ///
+    /// - Returns:  `true` if ``timeBases`` contains the work’s time basis and ``pitchNotations``
+    ///             contains its pitch notation; otherwise, `false`.
+    public func canWrite(_ work: Work) -> Bool {
+        fileFormat.timeBases.contains(work.timeBasis) && fileFormat.pitchNotations.contains(work.pitchNotation)
+    }
+
     /// Returns a Boolean value indicating whether this format supports the given filename extension or MIME type.
     ///
     /// - Parameter tag:    The filename extension or MIME type to check.

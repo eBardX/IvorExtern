@@ -1,6 +1,9 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 import IvorExtern
+import IvorModel
+import IvorTiming
+import IvorTuning
 import Testing
 
 struct ExportFileFormatTests {
@@ -28,6 +31,29 @@ extension ExportFileFormatTests {
         let fmt = try #require(ExportFileFormat.exportFileFormat(for: "dkm"))
 
         #expect(!fmt.canWrite(to: "xyz"))
+    }
+
+    @Test
+    func canWrite_work_midi() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+
+        #expect(fmt.canWrite(_makeWork(.beat, .keyboard)))
+        #expect(fmt.canWrite(_makeWork(.wall, .keyboard)))
+        #expect(!fmt.canWrite(_makeWork(.beat, .standard)))
+        #expect(!fmt.canWrite(_makeWork(.beat, .absolute)))
+    }
+
+    @Test(arguments: ["abc", "dkm", "gmn", "midi", "musicxml", "mxl"])
+    func canWrite_work_matchesTimeBasesAndPitchNotations(tag: String) throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: tag))
+
+        for timeBasis in [TimeBasis.beat, .wall] {
+            for pitchNotation in [PitchNotation.absolute, .keyboard, .standard] {
+                let expected = fmt.timeBases.contains(timeBasis) && fmt.pitchNotations.contains(pitchNotation)
+
+                #expect(fmt.canWrite(_makeWork(timeBasis, pitchNotation)) == expected)
+            }
+        }
     }
 
     @Test
@@ -106,5 +132,16 @@ extension ExportFileFormatTests {
     @Test
     func supportedMIMETypes_notEmpty() {
         #expect(!ExportFileFormat.supportedMIMETypes.isEmpty)
+    }
+}
+
+// MARK: -
+
+extension ExportFileFormatTests {
+    private func _makeWork(_ timeBasis: TimeBasis,
+                           _ pitchNotation: PitchNotation) -> Work {
+        Work(name: "Work",
+             content: .empty(timeBasis: timeBasis,
+                             pitchNotation: pitchNotation))
     }
 }

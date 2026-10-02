@@ -36,7 +36,7 @@ extension MIDI.Importer {
 
     // A wall-time work has no tempo map to carry the file's timecode
     // division (see `_makeStartElements`), so it's recorded on each part's
-    // instrument map entry at time zero instead, where `MIDI.Exporter`
+    // instrument map entry at time zero instead, where `determineTimeCode`
     // looks for it. When a part has no such entry, one holding the default
     // instrument is inserted for it, carrying the part's `midiChannel`
     // extra too, since the exporter reads the channel from a part's first

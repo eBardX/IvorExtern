@@ -4,6 +4,7 @@
 import IvorMIDI
 import IvorModel
 import IvorSMF
+import IvorSMPTE
 import IvorTiming
 import IvorTuning
 import Testing
@@ -91,6 +92,72 @@ extension MIDIFunctionsTests {
     }
 
     @Test
+    func determineTimeCode_beat_readsTempoMapAtBeatZero() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: 120, extras: _timeCodeExtras("29.97DF", 80))
+
+        let content = Work.Content.standardBeat([], tempoMap)
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
+
+        #expect(determineTimeCode(content) == timeCode)
+    }
+
+    @Test
+    func determineTimeCode_beat_ignoresLaterTempoMapEntries() {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: 120)
+        tempoMap.insert(beatTime: BeatTime(4), tempo: 60, extras: _timeCodeExtras("25", 40))
+
+        #expect(determineTimeCode(.keyboardBeat([], tempoMap)) == nil)
+    }
+
+    @Test
+    func determineTimeCode_none() {
+        #expect(determineTimeCode(.keyboardBeat([], TempoMap())) == nil)
+        #expect(determineTimeCode(.keyboardWall([Part(name: "Piano")])) == nil)
+    }
+
+    @Test
+    func determineTimeCode_unencodable_skippedForLaterParts() throws {
+        var instrumentMap1 = InstrumentMap<WallTime>()
+        var instrumentMap2 = InstrumentMap<WallTime>()
+
+        instrumentMap1.insert(time: .zero, instrument: .vanilla, extras: _timeCodeExtras("29.97", 40))
+        instrumentMap2.insert(time: .zero, instrument: .vanilla, extras: _timeCodeExtras("30", 10))
+
+        let content = Work.Content.keyboardWall([Part(name: "A", instrumentMap: instrumentMap1),
+                                                 Part(name: "B", instrumentMap: instrumentMap2)])
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps30, ticksPerFrame: 10))
+
+        #expect(determineTimeCode(content) == timeCode)
+    }
+
+    @Test
+    func determineTimeCode_wall_readsInstrumentMapAtTimeZero() throws {
+        var instrumentMap = InstrumentMap<WallTime>()
+
+        instrumentMap.insert(time: .zero, instrument: .vanilla, extras: _timeCodeExtras("25", 40))
+
+        let absolute = Work.Content.absoluteWall([Part(name: "Piano", instrumentMap: instrumentMap)])
+        let standard = Work.Content.standardWall([Part(name: "Piano", instrumentMap: instrumentMap)])
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))
+
+        #expect(determineTimeCode(absolute) == timeCode)
+        #expect(determineTimeCode(standard) == timeCode)
+    }
+
+    @Test
+    func determineTimeCode_wall_ignoresLaterInstrumentMapEntries() {
+        var instrumentMap = InstrumentMap<WallTime>()
+
+        instrumentMap.insert(time: WallTime(1_000), instrument: .vanilla, extras: _timeCodeExtras("25", 40))
+
+        #expect(determineTimeCode(.keyboardWall([Part(name: "Piano", instrumentMap: instrumentMap)])) == nil)
+    }
+
+    @Test
     func determineWorkName_noSequenceTrackNameEvent_returnsEmptyString() {
         let track = SMFTrack(events: [.meta(.zero, .endOfTrack)])
         let sequence = SMFSequence(format: .format1,
@@ -108,5 +175,15 @@ extension MIDIFunctionsTests {
                                    tracks: [track])
 
         #expect(determineWorkName(sequence) == "My Track")
+    }
+}
+
+// MARK: -
+
+extension MIDIFunctionsTests {
+    private func _timeCodeExtras(_ frameRate: String,
+                                 _ ticksPerFrame: Int) -> Extras {
+        Extras(elements: [Extra(name: Extra.midiTimeCode.name,
+                                values: [.string(frameRate), .int(ticksPerFrame)])])
     }
 }

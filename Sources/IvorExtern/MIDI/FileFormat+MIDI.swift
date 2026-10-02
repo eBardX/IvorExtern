@@ -11,5 +11,6 @@ extension FileFormat {
                                     mimeTypes: ["audio/midi",           // preferred goes 1st
                                                 "audio/x-midi"],
                                     pitchNotations: [.keyboard],
-                                    timeBases: [.beat])
+                                    timeBases: [.beat,
+                                                .wall])
 }

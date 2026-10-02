@@ -204,16 +204,15 @@ extension MIDI.Exporter {
     }
 
     // A beat-time work imported from a file with a timecode division (see
-    // `MIDI.Importer._makeStartElements`) carries that division in a
-    // `midiTimeCode` extra on its tempo map, and is written back with the
-    // same division; every other beat-time work gets a metrical division.
+    // `determineTimeCode`) is written back with the same division; every
+    // other beat-time work gets a metrical division.
     // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
     // meta event (see `_smpteOffset`).
     private static func _convert(name: String,
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
+                                 timeCode: MIDI.TimeCode?,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
-        let timeCode = _timeCode(_startExtras(tempoMap))
         let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(exportTickRate)
         let tempoChanges = _tempoChanges(from: tempoMap)
         let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: exportTickRate)
@@ -233,17 +232,17 @@ extension MIDI.Exporter {
     }
 
     // A wall-time work is always written with a timecode division, since a
-    // metrical one would need a tempo to measure wall time by: the division
-    // recorded in a `midiTimeCode` extra on its parts (see
-    // `MIDI.Importer._addStartElements`), if SMF can encode it, otherwise
+    // metrical one would need a tempo to measure wall time by: the one it
+    // was imported with (see `determineTimeCode`), if any, otherwise
     // 25 frames per second at 40 ticks per frame — one tick per
     // millisecond. Its first track carries the work's name and SMPTE
     // Offset (see `_smpteOffset`), but neither tempo nor time signature
     // events.
     private static func _convert(name: String,
                                  parts: [Part<WallTime, NoteNumber>],
+                                 timeCode: MIDI.TimeCode?,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
-        let timeCode = _timeCode(_startExtras(parts)) ?? exportTimeCode
+        let timeCode = timeCode ?? exportTimeCode
         let tickMap = MIDI.WallTickMap(timeCode: timeCode)
         var tracks = [MIDI.Track(events: _headerEvents(name: name,
                                                        smpteOffset: _smpteOffset(smpteStartTime,
@@ -258,17 +257,21 @@ extension MIDI.Exporter {
     }
 
     private static func _convert(work: Work) throws(MIDI.Error) -> MIDI.Sequence {
+        let timeCode = determineTimeCode(work.content)
+
         switch work.content {
         case let .keyboardBeat(parts, tempoMap):
-            try _convert(name: work.name,
-                         parts: parts,
-                         tempoMap: tempoMap,
-                         smpteStartTime: work.smpteStartTime)
+            return try _convert(name: work.name,
+                                parts: parts,
+                                tempoMap: tempoMap,
+                                timeCode: timeCode,
+                                smpteStartTime: work.smpteStartTime)
 
         case let .keyboardWall(parts):
-            try _convert(name: work.name,
-                         parts: parts,
-                         smpteStartTime: work.smpteStartTime)
+            return try _convert(name: work.name,
+                                parts: parts,
+                                timeCode: timeCode,
+                                smpteStartTime: work.smpteStartTime)
 
         default:
             throw MIDI.Error.unsupportedPitchNotation(work.pitchNotation)
@@ -453,22 +456,6 @@ extension MIDI.Exporter {
         return startTime
     }
 
-    // The extras of every instrument map entry at time zero, in part order,
-    // where `MIDI.Importer` records the timecode division of a file it read
-    // as wall time.
-    private static func _startExtras(_ parts: [Part<WallTime, NoteNumber>]) -> [Extras] {
-        parts.flatMap { part in
-            part.instrumentMap.compactMap { $0.time == .zero ? $0.extras : nil }
-        }
-    }
-
-    // The extras of every tempo map entry at beat zero, where
-    // `MIDI.Importer` records the timecode division of a file it read as
-    // beat time.
-    private static func _startExtras(_ tempoMap: TempoMap) -> [Extras] {
-        tempoMap.compactMap { $0.beatTime == .zero ? $0.extras : nil }
-    }
-
     // The distinct beat times in `tempoMap` (last entry wins at any given
     // beat time, per the step-change convention), along with the exact
     // microseconds-per-quarter value (if any) held at each one.
@@ -543,27 +530,6 @@ extension MIDI.Exporter {
         }
 
         return changes
-    }
-
-    // A timecode division SMF can't encode — an unsupported frame rate, or
-    // a number of ticks per frame outside 1–255 — is skipped, so the work
-    // falls back to a metrical division.
-    private static func _timeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
-        for extras in startExtras {
-            guard let values = extras.elements.first(where: { $0.name == Extra.midiTimeCode.name })?.values,
-                  values.count == 2,
-                  case let .string(frameRateString) = values[0],
-                  case let .int(ticksPerFrameValue) = values[1],
-                  let frameRate = SMPTEFrameRate(string: frameRateString),
-                  let ticksPerFrame = UInt(exactly: ticksPerFrameValue),
-                  let timeCode = MIDI.TimeCode(frameRate: frameRate,
-                                               ticksPerFrame: ticksPerFrame)
-            else { continue }
-
-            return timeCode
-        }
-
-        return nil
     }
 }
 
