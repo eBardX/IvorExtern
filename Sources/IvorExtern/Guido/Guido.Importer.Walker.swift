@@ -156,7 +156,7 @@ extension Guido.Importer.Walker {
 
             context.instrumentEvents.append((beatTime: context.currentBeatTime,
                                              instrument: convertToInstrument(instrument),
-                                             midi: instrument.midi))
+                                             tag: instrument))
 
             if context.instrumentName == nil {
                 context.instrumentName = instrument.instrumentName

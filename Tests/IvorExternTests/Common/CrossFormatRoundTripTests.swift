@@ -155,6 +155,29 @@ extension CrossFormatRoundTripTests {
         #expect(abcProgram == guidoProgram)
     }
 
+    // MusicXML's `<source>` and ABC's `S:` share the `source` remark label,
+    // so a source note read from one is written to the other's own field.
+    @Test
+    func crossFormat_musicXMLToABC_preservesSharedMetadata() throws {
+        let metadata = Work.Metadata(title: "Aubade",
+                                     credits: [Credit(name: "J. Smith", role: .composer),
+                                               Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self),
+                                     remarks: [Remark(text: "Manuscript", label: RemarkLabel.source)].compactMap(\.self))
+        let work = Work(name: "Aubade",
+                        content: .standardBeat([Part(name: "Piano", noteTable: NoteTable())], TempoMap()),
+                        metadata: metadata)
+        let viaMusicXML = try roundTrip(work,
+                                        exporter: MusicXML.Exporter(),
+                                        importer: MusicXML.Importer(),
+                                        fileFormat: .musicXML)
+        let viaABC = try roundTrip(viaMusicXML,
+                                   exporter: ABC.Exporter(),
+                                   importer: ABC.Importer(),
+                                   fileFormat: .abc)
+
+        #expect(viaABC.metadata == metadata)
+    }
+
     @Test
     func crossFormat_musicXMLToMIDI_preservesNotes() throws {
         var table = NoteTable<BeatTime, Pitch>()

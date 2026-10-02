@@ -341,11 +341,14 @@ extension ABC.Exporter {
                                     parts: [Part<BeatTime, Pitch>],
                                     tempoMap: TempoMap) -> [ABCHeaderEntry] {
         var header: [ABCHeaderEntry] = [.field(.referenceNumber(ABCReferenceNumber(uintValue: 1).require())),
-                                        .field(.tuneTitle(ABCText(stringValue: work.name).require())),
-                                        .field(.meter(.standard(ABCTimeSignature.StandardMeter(numerator: 4,
-                                                                                               denominator: 4).require()))),
-                                        .field(.unitNoteLength(ABCLength(numerator: 1,
-                                                                         denominator: 4).require()))]
+                                        .field(.tuneTitle(ABCText(stringValue: work.metadata.title ?? work.name).require()))]
+
+        header += _metadataFields(work.metadata).map { .field($0) }
+
+        header += [.field(.meter(.standard(ABCTimeSignature.StandardMeter(numerator: 4,
+                                                                          denominator: 4).require()))),
+                   .field(.unitNoteLength(ABCLength(numerator: 1,
+                                                    denominator: 4).require()))]
 
         var tempoTextAtZero: String?
 
@@ -518,6 +521,10 @@ extension ABC.Exporter {
             properties["name"] = part.name
         }
 
+        if let abbreviation = part.metadata.abbreviation {
+            properties["subname"] = abbreviation
+        }
+
         return ABCVoice(id: _voiceID(index: index),
                         properties: properties).require()
     }
@@ -534,15 +541,108 @@ extension ABC.Exporter {
         return max(1, UInt(measures))
     }
 
+    // The string fields after the title (see `ABC.Importer._makeMetadata`
+    // for the reverse mapping). Subtitles and alternate titles both become
+    // later `T:` fields, ABC's only kind of secondary title (§3.1.2); there
+    // is nothing to hold a parent work's title. A composer, or a credit
+    // with no role, is a `C:` field, and a transcriber or editor a `Z:`
+    // field; any other role is spelled out in a `C:` field, which already
+    // holds free text such as "arr. J. Smith". ABC's only rights field is
+    // `Z:abc-copyright`, which covers the transcription (§3.1.10), so a
+    // notice with any other scope has nowhere to go. A remark goes to the
+    // field its label names, to `r:` when it has no label, and otherwise to
+    // `N:` with its label spelled out. A field holds a single line, so
+    // line breaks become spaces.
+    private static func _metadataFields(_ metadata: Work.Metadata) -> [ABCField] {
+        var fields: [ABCField] = []
+
+        func text(_ value: String) -> ABCText {
+            ABCText(stringValue: singleLine(value)).require()
+        }
+
+        for title in metadata.subtitles + metadata.alternateTitles {
+            fields.append(.tuneTitle(text(title)))
+        }
+
+        for credit in metadata.credits {
+            switch credit.role {
+            case .composer,
+                 nil:
+                fields.append(.composer(text(credit.name)))
+
+            case .editor:
+                fields.append(.transcription(text("abc-edited-by " + credit.name)))
+
+            case .transcriber:
+                fields.append(.transcription(text(credit.name)))
+
+            default:
+                fields.append(.composer(text(describeCredit(credit))))
+            }
+        }
+
+        for notice in metadata.rights where notice.scope == .transcription {
+            fields.append(.transcription(text("abc-copyright " + notice.text)))
+        }
+
+        for remark in metadata.remarks {
+            fields.append(_remarkField(remark, text(remark.text)))
+        }
+
+        return fields
+    }
+
     // A single, unnamed part is written as an implicit voice — no `V:`
     // field at all — matching how a real single-voice ABC tune is normally
     // written, and keeping that case round-trip-safe: an implicit voice
     // imports back as unnamed (see `ABCFunctions.determinePartName`), while
     // an explicit `V:` field's `id` becomes the imported name whenever it
     // has no name property of its own and isn't a bare voice number. A lone *named* part still needs its
-    // `V:` field, since that's ABC's only place to record a part name.
+    // `V:` field, since that's ABC's only place to record a part name — and
+    // so does a lone part with an abbreviated name, for the same reason.
     private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
-        parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
+        parts.count > 1 || parts.first.map { !$0.name.isEmpty || $0.metadata.abbreviation != nil } ?? false
+    }
+
+    private static func _remarkField(_ remark: Remark,
+                                     _ text: ABCText) -> ABCField {
+        switch remark.label {
+        case nil:
+            .remark(text)
+
+        case RemarkLabel.area:
+            .area(text)
+
+        case RemarkLabel.book:
+            .book(text)
+
+        case RemarkLabel.discography:
+            .discography(text)
+
+        case RemarkLabel.fileURL:
+            .fileURL(text)
+
+        case RemarkLabel.group:
+            .group(text)
+
+        case RemarkLabel.history:
+            .history(text)
+
+        case RemarkLabel.notes:
+            .notes(text)
+
+        case RemarkLabel.origin:
+            .origin(text)
+
+        case RemarkLabel.rhythm:
+            .rhythm(text)
+
+        case RemarkLabel.source:
+            .source(text)
+
+        default:
+            .notes(ABCText(stringValue: singleLine(describeRemark(remark))).require())
+        }
     }
 
     // A `)` slur-end marker, written immediately after a note/chord's own

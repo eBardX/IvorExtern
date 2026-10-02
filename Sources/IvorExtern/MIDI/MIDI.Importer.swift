@@ -32,7 +32,43 @@ extension MIDI.Importer {
         }
     }
 
+    // MARK: Private Type Aliases
+
+    // A voice, plus what it shares with every other voice split from the
+    // same track: the track's Instrument Name events and opening remarks.
+    private typealias TrackVoice = (voice: MIDI.Voice, instrumentNameEvents: [SMFEvent], remarks: [Remark])
+
     // MARK: Private Type Methods
+
+    private static func _addSongInformation(name: String,
+                                            value: String,
+                                            to metadata: inout Work.Metadata) {
+        let role: Credit.Role? = switch name.lowercased() {
+        case "artist":
+            .artist
+
+        case "composer":
+            .composer
+
+        case "lyrics":
+            .lyricist
+
+        default:
+            nil
+        }
+
+        if let role {
+            if let credit = Credit(name: value, role: role) {
+                metadata.credits.append(credit)
+            }
+        } else if name.lowercased() == "title" {
+            if metadata.title == nil {
+                metadata.title = value
+            } else if metadata.title != value.normalizingWhitespace() {
+                metadata.subtitles.append(value)
+            }
+        }
+    }
 
     // A wall-time work has no tempo map to carry the file's timecode
     // division (see `_makeStartElements`), so it's recorded on each part's
@@ -82,7 +118,8 @@ extension MIDI.Importer {
                                           timeline,
                                           validated.division),
                         smpteStartTime: _makeStartTime(timeline,
-                                                       validated.division))
+                                                       validated.division),
+                        metadata: _makeMetadata(validated))
     }
 
     // A file with a timecode division and no tempo events has no beats to
@@ -91,7 +128,7 @@ extension MIDI.Importer {
     // of on a tempo map (see `_addStartElements`). Every other file is
     // imported as beat time. Either way, the work's SMPTE start time comes
     // from the file's SMPTE Offset (see `_makeStartTime`).
-    private static func _convert(_ voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])],
+    private static func _convert(_ voices: [TrackVoice],
                                  _ timeline: [MIDI.Event],
                                  _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
         if case let .timeCode(timeCode) = division,
@@ -163,6 +200,7 @@ extension MIDI.Importer {
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voice: MIDI.Voice,
                                                               _ instrumentNameEvents: [SMFEvent],
+                                                              _ remarks: [Remark],
                                                               _ timeMap: TimeMap,
                                                               startElements: [Extra]) -> Part<TimeMap.TimeType, NoteNumber> {
         var context = Self.Context(timeMap: timeMap)
@@ -224,13 +262,14 @@ extension MIDI.Importer {
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
                     instrumentMap: instrumentMap,
-                    panMap: context.panMap)
+                    panMap: context.panMap,
+                    metadata: Part.Metadata(remarks: remarks))
     }
 
-    private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])],
+    private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
                                                               _ timeMap: TimeMap,
                                                               startElements: [Extra]) -> [Part<TimeMap.TimeType, NoteNumber>] {
-        voices.map { _convert($0.voice, $0.instrumentNameEvents, timeMap, startElements: startElements) }
+        voices.map { _convert($0.voice, $0.instrumentNameEvents, $0.remarks, timeMap, startElements: startElements) }
     }
 
     private static func _makeBeatMap(_ division: MIDI.Division,
@@ -314,6 +353,11 @@ extension MIDI.Importer {
                                           values: [.int(Int((bankMSB << 7) | bankLSB) + 1)]))
                 }
 
+                if let instrumentName = instrumentName.map({ normalizeName($0) })?.nilIfEmpty {
+                    elements.append(Extra(name: Extra.instrumentName.name,
+                                          values: [.string(instrumentName)]))
+                }
+
                 let instrument = instrumentName.flatMap { Instrument(stringValue: $0) } ?? convertToInstrument(program)
 
                 instrumentMap.insert(time: time,
@@ -326,6 +370,42 @@ extension MIDI.Importer {
         }
 
         return instrumentMap
+    }
+
+    // An SMF has no meta event for most metadata, so this reads what the
+    // conventions give it (RP-001): the first track's name is the title, as
+    // `determineWorkName` already reads it; every Copyright event is a
+    // rights notice, of no particular scope; and every Text event at tick
+    // zero on the first track is a remark about the whole work, since its
+    // text could be anything ("any amount of text describing anything").
+    // Text later in the track, which is tied to a point in time, isn't read.
+    // The RP-026 song information tags opening a track's lyrics are the
+    // one place an SMF names a composer, lyricist, or artist, and can carry
+    // a title too: one that differs from the first track's name is kept as
+    // a subtitle (RP-026 has it hold "Song Title / Sub Title etc.").
+    private static func _makeMetadata(_ sequence: MIDI.Sequence) -> Work.Metadata {
+        var metadata = Work.Metadata(title: determineWorkName(sequence))
+
+        for event in sequence.tracks.flatMap(\.events) {
+            switch event {
+            case let .meta(_, .copyright(text)):
+                if let notice = RightsNotice(text: text.stringValue) {
+                    metadata.rights.append(notice)
+                }
+
+            case let .meta(_, .lyric(text)):
+                for (name, value) in parseSongInformation(text.stringValue) {
+                    _addSongInformation(name: name, value: value, to: &metadata)
+                }
+
+            default:
+                break
+            }
+        }
+
+        metadata.remarks = sequence.tracks.first.map(_remarks) ?? []
+
+        return metadata
     }
 
     private static func _makeStartElements(_ division: MIDI.Division) -> [Extra] {
@@ -416,11 +496,14 @@ extension MIDI.Importer {
     // already share its one track name. A lone track's name isn't used for
     // its voices at all: `determineWorkName` has already taken it as the
     // work's title — the Format 0 convention — and repeating it on every
-    // part ("My Song, Channel 1") would only mislabel them.
-    private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] {
-        var voices: [(voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])] = []
+    // part ("My Song, Channel 1") would only mislabel them. The same goes
+    // for the text events opening the first track, which describe the whole
+    // work (see `_makeMetadata`); those opening any later track describe
+    // that track's voices.
+    private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [TrackVoice] {
+        var voices: [TrackVoice] = []
 
-        for track in tracks {
+        for (trackIndex, track) in tracks.enumerated() {
             var channelEvents: [MIDI.Channel: [SMFEvent]] = [:]
 
             for event in track.events {
@@ -438,6 +521,7 @@ extension MIDI.Importer {
             let instrumentNameEvents = track.events.filter {
                 if case .meta(_, .instrumentName) = $0 { true } else { false }
             }
+            let remarks = trackIndex > 0 ? _remarks(track) : []
 
             for channel in channelEvents.keys.sorted() {
                 let voice = try _makeVoice(channel: channel,
@@ -446,19 +530,24 @@ extension MIDI.Importer {
                                                                 isMultiChannel: isMultiChannel),
                                            events: channelEvents[channel] ?? [])
 
-                voices.append((voice, instrumentNameEvents))
+                voices.append((voice, instrumentNameEvents, remarks))
             }
         }
 
         return voices
     }
 
-    // The tick-ordered timeline of every track's meta events (tempo, time
-    // signature, and so on), gathered across all tracks since a Standard
-    // MIDI File is free to carry one anywhere, though convention puts them
-    // on track 0. End-of-track meta events and system exclusive events are
-    // both dropped — the former is a track-boundary wire artifact, the
-    // latter is never read.
+    // The remarks a track's Text events at tick zero make.
+    private static func _remarks(_ track: MIDI.Track) -> [Remark] {
+        track.events.compactMap {
+            guard case let .meta(eventTime, .text(text)) = $0,
+                  eventTime == .zero
+            else { return nil }
+
+            return Remark(text: text.stringValue)
+        }
+    }
+
     // Only the first SMPTE Offset at tick zero counts: the SMF specification
     // requires the event to precede any nonzero delta time, and in a
     // format 1 file the one on the first track (the tempo map) applies to
@@ -474,6 +563,12 @@ extension MIDI.Importer {
         return nil
     }
 
+    // The tick-ordered timeline of every track's meta events (tempo, time
+    // signature, and so on), gathered across all tracks since a Standard
+    // MIDI File is free to carry one anywhere, though convention puts them
+    // on track 0. End-of-track meta events and system exclusive events are
+    // both dropped — the former is a track-boundary wire artifact, the
+    // latter is never read.
     private static func _timeline(_ tracks: [MIDI.Track]) -> [MIDI.Event] {
         var timeline: [MIDI.Event] = []
 

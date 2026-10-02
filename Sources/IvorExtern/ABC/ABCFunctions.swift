@@ -353,6 +353,13 @@ internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
     return Tempo(uintValue: uintValue)
 }
 
+// A voice's subname (`snm=`) is the abbreviated name printed before every
+// staff after the first (§7.1), with the same `\n` line-break convention
+// as its name.
+internal func determinePartAbbreviation(_ voice: ABC.Voice?) -> String? {
+    voice?.subname.map(_normalizeVoiceName)?.nilIfEmpty
+}
+
 // A voice name's `\n` is abcm2ps's line-break convention for stacking a
 // staff label over two lines (`nm="Tenor\nSax"`), not text — the parser
 // keeps it as a literal backslash and `n` — so each break collapses to a
@@ -368,7 +375,7 @@ internal func determinePartName(_ voice: ABC.Voice?) -> String {
     guard let name = voice.name ?? voice.subname
     else { return _isVoiceNumber(voice.id.stringValue) ? "" : normalizeName(voice.id.stringValue) }
 
-    return normalizeName(name.replacingOccurrences(of: "\\n", with: " "))
+    return _normalizeVoiceName(name)
 }
 
 internal func determineWorkName(_ tune: ABCTune) -> String {
@@ -487,4 +494,8 @@ private func _isVoiceNumber(_ id: String) -> Bool {
     let digits = id.hasPrefix("V") || id.hasPrefix("v") ? id.dropFirst() : id[...]
 
     return !digits.isEmpty && digits.allSatisfy { $0.isASCII && $0.isNumber }
+}
+
+private func _normalizeVoiceName(_ name: String) -> String {
+    normalizeName(name.replacingOccurrences(of: "\\n", with: " "))
 }

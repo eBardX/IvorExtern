@@ -48,7 +48,8 @@ extension MusicXML.Importer {
 
         return try Work(name: determineWorkName(score),
                         content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
-                                               _makeTempoMap(results.flatMap(\.tempoEvents))))
+                                               _makeTempoMap(results.flatMap(\.tempoEvents))),
+                        metadata: determineWorkMetadata(score))
     }
 
     // Each Ivor `Part` carries a single note table, so a MusicXML part with
@@ -68,13 +69,15 @@ extension MusicXML.Importer {
                                  panMap: PanMap<BeatTime>,
                                  directionDynamicMap: DynamicMap<BeatTime>) -> [Part<BeatTime, Pitch>] {
         let instrumentMap = _makeInstrumentMap(part.part)
+        let metadata = determinePartMetadata(part.part)
 
         guard !part.voices.isEmpty
         else { return [Part(name: determinePartName(part.part, groupName: groupName),
                             noteTable: NoteTable(),
                             dynamicMap: directionDynamicMap,
                             instrumentMap: instrumentMap,
-                            panMap: panMap)] }
+                            panMap: panMap,
+                            metadata: metadata)] }
 
         return part.voices.enumerated().map { index, voice in
             let dynamicMap = voice.noteDynamicEvents.isEmpty ? directionDynamicMap : _makeDynamicMap(voice.noteDynamicEvents)
@@ -86,7 +89,8 @@ extension MusicXML.Importer {
                         noteTable: voice.noteTable,
                         dynamicMap: dynamicMap,
                         instrumentMap: instrumentMap,
-                        panMap: panMap)
+                        panMap: panMap,
+                        metadata: metadata)
         }
     }
 
@@ -251,6 +255,17 @@ extension MusicXML.Importer {
 
             if let unpitched = midiInstrument?.midiUnpitched {
                 elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
+            }
+
+            // `<instrument-name>` names the instrument for display as well
+            // as for playback (see `convertToInstrument(_:)`), so it's also
+            // kept as an `instrumentName` extra, alongside its abbreviation.
+            if let name = scorePart.instrument.first?.name.normalizingWhitespace().nilIfEmpty {
+                elements.append(Extra(name: Extra.instrumentName.name, values: [.string(name)]))
+            }
+
+            if let abbreviation = scorePart.instrument.first?.abbreviation?.normalizingWhitespace().nilIfEmpty {
+                elements.append(Extra(name: Extra.instrumentAbbreviation.name, values: [.string(abbreviation)]))
             }
 
             instrumentMap.insert(time: .zero,

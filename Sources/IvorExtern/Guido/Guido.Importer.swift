@@ -53,7 +53,8 @@ extension Guido.Importer {
 
         return Work(name: determineWorkName(validated),
                     content: .standardBeat(fillEmptyPartNames(parts),
-                                           _makeTempoMap(contexts.flatMap(\.tempoEvents))))
+                                           _makeTempoMap(contexts.flatMap(\.tempoEvents))),
+                    metadata: determineWorkMetadata(validated))
     }
 
     // Unlike `_makeTempoMap`, this isn't a uniform reassert-then-insert step
@@ -98,15 +99,25 @@ extension Guido.Importer {
     // is needed: `InstrumentMap`'s own subscript already reads as a step
     // function — the entry in effect at or before a queried time, with no
     // interpolation — so one plain insert per `\instrument` tag is enough.
-    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, midi: Int?)]) -> InstrumentMap<BeatTime> {
+    // The tag's name is the instrument's display name as well as its
+    // playback designation, so it's also kept as an `instrumentName` extra.
+    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)]) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
 
         for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
-            let extras = event.midi.map {
-                Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int($0 + 1)])])
+            var elements: [Extra] = []
+
+            if let midi = event.tag.midi {
+                elements.append(Extra(name: Extra.midiProgram.name, values: [.int(midi + 1)]))
             }
 
-            instrumentMap.insert(time: event.beatTime, instrument: event.instrument, extras: extras)
+            if let name = event.tag.instrumentName.normalizingWhitespace().nilIfEmpty {
+                elements.append(Extra(name: Extra.instrumentName.name, values: [.string(name)]))
+            }
+
+            instrumentMap.insert(time: event.beatTime,
+                                 instrument: event.instrument,
+                                 extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 
         return instrumentMap

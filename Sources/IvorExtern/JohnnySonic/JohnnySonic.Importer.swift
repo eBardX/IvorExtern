@@ -75,6 +75,7 @@ extension JohnnySonic.Importer {
         else { throw JohnnySonic.Error.validationFailure(issues) }
 
         let workName = determineWorkName(validated)
+        let metadata = determineWorkMetadata(validated)
 
         // An `/End` command terminates the score even if more commands
         // follow — parking material after it is a common DKM convention.
@@ -98,7 +99,8 @@ extension JohnnySonic.Importer {
         guard hasPitchesNotes
         else { return Work(name: workName,
                            content: .keyboardBeat([],
-                                                  tempoMap)) }
+                                                  tempoMap),
+                           metadata: metadata) }
 
         if hasAbsolutePitch {
             let tuning = Tuning(activeCommands)
@@ -106,13 +108,15 @@ extension JohnnySonic.Importer {
 
             return Work(name: workName,
                         content: .absoluteBeat(parts,
-                                               tempoMap))
+                                               tempoMap),
+                        metadata: metadata)
         } else {
             let parts = try _convertKeyboard(activeCommands)
 
             return Work(name: workName,
                         content: .keyboardBeat(parts,
-                                               tempoMap))
+                                               tempoMap),
+                        metadata: metadata)
         }
     }
 

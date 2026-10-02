@@ -108,10 +108,12 @@ extension MIDI.Exporter {
     }
 
     private static func _convert(name: String,
+                                 metadata: Work.Metadata,
                                  smpteOffset: SMPTETime?,
                                  tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
                                  tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events = _headerEvents(name: name,
+                                   metadata: metadata,
                                    smpteOffset: smpteOffset)
 
         // Always 4/4: a model-level limitation, not an exporter shortcut.
@@ -142,6 +144,8 @@ extension MIDI.Exporter {
         if let trackName = convertToMIDIText(part.name) {
             events.append(.meta(.zero, .sequenceTrackName(trackName)))
         }
+
+        events += _textEvents(part.metadata.remarks.map(describeRemark))
 
         events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
 
@@ -209,6 +213,7 @@ extension MIDI.Exporter {
     // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
     // meta event (see `_smpteOffset`).
     private static func _convert(name: String,
+                                 metadata: Work.Metadata,
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
                                  timeCode: MIDI.TimeCode?,
@@ -219,6 +224,7 @@ extension MIDI.Exporter {
         var tracks: [MIDI.Track] = []
 
         try tracks.append(_convert(name: name,
+                                   metadata: metadata,
                                    smpteOffset: _smpteOffset(smpteStartTime, division),
                                    tempoChanges: tempoChanges,
                                    tickMap: tickMap))
@@ -239,12 +245,14 @@ extension MIDI.Exporter {
     // Offset (see `_smpteOffset`), but neither tempo nor time signature
     // events.
     private static func _convert(name: String,
+                                 metadata: Work.Metadata,
                                  parts: [Part<WallTime, NoteNumber>],
                                  timeCode: MIDI.TimeCode?,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = timeCode ?? exportTimeCode
         let tickMap = MIDI.WallTickMap(timeCode: timeCode)
         var tracks = [MIDI.Track(events: _headerEvents(name: name,
+                                                       metadata: metadata,
                                                        smpteOffset: _smpteOffset(smpteStartTime,
                                                                                  .timeCode(timeCode))))]
 
@@ -261,14 +269,16 @@ extension MIDI.Exporter {
 
         switch work.content {
         case let .keyboardBeat(parts, tempoMap):
-            return try _convert(name: work.name,
+            return try _convert(name: work.metadata.title ?? work.name,
+                                metadata: work.metadata,
                                 parts: parts,
                                 tempoMap: tempoMap,
                                 timeCode: timeCode,
                                 smpteStartTime: work.smpteStartTime)
 
         case let .keyboardWall(parts):
-            return try _convert(name: work.name,
+            return try _convert(name: work.metadata.title ?? work.name,
+                                metadata: work.metadata,
                                 parts: parts,
                                 timeCode: timeCode,
                                 smpteStartTime: work.smpteStartTime)
@@ -320,15 +330,28 @@ extension MIDI.Exporter {
         return events
     }
 
-    // The events every exported file's first track opens with: the work's
-    // name and SMPTE Offset, if any.
+    // The events every exported file's first track opens with (see
+    // `MIDI.Importer._makeMetadata` for the reverse mapping): a Copyright
+    // event, which RP-001 places first of all, holding every rights notice,
+    // since a file has the one; the work's title, or its name without one;
+    // a Text event for each credit and each remark, SMF's only home for
+    // either, with the role or label spelled out; and the SMPTE Offset, if
+    // any. Nothing holds a subtitle, alternate title, or parent work title.
     private static func _headerEvents(name: String,
+                                      metadata: Work.Metadata,
                                       smpteOffset: SMPTETime?) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
+
+        if !metadata.rights.isEmpty,
+           let copyright = convertToMIDIText(metadata.rights.map(\.text).joined(separator: "\n")) {
+            events.append(.meta(.zero, .copyright(copyright)))
+        }
 
         if let sequenceName = convertToMIDIText(name) {
             events.append(.meta(.zero, .sequenceTrackName(sequenceName)))
         }
+
+        events += _textEvents(metadata.credits.map(describeCredit) + metadata.remarks.map(describeRemark))
 
         if let smpteOffset {
             events.append(.meta(.zero, .smpteOffset(smpteOffset)))
@@ -346,7 +369,8 @@ extension MIDI.Exporter {
     // LSB pair / Channel Volume event immediately before the Program
     // Change, MIDI convention order — the reverse of the combine
     // `MIDI.Importer._makeInstrumentMap` does on the way in. The
-    // instrument's own name is also written as an Instrument Name (`FF 04`)
+    // instrument's display name (its `instrumentName` extra), or failing
+    // that its own name, is also written as an Instrument Name (`FF 04`)
     // meta event immediately ahead of the Program Change, unconditionally —
     // the same "always write the resolved name" choice
     // `MusicXML.Exporter`'s own `<score-instrument name=…>` makes — so an
@@ -380,7 +404,7 @@ extension MIDI.Exporter {
                     events.append(.midi(eventTime, .controlChange(channel, .channelVolumeMSB, value)))
                 }
 
-                if let instrumentName = convertToMIDIText(entry.instrument.stringValue) {
+                if let instrumentName = convertToMIDIText(stringValue(entry.extras, .instrumentName) ?? entry.instrument.stringValue) {
                     events.append(.meta(eventTime, .instrumentName(instrumentName)))
                 }
 
@@ -530,6 +554,10 @@ extension MIDI.Exporter {
         }
 
         return changes
+    }
+
+    private static func _textEvents(_ texts: [String]) -> [MIDI.Event] {
+        texts.compactMap { convertToMIDIText($0).map { .meta(.zero, .text($0)) } }
     }
 }
 

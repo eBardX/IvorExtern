@@ -165,7 +165,22 @@ extension MusicXML.Exporter {
                                                                             tempoMap: tempoMap)))
         }
 
-        return MusicXML.Score(movementTitle: work.name.nilIfEmpty,
+        let metadata = work.metadata
+        let title = metadata.title ?? work.name.nilIfEmpty
+        let parentTitle = metadata.parentWorkTitle
+        let workNumber = _firstRemark(metadata.remarks, RemarkLabel.workNumber)
+        let xmlWork = parentTitle != nil || title != nil || workNumber != nil
+            ? MXLWork(number: workNumber, title: parentTitle ?? title)
+            : nil
+
+        // A movement's title is the title of the work, and the work it
+        // belongs to is its parent (see `determineWorkMetadata(_:)`), so
+        // without a parent the title is the work title alone.
+        return MusicXML.Score(work: xmlWork,
+                              movementNumber: _firstRemark(metadata.remarks, RemarkLabel.movementNumber),
+                              movementTitle: parentTitle != nil ? title : nil,
+                              identification: convertToMusicXMLIdentification(metadata),
+                              credit: convertToMusicXMLCredits(title: title, subtitles: metadata.subtitles),
                               partList: MXLPartList(items: scoreParts.map { .scorePart($0) }),
                               parts: xmlParts)
     }
@@ -298,6 +313,11 @@ extension MusicXML.Exporter {
         }
 
         return first
+    }
+
+    private static func _firstRemark(_ remarks: [Remark],
+                                     _ label: String) -> String? {
+        remarks.first { $0.label == label }.map { singleLine($0.text) }
     }
 
     // Bins the flat, boundary-ordered stream of music items into one
@@ -560,7 +580,9 @@ extension MusicXML.Exporter {
             let instrument = first?.instrument ?? .vanilla
             let instrumentID = id + "-I1"
 
-            instruments.append(MXLScoreInstrument(id: instrumentID, name: instrument.stringValue))
+            instruments.append(MXLScoreInstrument(id: instrumentID,
+                                                  name: stringValue(first?.extras, .instrumentName) ?? instrument.stringValue,
+                                                  abbreviation: stringValue(first?.extras, .instrumentAbbreviation)))
 
             let exactProgram = intValue(first?.extras, .midiProgram)
             let derivedProgram = generalMIDIProgramNumber(name: instrument.stringValue).map { $0 + 1 }
@@ -591,8 +613,12 @@ extension MusicXML.Exporter {
             }
         }
 
+        let partIdentification = convertToMusicXMLIdentification(remarks: part.metadata.remarks)
+
         return MusicXML.ScorePart(id: id,
+                                  identification: partIdentification,
                                   name: MXLPartName(value: part.name, text: MXLPartName.Text()),
+                                  abbreviation: part.metadata.abbreviation.map { MXLPartName(value: $0, text: MXLPartName.Text()) },
                                   instrument: instruments,
                                   group2: group2)
     }

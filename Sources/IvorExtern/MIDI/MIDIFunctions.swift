@@ -5,6 +5,7 @@ internal import IvorSMPTE
 internal import IvorTiming
 internal import IvorTuning
 
+private import Foundation
 private import IvorMIDI
 private import IvorSMF
 private import XestiNumbers
@@ -48,8 +49,32 @@ internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {
     MIDI.Tempo(uintValue: 60_000_000 / tempo.uintValue)
 }
 
+// SMF text is one byte per character, which IvorSMF reads and writes as
+// Latin-1, and `SMFValidator` rejects any text that can't be encoded that
+// way. So a character outside Latin-1 — a curly quote, a dash, a ℗, a
+// non-Latin script — is transliterated to Latin-1 instead (`’` → `'`,
+// `℗` → `(P)`, `日本` → `ri ben`), and written as `?` only if even that
+// fails, rather than failing the whole export.
 internal func convertToMIDIText(_ text: String) -> MIDI.Text? {
-    MIDI.Text(stringValue: text)
+    guard !_isLatin1(text)
+    else { return MIDI.Text(stringValue: text) }
+
+    var result = ""
+
+    for character in text {
+        let string = String(character)
+
+        if _isLatin1(string) {
+            result += string
+        } else if let transliterated = string.applyingTransform(StringTransform("Any-Latin; Latin-ASCII"), reverse: false),
+                  _isLatin1(transliterated) {
+            result += transliterated
+        } else {
+            result += "?"
+        }
+    }
+
+    return MIDI.Text(stringValue: result)
 }
 
 internal func convertToNoteNumber(_ noteNumber: MIDI.NoteNumber) -> NoteNumber {
@@ -128,6 +153,30 @@ internal func impliedSMPTEStartTime(_ division: MIDI.Division) -> SMPTETime {
     return startTime
 }
 
+// The RP-026 song information tags in one Lyric meta event's text —
+// `{#Title=…}`, `{#Composer=…}`, `{#Lyrics=…}`, `{#Artist=…}` — as name and
+// value pairs, in order. RP-026 puts them at the start of the lyrics,
+// ended by a bare `{#}`, which (like any tag with no `=`) yields nothing.
+internal func parseSongInformation(_ text: String) -> [(name: String, value: String)] {
+    var results: [(name: String, value: String)] = []
+    var rest = text[...]
+
+    while let open = rest.range(of: "{#") {
+        guard let close = rest[open.upperBound...].firstIndex(of: "}")
+        else { break }
+
+        let tag = rest[open.upperBound..<close]
+
+        if let equals = tag.firstIndex(of: "=") {
+            results.append((String(tag[..<equals]), String(tag[tag.index(after: equals)...])))
+        }
+
+        rest = rest[rest.index(after: close)...]
+    }
+
+    return results
+}
+
 // MARK: Private Functions
 
 private func _determineTimeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
@@ -146,6 +195,10 @@ private func _determineTimeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
     }
 
     return nil
+}
+
+private func _isLatin1(_ text: String) -> Bool {
+    text.unicodeScalars.allSatisfy { $0.value <= 0xff }
 }
 
 // The extras of every instrument map entry at time zero, in part order.

@@ -45,7 +45,7 @@ extension Guido.Importer {
 
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
-        internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, midi: Int?)] = []
+        internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)] = []
         internal var instrumentName: String?
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp

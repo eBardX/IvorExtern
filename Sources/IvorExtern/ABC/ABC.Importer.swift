@@ -32,7 +32,8 @@ extension ABC.Importer {
     // MARK: Private Type Methods
 
     private static func _convert(_ tune: ABCTune,
-                                 fileHeader: [ABCHeaderEntry]) throws(ABC.Error) -> Work {
+                                 fileHeader: [ABCHeaderEntry],
+                                 version: ABCVersion?) throws(ABC.Error) -> Work {
         let results = try Walker().walk(tune, fileHeader: fileHeader)
         let instrumentMap = _makeInstrumentMap(program: _findMIDIDirective(tune, fileHeader: fileHeader, keyword: "program"),
                                                channel: _findMIDIDirective(tune, fileHeader: fileHeader, keyword: "channel"))
@@ -43,15 +44,24 @@ extension ABC.Importer {
             return Part(name: determinePartName(result.identity),
                         noteTable: result.context.noteTable,
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
-                        instrumentMap: instrumentMap)
+                        instrumentMap: instrumentMap,
+                        metadata: Part.Metadata(abbreviation: determinePartAbbreviation(result.identity)))
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 
         return try Work(name: determineWorkName(tune),
-                        content: .standardBeat(fillEmptyPartNames(parts), _makeTempoMap(tempoEvents)))
+                        content: .standardBeat(fillEmptyPartNames(parts), _makeTempoMap(tempoEvents)),
+                        metadata: _makeMetadata(tune,
+                                                fileHeader: fileHeader,
+                                                version: version))
     }
 
+    // Normalization rewrites the tunebook's version to the current one, so
+    // the version the file declared is read off the parsed tunebook first:
+    // `A:` means something different in an ABC 2.0 file (see
+    // `_makeMetadata`).
     private static func _convert(_ tunebook: ABC.Tunebook) throws -> [Work] {
+        let version = tunebook.version
         let (normalized, _) = ABC.Normalizer().normalize(tunebook)
         let (validated, issues) = try ABC.Validator().validate(normalized)
 
@@ -61,7 +71,9 @@ extension ABC.Importer {
         var works: [Work] = []
 
         for tune in validated.tunes {
-            try works.append(_convert(tune, fileHeader: validated.fileHeader))
+            try works.append(_convert(tune,
+                                      fileHeader: validated.fileHeader,
+                                      version: version))
         }
 
         return works
@@ -177,6 +189,127 @@ extension ABC.Importer {
         return instrumentMap
     }
 
+    // The descriptive fields of the file header apply to every tune in the
+    // file (§2.2.2), so they're read ahead of the tune's own header. The
+    // first `T:` of the tune header is the title and any later one an
+    // alternative title (§3.1.2); a `T:` in the body names a section of the
+    // tune and isn't read. Every other repeated field adds to the ones
+    // before it rather than replacing them (§3).
+    //
+    // `A:` named the lyricist in ABC 2.0 (§10.1) but is the (deprecated)
+    // area in every other version. `Z:` credits a transcriber unless its
+    // prefix says otherwise (§3.1.10): `abc-copyright` is the copyright of
+    // the *transcription*, not the tune, and `abc-edited-by` names an
+    // editor. The ABC 2.0 `%%abc-copyright`/`%%abc-edited-by` directives
+    // `Z:` replaced read the same way. A remark field (`r:`) is a remark
+    // with no label; the other string fields are remarks labeled with what
+    // the field holds.
+    private static func _makeMetadata(_ tune: ABCTune,
+                                      fileHeader: [ABCHeaderEntry],
+                                      version: ABCVersion?) -> Work.Metadata {
+        var metadata = Work.Metadata()
+
+        for entry in tune.header {
+            guard case let .field(.tuneTitle(text)) = entry
+            else { continue }
+
+            if metadata.title == nil {
+                metadata.title = text.stringValue
+            } else {
+                metadata.alternateTitles.append(text.stringValue)
+            }
+        }
+
+        func addRemark(_ text: ABCText, _ label: String?) {
+            if let remark = Remark(text: text.stringValue, label: label) {
+                metadata.remarks.append(remark)
+            }
+        }
+
+        func addTranscription(_ value: String) {
+            if let text = _strippingPrefix("abc-copyright", from: value) {
+                if let notice = RightsNotice(text: text, scope: .transcription) {
+                    metadata.rights.append(notice)
+                }
+            } else if let name = _strippingPrefix("abc-edited-by", from: value) {
+                if let credit = Credit(name: name, role: .editor) {
+                    metadata.credits.append(credit)
+                }
+            } else if let credit = Credit(name: _strippingPrefix("abc-transcription", from: value) ?? value,
+                                          role: .transcriber) {
+                metadata.credits.append(credit)
+            }
+        }
+
+        for entry in fileHeader + tune.header {
+            switch entry {
+            case let .directive(directive):
+                switch directive.name.stringValue.lowercased() {
+                case "abc-copyright":
+                    addTranscription("abc-copyright " + directive.value)
+
+                case "abc-edited-by":
+                    addTranscription("abc-edited-by " + directive.value)
+
+                default:
+                    break
+                }
+
+            case let .field(.area(text)):
+                if version?.major == 2, version?.minor == 0 {
+                    if let credit = Credit(name: text.stringValue, role: .lyricist) {
+                        metadata.credits.append(credit)
+                    }
+                } else {
+                    addRemark(text, RemarkLabel.area)
+                }
+
+            case let .field(.book(text)):
+                addRemark(text, RemarkLabel.book)
+
+            case let .field(.composer(text)):
+                if let credit = Credit(name: text.stringValue, role: .composer) {
+                    metadata.credits.append(credit)
+                }
+
+            case let .field(.discography(text)):
+                addRemark(text, RemarkLabel.discography)
+
+            case let .field(.fileURL(text)):
+                addRemark(text, RemarkLabel.fileURL)
+
+            case let .field(.group(text)):
+                addRemark(text, RemarkLabel.group)
+
+            case let .field(.history(text)):
+                addRemark(text, RemarkLabel.history)
+
+            case let .field(.notes(text)):
+                addRemark(text, RemarkLabel.notes)
+
+            case let .field(.origin(text)):
+                addRemark(text, RemarkLabel.origin)
+
+            case let .field(.remark(text)):
+                addRemark(text, nil)
+
+            case let .field(.rhythm(text)):
+                addRemark(text, RemarkLabel.rhythm)
+
+            case let .field(.source(text)):
+                addRemark(text, RemarkLabel.source)
+
+            case let .field(.transcription(text)):
+                addTranscription(text.stringValue)
+
+            default:
+                break
+            }
+        }
+
+        return metadata
+    }
+
     // The same prev/curr double-insert step MIDI's and Guido's `TempoMap`
     // builders use: a `TempoMap` lookup finds the tempo active *at or before*
     // a beat, so the tempo that was in effect immediately before a change
@@ -201,6 +334,21 @@ extension ABC.Importer {
         }
 
         return tempoMap
+    }
+
+    // The rest of `value` after `prefix` and the whitespace following it,
+    // or `nil` if `value` doesn't start with `prefix` as a whole word.
+    private static func _strippingPrefix(_ prefix: String,
+                                         from value: String) -> String? {
+        guard value.hasPrefix(prefix)
+        else { return nil }
+
+        let rest = value.dropFirst(prefix.count)
+
+        guard rest.isEmpty || rest.first?.isWhitespace == true
+        else { return nil }
+
+        return String(rest)
     }
 }
 

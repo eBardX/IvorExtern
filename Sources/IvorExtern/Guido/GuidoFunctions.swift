@@ -263,6 +263,45 @@ internal func determinePartName(_ voice: Guido.Voice) -> String {
     return ""
 }
 
+// Guido's metadata is presentational — tags saying what to print where —
+// and the spec puts `\title` and `\composer` at the start of the first
+// voice (§2.7.21), so that voice is where the work's metadata is read
+// from. The first `\title` is the title and any later one a subtitle (GMN
+// has no subtitle tag). A `\composer` tag is the only creator role GMN
+// has. A `\footer` is where a copyright line goes by convention, so one
+// that reads like a rights notice is kept as one and any other as a
+// remark. A `\label` with no body ahead of the voice's first event labels
+// the whole piece (§2.7.22); one later on, or with a body, marks a point
+// or a passage instead and isn't read.
+internal func determineWorkMetadata(_ score: Guido.Score) -> Work.Metadata {
+    var metadata = Work.Metadata()
+
+    guard let voice = score.voices.first
+    else { return metadata }
+
+    for tag in _findTags(voice.symbols) {
+        if case let .titleBlock(block) = tag {
+            _addTitleBlock(block, to: &metadata)
+        }
+    }
+
+    // A bodied tag wraps the notes it covers, so it ends the run of leading
+    // tags as surely as a bare note does.
+    for symbol in voice.symbols {
+        guard case let .tag(tag) = symbol,
+              tag.body.isEmpty
+        else { break }
+
+        if case let .text(text) = tag,
+           text.kind == .label,
+           let remark = Remark(text: text.text, label: RemarkLabel.label) {
+            metadata.remarks.append(remark)
+        }
+    }
+
+    return metadata
+}
+
 internal func determineWorkName(_ score: Guido.Score) -> String {
     guard let voice = score.voices.first
     else { return "" }
@@ -279,6 +318,32 @@ internal func determineWorkName(_ score: Guido.Score) -> String {
 }
 
 // MARK: Private Functions
+
+private func _addTitleBlock(_ block: GMNTitleBlock,
+                            to metadata: inout Work.Metadata) {
+    switch block.kind {
+    case .composer:
+        if let credit = Credit(name: block.text, role: .composer) {
+            metadata.credits.append(credit)
+        }
+
+    case .footer:
+        if isRightsNoticeText(block.text) {
+            if let notice = RightsNotice(text: block.text) {
+                metadata.rights.append(notice)
+            }
+        } else if let remark = Remark(text: block.text, label: RemarkLabel.footer) {
+            metadata.remarks.append(remark)
+        }
+
+    case .title:
+        if metadata.title == nil {
+            metadata.title = block.text
+        } else {
+            metadata.subtitles.append(block.text)
+        }
+    }
+}
 
 // Guido Music Notation has no explicit natural sign, so a natural pitch
 // converts to `.omitted` rather than to some notated-but-inert form — an
