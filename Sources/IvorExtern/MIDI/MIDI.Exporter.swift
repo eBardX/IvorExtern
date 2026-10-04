@@ -145,8 +145,6 @@ extension MIDI.Exporter {
             events.append(.meta(.zero, .sequenceTrackName(trackName)))
         }
 
-        events += _textEvents(part.metadata.remarks.map(describeRemark))
-
         events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
 
         events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)

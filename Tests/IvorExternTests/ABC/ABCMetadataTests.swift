@@ -118,25 +118,6 @@ extension ABCMetadataTests {
     }
 
     @Test
-    func read_voiceSubname_isPartAbbreviation() throws {
-        let work = try _read("""
-            X:1
-            T:Duet
-            V:1 name="Tenore I" snm="T.I"
-            V:2 name="Basso"
-            K:C
-            V:1
-            C
-            V:2
-            C,
-            """)
-        let parts = try #require(standardBeatParts(of: work))
-
-        #expect(parts.map(\.name) == ["Tenore I", "Basso"])
-        #expect(parts.map(\.metadata.abbreviation) == ["T.I", nil])
-    }
-
-    @Test
     func write_metadata_writesStringFields() throws {
         let text = try _write(Work(name: "Sketch",
                                    content: .standardBeat([], TempoMap()),
@@ -157,16 +138,6 @@ extension ABCMetadataTests {
     }
 
     @Test
-    func write_partAbbreviation_writesVoiceSubname() throws {
-        let part = Part<BeatTime, Pitch>(name: "Flute",
-                                         noteTable: NoteTable(),
-                                         metadata: Part.Metadata(abbreviation: "Fl."))
-        let text = try _write(Work(name: "Solo", content: .standardBeat([part], TempoMap())))
-
-        #expect(text.contains("V:V1 name=Flute subname=Fl.\n"))
-    }
-
-    @Test
     func write_noTitle_writesWorkNameAsTitle() throws {
         let text = try _write(Work(name: "Sketch 3", content: .standardBeat([], TempoMap())))
 
@@ -176,8 +147,7 @@ extension ABCMetadataTests {
     @Test
     func roundTrip_metadata_preservesWhatABCCanHold() throws {
         let part = Part<BeatTime, Pitch>(name: "Flute",
-                                         noteTable: NoteTable(),
-                                         metadata: Part.Metadata(abbreviation: "Fl."))
+                                         noteTable: NoteTable())
         let work = Work(name: "Aubade",
                         content: .standardBeat([part], TempoMap()),
                         metadata: _sampleMetadata())
@@ -186,7 +156,6 @@ extension ABCMetadataTests {
                                       importer: ABC.Importer(),
                                       fileFormat: .abc)
         let metadata = recovered.metadata
-        let recoveredPart = try namedStandardPart(recovered, "Flute")
 
         #expect(metadata.title == "Aubade")
         #expect(metadata.alternateTitles == ["Dawn Song", "Morning Piece"])
@@ -200,7 +169,6 @@ extension ABCMetadataTests {
                                      Remark(text: "From a fiddler", label: "source"),
                                      Remark(text: "A plain remark"),
                                      Remark(text: "mood: Wistful", label: "notes")].compactMap(\.self))
-        #expect(recoveredPart.metadata.abbreviation == "Fl.")
     }
 }
 

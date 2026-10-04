@@ -71,14 +71,10 @@ extension MusicXMLMetadataTests {
     }
 
     @Test
-    func read_scorePart_populatesPartMetadataAndInstrumentExtras() throws {
+    func read_scorePart_populatesInstrumentExtras() throws {
         let work = try _read(header: "",
                              scorePart: """
-                                <identification>
-                                  <miscellaneous><miscellaneous-field name="desk">Front</miscellaneous-field></miscellaneous>
-                                </identification>
                                 <part-name>Flute</part-name>
-                                <part-abbreviation>Fl.</part-abbreviation>
                                 <score-instrument id="P1-I1">
                                   <instrument-name>Flauto 1</instrument-name>
                                   <instrument-abbreviation>Fl. 1</instrument-abbreviation>
@@ -87,8 +83,6 @@ extension MusicXMLMetadataTests {
         let part = try #require(standardBeatParts(of: work)?.first)
         let entry = try #require(part.instrumentMap.first)
 
-        #expect(part.metadata.abbreviation == "Fl.")
-        #expect(part.metadata.remarks == [Remark(text: "Front", label: "desk")].compactMap(\.self))
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
         #expect(stringValue(entry.extras, .instrumentAbbreviation) == "Fl. 1")
     }
@@ -141,7 +135,6 @@ extension MusicXMLMetadataTests {
         expected.rights = [RightsNotice(text: "© 1998 Acme Line two", scope: .music)].compactMap(\.self)
 
         #expect(recovered.metadata == expected)
-        #expect(recoveredPart.metadata == standardBeatParts(of: work)?.first?.metadata)
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
         #expect(stringValue(entry.extras, .instrumentAbbreviation) == "Fl. 1")
     }
@@ -186,9 +179,7 @@ extension MusicXMLMetadataTests {
 
         let part = Part<BeatTime, Pitch>(name: "Flute",
                                          noteTable: NoteTable(),
-                                         instrumentMap: instrumentMap,
-                                         metadata: Part.Metadata(abbreviation: "Fl.",
-                                                                 remarks: [Remark(text: "Front", label: "desk")].compactMap(\.self)))
+                                         instrumentMap: instrumentMap)
 
         return Work(name: "Collected Pieces: Aubade",
                     content: .standardBeat([part], TempoMap()),

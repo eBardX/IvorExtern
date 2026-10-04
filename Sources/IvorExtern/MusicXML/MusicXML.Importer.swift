@@ -69,15 +69,13 @@ extension MusicXML.Importer {
                                  panMap: PanMap<BeatTime>,
                                  directionDynamicMap: DynamicMap<BeatTime>) -> [Part<BeatTime, Pitch>] {
         let instrumentMap = _makeInstrumentMap(part.part)
-        let metadata = determinePartMetadata(part.part)
 
         guard !part.voices.isEmpty
         else { return [Part(name: determinePartName(part.part, groupName: groupName),
                             noteTable: NoteTable(),
                             dynamicMap: directionDynamicMap,
                             instrumentMap: instrumentMap,
-                            panMap: panMap,
-                            metadata: metadata)] }
+                            panMap: panMap)] }
 
         return part.voices.enumerated().map { index, voice in
             let dynamicMap = voice.noteDynamicEvents.isEmpty ? directionDynamicMap : _makeDynamicMap(voice.noteDynamicEvents)
@@ -89,8 +87,7 @@ extension MusicXML.Importer {
                         noteTable: voice.noteTable,
                         dynamicMap: dynamicMap,
                         instrumentMap: instrumentMap,
-                        panMap: panMap,
-                        metadata: metadata)
+                        panMap: panMap)
         }
     }
 

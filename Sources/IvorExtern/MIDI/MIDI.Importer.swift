@@ -35,8 +35,8 @@ extension MIDI.Importer {
     // MARK: Private Type Aliases
 
     // A voice, plus what it shares with every other voice split from the
-    // same track: the track's Instrument Name events and opening remarks.
-    private typealias TrackVoice = (voice: MIDI.Voice, instrumentNameEvents: [SMFEvent], remarks: [Remark])
+    // same track: the track's Instrument Name events.
+    private typealias TrackVoice = (voice: MIDI.Voice, instrumentNameEvents: [SMFEvent])
 
     // MARK: Private Type Methods
 
@@ -200,7 +200,6 @@ extension MIDI.Importer {
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voice: MIDI.Voice,
                                                               _ instrumentNameEvents: [SMFEvent],
-                                                              _ remarks: [Remark],
                                                               _ timeMap: TimeMap,
                                                               startElements: [Extra]) -> Part<TimeMap.TimeType, NoteNumber> {
         var context = Self.Context(timeMap: timeMap)
@@ -262,14 +261,13 @@ extension MIDI.Importer {
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
                     instrumentMap: instrumentMap,
-                    panMap: context.panMap,
-                    metadata: Part.Metadata(remarks: remarks))
+                    panMap: context.panMap)
     }
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
                                                               _ timeMap: TimeMap,
                                                               startElements: [Extra]) -> [Part<TimeMap.TimeType, NoteNumber>] {
-        voices.map { _convert($0.voice, $0.instrumentNameEvents, $0.remarks, timeMap, startElements: startElements) }
+        voices.map { _convert($0.voice, $0.instrumentNameEvents, timeMap, startElements: startElements) }
     }
 
     private static func _makeBeatMap(_ division: MIDI.Division,
@@ -496,14 +494,11 @@ extension MIDI.Importer {
     // already share its one track name. A lone track's name isn't used for
     // its voices at all: `determineWorkName` has already taken it as the
     // work's title — the Format 0 convention — and repeating it on every
-    // part ("My Song, Channel 1") would only mislabel them. The same goes
-    // for the text events opening the first track, which describe the whole
-    // work (see `_makeMetadata`); those opening any later track describe
-    // that track's voices.
+    // part ("My Song, Channel 1") would only mislabel them.
     private static func _makeVoices(_ tracks: [MIDI.Track]) throws(MIDI.Error) -> [TrackVoice] {
         var voices: [TrackVoice] = []
 
-        for (trackIndex, track) in tracks.enumerated() {
+        for track in tracks {
             var channelEvents: [MIDI.Channel: [SMFEvent]] = [:]
 
             for event in track.events {
@@ -521,7 +516,6 @@ extension MIDI.Importer {
             let instrumentNameEvents = track.events.filter {
                 if case .meta(_, .instrumentName) = $0 { true } else { false }
             }
-            let remarks = trackIndex > 0 ? _remarks(track) : []
 
             for channel in channelEvents.keys.sorted() {
                 let voice = try _makeVoice(channel: channel,
@@ -530,7 +524,7 @@ extension MIDI.Importer {
                                                                 isMultiChannel: isMultiChannel),
                                            events: channelEvents[channel] ?? [])
 
-                voices.append((voice, instrumentNameEvents, remarks))
+                voices.append((voice, instrumentNameEvents))
             }
         }
 

@@ -51,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "1a0f1fcd470455b6b58bd3b0ef277f7e9d5e4f5a",
-        "version" : "0.26.0"
+        "revision" : "aa7dde58888651e29a639e21e986dd31a6e16634",
+        "version" : "0.27.0"
       }
     },
     {

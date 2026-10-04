@@ -48,7 +48,6 @@ extension MIDIMetadataTests {
                                      Credit(name: "The Band", role: .artist)].compactMap(\.self))
         #expect(metadata.rights == [RightsNotice(text: "(C) 1998 Acme")].compactMap(\.self))
         #expect(metadata.remarks == [Remark(text: "Arranged for the festival")].compactMap(\.self))
-        #expect(part.metadata.remarks == [Remark(text: "Play softly")].compactMap(\.self))
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
     }
 
@@ -85,7 +84,6 @@ extension MIDIMetadataTests {
         #expect(metadata.rights == [RightsNotice(text: "© 1998 Acme\n(P) 1999 Acme")].compactMap(\.self))
         #expect(metadata.remarks == [Remark(text: "J. Smith (composer)"),
                                      Remark(text: "history: Written at dawn")].compactMap(\.self))
-        #expect(part.metadata.remarks == [Remark(text: "Play softly")].compactMap(\.self))
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
     }
 
@@ -116,9 +114,7 @@ extension MIDIMetadataTests {
 
         let part = Part(name: "Melody",
                         noteTable: noteTable,
-                        instrumentMap: instrumentMap,
-                        metadata: Part.Metadata(abbreviation: "Mel.",
-                                                remarks: [Remark(text: "Play softly")].compactMap(\.self)))
+                        instrumentMap: instrumentMap)
 
         return Work(name: "Sketch",
                     content: .keyboardBeat([part], TempoMap()),

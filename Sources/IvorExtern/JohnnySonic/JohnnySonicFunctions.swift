@@ -45,8 +45,7 @@ internal func convertToJohnnySonicBeat(_ beatTime: BeatTime) -> JohnnySonic.Beat
 // role, a rights notice's scope, or a remark's label follows the key in
 // parentheses — `Credit (composer): J. S. Bach`. Every line but the first
 // of a multi-line rights notice or remark is a continuation line, indented
-// two spaces. Part metadata isn't written: DKM has no parts, only the
-// per-note instrument names that `JohnnySonic.Importer` groups notes by.
+// two spaces.
 internal func convertToJohnnySonicComments(_ metadata: Work.Metadata) -> [String] {
     var comments: [String] = []
 

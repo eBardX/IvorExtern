@@ -2,8 +2,6 @@
 
 internal import IvorModel
 internal import IvorMXL
-internal import IvorTiming
-internal import IvorTuning
 
 private import XestiTools
 
@@ -71,12 +69,11 @@ internal func convertToMusicXMLIdentification(_ metadata: Work.Metadata) -> MXLI
                              miscellaneous: base?.miscellaneous)
 }
 
-// An `<identification>` holding only remarks — all a part's
-// `<identification>` is used for — or `nil` with none to hold. The
-// first `source` remark is the `<source>` (there can be only one), each
-// `relation` remark a `<relation>`, and each `encoding description`
-// remark an `<encoding-description>`; every other remark is a
-// miscellaneous field named for its label, or for
+// An `<identification>` holding remarks, alternate titles and encoders,
+// or `nil` with none to hold. The first `source` remark is the `<source>`
+// (there can be only one), each `relation` remark a `<relation>`, and each
+// `encoding description` remark an `<encoding-description>`; every other
+// remark is a miscellaneous field named for its label, or for
 // `MusicXML.remarkFieldName` without one.
 internal func convertToMusicXMLIdentification(remarks: [Remark],
                                               alternateTitles: [String] = [],
@@ -110,14 +107,6 @@ internal func convertToMusicXMLIdentification(remarks: [Remark],
                              source: source,
                              relation: relations,
                              miscellaneous: fields.isEmpty ? nil : MXLMiscellaneous(field: fields))
-}
-
-// A score part's own `<identification>` is the only part-level
-// bibliographic metadata in any of the formats, but only its remarks have
-// a home in `Part.Metadata`; its creators and rights aren't read.
-internal func determinePartMetadata(_ scorePart: MusicXML.ScorePart) -> Part<BeatTime, Pitch>.Metadata {
-    Part.Metadata(abbreviation: scorePart.abbreviation?.value,
-                  remarks: _remarks(scorePart.identification).compactMap { $0.alternateTitle == nil ? $0.remark : nil })
 }
 
 // MusicXML describes a work twice over: semantically, in `<work>`,

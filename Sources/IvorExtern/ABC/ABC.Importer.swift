@@ -44,8 +44,7 @@ extension ABC.Importer {
             return Part(name: determinePartName(result.identity),
                         noteTable: result.context.noteTable,
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
-                        instrumentMap: instrumentMap,
-                        metadata: Part.Metadata(abbreviation: determinePartAbbreviation(result.identity)))
+                        instrumentMap: instrumentMap)
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 

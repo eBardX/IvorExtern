@@ -521,10 +521,6 @@ extension ABC.Exporter {
             properties["name"] = part.name
         }
 
-        if let abbreviation = part.metadata.abbreviation {
-            properties["subname"] = abbreviation
-        }
-
         return ABCVoice(id: _voiceID(index: index),
                         properties: properties).require()
     }
@@ -598,10 +594,9 @@ extension ABC.Exporter {
     // imports back as unnamed (see `ABCFunctions.determinePartName`), while
     // an explicit `V:` field's `id` becomes the imported name whenever it
     // has no name property of its own and isn't a bare voice number. A lone *named* part still needs its
-    // `V:` field, since that's ABC's only place to record a part name — and
-    // so does a lone part with an abbreviated name, for the same reason.
+    // `V:` field, since that's ABC's only place to record a part name.
     private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
-        parts.count > 1 || parts.first.map { !$0.name.isEmpty || $0.metadata.abbreviation != nil } ?? false
+        parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
     }
 
     private static func _remarkField(_ remark: Remark,

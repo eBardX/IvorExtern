@@ -613,12 +613,8 @@ extension MusicXML.Exporter {
             }
         }
 
-        let partIdentification = convertToMusicXMLIdentification(remarks: part.metadata.remarks)
-
         return MusicXML.ScorePart(id: id,
-                                  identification: partIdentification,
                                   name: MXLPartName(value: part.name, text: MXLPartName.Text()),
-                                  abbreviation: part.metadata.abbreviation.map { MXLPartName(value: $0, text: MXLPartName.Text()) },
                                   instrument: instruments,
                                   group2: group2)
     }
