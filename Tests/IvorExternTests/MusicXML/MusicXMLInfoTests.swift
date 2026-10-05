@@ -9,26 +9,28 @@ import IvorTuning
 import Testing
 import XestiTools
 
-struct MusicXMLMetadataTests {
+struct MusicXMLInfoTests {
 }
 
 // MARK: -
 
-extension MusicXMLMetadataTests {
+extension MusicXMLInfoTests {
     @Test
     func read_creditsOnly_fillWhatIdentificationLacks() throws {
         let work = try _read(header: """
               <credit page="1"><credit-type>title</credit-type><credit-words>Aubade</credit-words></credit>
               <credit page="1"><credit-type>subtitle</credit-type><credit-words>Dawn Song</credit-words></credit>
+              <credit page="1"><credit-type>Dedication</credit-type><credit-words>For Anna</credit-words></credit>
               <credit page="1"><credit-type>composer</credit-type><credit-words>J. Smith</credit-words></credit>
               <credit page="1"><credit-type>rights</credit-type><credit-words>© 1998 Acme</credit-words></credit>
               <credit page="1"><credit-words>Untyped</credit-words></credit>
             """)
 
-        #expect(work.metadata.title == "Aubade")
-        #expect(work.metadata.subtitles == ["Dawn Song"])
-        #expect(work.metadata.credits == [Credit(name: "J. Smith", role: .composer)].compactMap(\.self))
-        #expect(work.metadata.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
+        #expect(work.info.title == "Aubade")
+        #expect(work.info.subtitles == ["Dawn Song"])
+        #expect(work.info.dedication == "For Anna")
+        #expect(work.info.credits == [Credit(name: "J. Smith", role: .composer)].compactMap(\.self))
+        #expect(work.info.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
     }
 
     @Test
@@ -54,20 +56,20 @@ extension MusicXMLMetadataTests {
               <credit page="1"><credit-type>title</credit-type><credit-words>Printed Title</credit-words></credit>
               <credit page="1"><credit-type>composer</credit-type><credit-words>Printed Composer</credit-words></credit>
             """)
-        let metadata = work.metadata
+        let info = work.info
 
-        #expect(metadata.title == "Aubade")
-        #expect(metadata.parentWorkTitle == "Suite")
-        #expect(metadata.alternateTitles == ["Morning Piece"])
-        #expect(metadata.credits == [Credit(name: "J. Smith", role: .composer),
-                                     Credit(name: "Anon."),
-                                     Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self))
-        #expect(metadata.rights == [RightsNotice(text: "© 1998 Acme", scope: .words)].compactMap(\.self))
-        #expect(metadata.remarks == [Remark(text: "Op. 2", label: "work number"),
-                                     Remark(text: "3", label: "movement number"),
-                                     Remark(text: "Manuscript", label: "source"),
-                                     Remark(text: "Proofread twice", label: "encoding description"),
-                                     Remark(text: "Wistful", label: "mood")].compactMap(\.self))
+        #expect(info.title == "Aubade")
+        #expect(info.parentWorkTitle == "Suite")
+        #expect(info.alternateTitles == ["Morning Piece"])
+        #expect(info.credits == [Credit(name: "J. Smith", role: .composer),
+                                 Credit(name: "Anon."),
+                                 Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self))
+        #expect(info.rights == [RightsNotice(text: "© 1998 Acme", scope: .words)].compactMap(\.self))
+        #expect(info.remarks == [Remark(text: "Op. 2", label: "work number"),
+                                 Remark(text: "3", label: "movement number"),
+                                 Remark(text: "Manuscript", label: "source"),
+                                 Remark(text: "Proofread twice", label: "encoding description"),
+                                 Remark(text: "Wistful", label: "mood")].compactMap(\.self))
     }
 
     @Test
@@ -88,7 +90,7 @@ extension MusicXMLMetadataTests {
     }
 
     @Test
-    func write_metadata_writesWorkIdentificationAndCredits() throws {
+    func write_info_writesWorkIdentificationAndCredits() throws {
         let score = try MusicXML.Exporter().convert(_sampleWork())
         let identification = try #require(score.identification)
 
@@ -102,7 +104,7 @@ extension MusicXMLMetadataTests {
         #expect(identification.source == "From a fiddler")
         #expect(identification.miscellaneous?.field == [MXLMiscellaneous.Field(value: "Morning Piece", name: "alternate title"),
                                                         MXLMiscellaneous.Field(value: "A plain remark", name: "remark")])
-        #expect(score.credit.map(\.kind) == [["title"], ["subtitle"]])
+        #expect(score.credit.map(\.kind) == [["title"], ["subtitle"], ["dedication"]])
     }
 
     @Test
@@ -116,7 +118,7 @@ extension MusicXMLMetadataTests {
     }
 
     @Test
-    func roundTrip_metadata_preservesWork() throws {
+    func roundTrip_info_preservesWork() throws {
         let work = _sampleWork()
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -124,7 +126,7 @@ extension MusicXMLMetadataTests {
                                       fileFormat: .musicXML)
         let recoveredPart = try namedStandardPart(recovered, "Flute")
         let entry = try #require(recoveredPart.instrumentMap.first)
-        var expected = work.metadata
+        var expected = work.info
 
         // `movement number` and `work number` come back first, since they
         // have elements of their own ahead of `<identification>`.
@@ -134,7 +136,7 @@ extension MusicXMLMetadataTests {
         // breaks included.
         expected.rights = [RightsNotice(text: "© 1998 Acme Line two", scope: .music)].compactMap(\.self)
 
-        #expect(recovered.metadata == expected)
+        #expect(recovered.info == expected)
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
         #expect(stringValue(entry.extras, .instrumentAbbreviation) == "Fl. 1")
     }
@@ -142,7 +144,7 @@ extension MusicXMLMetadataTests {
 
 // MARK: -
 
-extension MusicXMLMetadataTests {
+extension MusicXMLInfoTests {
     private func _read(header: String,
                        scorePart: String = "<part-name>Piano</part-name>") throws -> Work {
         let musicXML = """
@@ -183,16 +185,17 @@ extension MusicXMLMetadataTests {
 
         return Work(name: "Collected Pieces: Aubade",
                     content: .standardBeat([part], TempoMap()),
-                    metadata: Work.Metadata(title: "Aubade",
-                                            subtitles: ["Dawn Song"],
-                                            alternateTitles: ["Morning Piece"],
-                                            parentWorkTitle: "Collected Pieces",
-                                            credits: [Credit(name: "J. Smith", role: .composer),
-                                                      Credit(name: "A. Poet", role: .lyricist),
-                                                      Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self),
-                                            rights: [RightsNotice(text: "© 1998 Acme\nLine two", scope: .music)].compactMap(\.self),
-                                            remarks: [Remark(text: "From a fiddler", label: "source"),
-                                                      Remark(text: "A plain remark"),
-                                                      Remark(text: "Op. 2", label: "work number")].compactMap(\.self)))
+                    info: Work.Info(title: "Aubade",
+                                    subtitles: ["Dawn Song"],
+                                    alternateTitles: ["Morning Piece"],
+                                    parentWorkTitle: "Collected Pieces",
+                                    dedication: "To my teacher",
+                                    credits: [Credit(name: "J. Smith", role: .composer),
+                                              Credit(name: "A. Poet", role: .lyricist),
+                                              Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self),
+                                    rights: [RightsNotice(text: "© 1998 Acme\nLine two", scope: .music)].compactMap(\.self),
+                                    remarks: [Remark(text: "From a fiddler", label: "source"),
+                                              Remark(text: "A plain remark"),
+                                              Remark(text: "Op. 2", label: "work number")].compactMap(\.self)))
     }
 }

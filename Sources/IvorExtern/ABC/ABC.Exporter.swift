@@ -204,6 +204,64 @@ extension ABC.Exporter {
         return events
     }
 
+    // The string fields after the title (see `ABC.Importer._makeInfo`
+    // for the reverse mapping). Subtitles and alternate titles both
+    // become later `T:` fields, ABC's only kind of secondary title
+    // (§3.1.2); there is nothing to hold a parent work's title. ABC
+    // has no dedication field either, so the dedication is an `N:`
+    // field labeled as one (see `describeDedication(_:)`). A composer,
+    // or a credit with no role, is a `C:` field, and a transcriber or
+    // editor a `Z:` field; any other role is spelled out in a `C:`
+    // field, which already holds free text such as "arr. J. Smith".
+    // ABC's only rights field is `Z:abc-copyright`, which covers the
+    // transcription (§3.1.10), so a notice with any other scope has
+    // nowhere to go. A remark goes to the field its label names, to
+    // `r:` when it has no label, and otherwise to `N:` with its label
+    // spelled out. A field holds a single line, so line breaks become
+    // spaces.
+    private static func _infoFields(_ info: Work.Info) -> [ABCField] {
+        var fields: [ABCField] = []
+
+        func text(_ value: String) -> ABCText {
+            ABCText(stringValue: singleLine(value)).require()
+        }
+
+        for title in info.subtitles + info.alternateTitles {
+            fields.append(.tuneTitle(text(title)))
+        }
+
+        if let dedication = info.dedication {
+            fields.append(.notes(text(describeDedication(dedication))))
+        }
+
+        for credit in info.credits {
+            switch credit.role {
+            case .composer,
+                 nil:
+                fields.append(.composer(text(credit.name)))
+
+            case .editor:
+                fields.append(.transcription(text("abc-edited-by " + credit.name)))
+
+            case .transcriber:
+                fields.append(.transcription(text(credit.name)))
+
+            default:
+                fields.append(.composer(text(describeCredit(credit))))
+            }
+        }
+
+        for notice in info.rights where notice.scope == .transcription {
+            fields.append(.transcription(text("abc-copyright " + notice.text)))
+        }
+
+        for remark in info.remarks {
+            fields.append(_remarkField(remark, text(remark.text)))
+        }
+
+        return fields
+    }
+
     // A `program`/`instrument` pair emits `%%MIDI program [c] n`, `n` in
     // its native 1–128 form — the ABC standard's and abc2midi.txt's own
     // convention, matching the `midiProgram` extra's "1-128 convention"
@@ -341,9 +399,9 @@ extension ABC.Exporter {
                                     parts: [Part<BeatTime, Pitch>],
                                     tempoMap: TempoMap) -> [ABCHeaderEntry] {
         var header: [ABCHeaderEntry] = [.field(.referenceNumber(ABCReferenceNumber(uintValue: 1).require())),
-                                        .field(.tuneTitle(ABCText(stringValue: work.metadata.title ?? work.name).require()))]
+                                        .field(.tuneTitle(ABCText(stringValue: work.info.title ?? work.name).require()))]
 
-        header += _metadataFields(work.metadata).map { .field($0) }
+        header += _infoFields(work.info).map { .field($0) }
 
         header += [.field(.meter(.standard(ABCTimeSignature.StandardMeter(numerator: 4,
                                                                           denominator: 4).require()))),
@@ -535,57 +593,6 @@ extension ABC.Exporter {
         let measures = (range.upperBound.doubleValue / 4).rounded(.up)
 
         return max(1, UInt(measures))
-    }
-
-    // The string fields after the title (see `ABC.Importer._makeMetadata`
-    // for the reverse mapping). Subtitles and alternate titles both become
-    // later `T:` fields, ABC's only kind of secondary title (§3.1.2); there
-    // is nothing to hold a parent work's title. A composer, or a credit
-    // with no role, is a `C:` field, and a transcriber or editor a `Z:`
-    // field; any other role is spelled out in a `C:` field, which already
-    // holds free text such as "arr. J. Smith". ABC's only rights field is
-    // `Z:abc-copyright`, which covers the transcription (§3.1.10), so a
-    // notice with any other scope has nowhere to go. A remark goes to the
-    // field its label names, to `r:` when it has no label, and otherwise to
-    // `N:` with its label spelled out. A field holds a single line, so
-    // line breaks become spaces.
-    private static func _metadataFields(_ metadata: Work.Metadata) -> [ABCField] {
-        var fields: [ABCField] = []
-
-        func text(_ value: String) -> ABCText {
-            ABCText(stringValue: singleLine(value)).require()
-        }
-
-        for title in metadata.subtitles + metadata.alternateTitles {
-            fields.append(.tuneTitle(text(title)))
-        }
-
-        for credit in metadata.credits {
-            switch credit.role {
-            case .composer,
-                 nil:
-                fields.append(.composer(text(credit.name)))
-
-            case .editor:
-                fields.append(.transcription(text("abc-edited-by " + credit.name)))
-
-            case .transcriber:
-                fields.append(.transcription(text(credit.name)))
-
-            default:
-                fields.append(.composer(text(describeCredit(credit))))
-            }
-        }
-
-        for notice in metadata.rights where notice.scope == .transcription {
-            fields.append(.transcription(text("abc-copyright " + notice.text)))
-        }
-
-        for remark in metadata.remarks {
-            fields.append(_remarkField(remark, text(remark.text)))
-        }
-
-        return fields
     }
 
     // A single, unnamed part is written as an implicit voice — no `V:`

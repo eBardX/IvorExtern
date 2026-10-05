@@ -38,15 +38,15 @@ internal func convertToJohnnySonicBeat(_ beatTime: BeatTime) -> JohnnySonic.Beat
     beatTime.doubleValue
 }
 
-// DKM defines no metadata at all — only comments — so the work's metadata
+// DKM defines no metadata at all — only comments — so the work's info
 // is written as comment lines in a `Key: value` form of this module's own
-// (see `determineWorkMetadata(_:)` for the reverse), right after the
+// (see `determineWorkInfo(_:)` for the reverse), right after the
 // `| Work: … |` banner that already carries the work's name. A credit's
 // role, a rights notice's scope, or a remark's label follows the key in
 // parentheses — `Credit (composer): J. S. Bach`. Every line but the first
-// of a multi-line rights notice or remark is a continuation line, indented
-// two spaces.
-internal func convertToJohnnySonicComments(_ metadata: Work.Metadata) -> [String] {
+// of a multi-line dedication, rights notice or remark is a continuation
+// line, indented two spaces.
+internal func convertToJohnnySonicComments(_ info: Work.Info) -> [String] {
     var comments: [String] = []
 
     func add(_ key: String, _ qualifier: String?, _ text: String) {
@@ -57,31 +57,35 @@ internal func convertToJohnnySonicComments(_ metadata: Work.Metadata) -> [String
         comments += lines.dropFirst().map { continuationPrefix + $0 }
     }
 
-    if let title = metadata.title {
+    if let title = info.title {
         add(titleKey, nil, title)
     }
 
-    for subtitle in metadata.subtitles {
+    for subtitle in info.subtitles {
         add(subtitleKey, nil, subtitle)
     }
 
-    for alternateTitle in metadata.alternateTitles {
+    for alternateTitle in info.alternateTitles {
         add(alternateTitleKey, nil, alternateTitle)
     }
 
-    if let parentWorkTitle = metadata.parentWorkTitle {
+    if let parentWorkTitle = info.parentWorkTitle {
         add(parentWorkTitleKey, nil, parentWorkTitle)
     }
 
-    for credit in metadata.credits {
+    if let dedication = info.dedication {
+        add(dedicationKey, nil, dedication)
+    }
+
+    for credit in info.credits {
         add(creditKey, credit.role?.stringValue, credit.name)
     }
 
-    for notice in metadata.rights {
+    for notice in info.rights {
         add(rightsKey, notice.scope?.stringValue, notice.text)
     }
 
-    for remark in metadata.remarks {
+    for remark in info.remarks {
         add(remarkKey, remark.label, remark.text)
     }
 
@@ -130,23 +134,23 @@ internal func convertToTempo(_ bpm: Double) -> Tempo {
     return Tempo(uintValue: UInt(bpm.rounded())) ?? .default
 }
 
-// Reads the metadata comment lines `convertToJohnnySonicComments(_:)`
+// Reads the info comment lines `convertToJohnnySonicComments(_:)`
 // writes. Every other comment is a remark with no label, the only reading
 // DKM gives one — except the boxed banners `JohnnySonic.Exporter` frames
 // its sections with — and a run of consecutive comment lines, unbroken by
 // any other command, is one remark.
-internal func determineWorkMetadata(_ score: JohnnySonic.Score) -> Work.Metadata {
-    var metadata = Work.Metadata()
+internal func determineWorkInfo(_ score: JohnnySonic.Score) -> Work.Info {
+    var info = Work.Info()
     var entry: (key: String, qualifier: String?, lines: [String])?
     var plainLines: [String] = []
 
     func flush() {
         if let entry {
-            _addMetadata(entry.key, entry.qualifier, entry.lines.joined(separator: "\n"), to: &metadata)
+            _addInfo(entry.key, entry.qualifier, entry.lines.joined(separator: "\n"), to: &info)
         }
 
         if let remark = Remark(text: plainLines.joined(separator: "\n")) {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
 
         entry = nil
@@ -163,7 +167,7 @@ internal func determineWorkMetadata(_ score: JohnnySonic.Score) -> Work.Metadata
 
         if entry != nil, text.hasPrefix(continuationPrefix) {
             entry?.lines.append(String(text.dropFirst(continuationPrefix.count)))
-        } else if let parsed = _parseMetadataComment(text) {
+        } else if let parsed = _parseInfoComment(text) {
             flush()
             entry = (parsed.key, parsed.qualifier, [parsed.value])
         } else {
@@ -177,7 +181,7 @@ internal func determineWorkMetadata(_ score: JohnnySonic.Score) -> Work.Metadata
 
     flush()
 
-    return metadata
+    return info
 }
 
 internal func determineWorkName(_ score: JohnnySonic.Score) -> String {
@@ -201,47 +205,51 @@ internal func determineWorkName(_ score: JohnnySonic.Score) -> String {
 private let alternateTitleKey  = "Alternate Title"
 private let continuationPrefix = "  "
 private let creditKey          = "Credit"
+private let dedicationKey      = "Dedication"
 private let parentWorkTitleKey = "Parent Work Title"
 private let remarkKey          = "Remark"
 private let rightsKey          = "Rights"
 private let subtitleKey        = "Subtitle"
 private let titleKey           = "Title"
 
-private let metadataKeys = [alternateTitleKey, creditKey, parentWorkTitleKey, remarkKey, rightsKey, subtitleKey, titleKey]
+private let infoKeys = [alternateTitleKey, creditKey, dedicationKey, parentWorkTitleKey, remarkKey, rightsKey, subtitleKey, titleKey]
 
 // MARK: Private Functions
 
-private func _addMetadata(_ key: String,
-                          _ qualifier: String?,
-                          _ value: String,
-                          to metadata: inout Work.Metadata) {
+private func _addInfo(_ key: String,
+                      _ qualifier: String?,
+                      _ value: String,
+                      to info: inout Work.Info) {
     switch key {
     case alternateTitleKey:
-        metadata.alternateTitles.append(value)
+        info.alternateTitles.append(value)
 
     case creditKey:
         if let credit = Credit(name: value, role: qualifier.flatMap { Credit.Role(stringValue: $0) }) {
-            metadata.credits.append(credit)
+            info.credits.append(credit)
         }
 
+    case dedicationKey:
+        info.dedication = value
+
     case parentWorkTitleKey:
-        metadata.parentWorkTitle = value
+        info.parentWorkTitle = value
 
     case remarkKey:
         if let remark = Remark(text: value, label: qualifier) {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
 
     case rightsKey:
         if let notice = RightsNotice(text: value, scope: qualifier.flatMap { RightsNotice.Scope(stringValue: $0) }) {
-            metadata.rights.append(notice)
+            info.rights.append(notice)
         }
 
     case subtitleKey:
-        metadata.subtitles.append(value)
+        info.subtitles.append(value)
 
     case titleKey:
-        metadata.title = value
+        info.title = value
 
     default:
         break
@@ -259,9 +267,9 @@ private func _isBanner(_ text: String) -> Bool {
 }
 
 // Splits `Key: value` or `Key (qualifier): value` into its parts, or `nil`
-// for a comment whose key isn't one of `metadataKeys`.
-private func _parseMetadataComment(_ text: String) -> (key: String, qualifier: String?, value: String)? {
-    for key in metadataKeys where text.hasPrefix(key) {
+// for a comment whose key isn't one of `infoKeys`.
+private func _parseInfoComment(_ text: String) -> (key: String, qualifier: String?, value: String)? {
+    for key in infoKeys where text.hasPrefix(key) {
         var rest = text.dropFirst(key.count)
         var qualifier: String?
 

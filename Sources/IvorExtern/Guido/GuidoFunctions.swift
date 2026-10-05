@@ -265,7 +265,7 @@ internal func determinePartName(_ voice: Guido.Voice) -> String {
 
 // Guido's metadata is presentational — tags saying what to print where —
 // and the spec puts `\title` and `\composer` at the start of the first
-// voice (§2.7.21), so that voice is where the work's metadata is read
+// voice (§2.7.21), so that voice is where the work's info is read
 // from. The first `\title` is the title and any later one a subtitle (GMN
 // has no subtitle tag). A `\composer` tag is the only creator role GMN
 // has. A `\footer` is where a copyright line goes by convention, so one
@@ -273,15 +273,15 @@ internal func determinePartName(_ voice: Guido.Voice) -> String {
 // remark. A `\label` with no body ahead of the voice's first event labels
 // the whole piece (§2.7.22); one later on, or with a body, marks a point
 // or a passage instead and isn't read.
-internal func determineWorkMetadata(_ score: Guido.Score) -> Work.Metadata {
-    var metadata = Work.Metadata()
+internal func determineWorkInfo(_ score: Guido.Score) -> Work.Info {
+    var info = Work.Info()
 
     guard let voice = score.voices.first
-    else { return metadata }
+    else { return info }
 
     for tag in _findTags(voice.symbols) {
         if case let .titleBlock(block) = tag {
-            _addTitleBlock(block, to: &metadata)
+            _addTitleBlock(block, to: &info)
         }
     }
 
@@ -295,11 +295,11 @@ internal func determineWorkMetadata(_ score: Guido.Score) -> Work.Metadata {
         if case let .text(text) = tag,
            text.kind == .label,
            let remark = Remark(text: text.text, label: RemarkLabel.label) {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
     }
 
-    return metadata
+    return info
 }
 
 internal func determineWorkName(_ score: Guido.Score) -> String {
@@ -320,27 +320,27 @@ internal func determineWorkName(_ score: Guido.Score) -> String {
 // MARK: Private Functions
 
 private func _addTitleBlock(_ block: GMNTitleBlock,
-                            to metadata: inout Work.Metadata) {
+                            to info: inout Work.Info) {
     switch block.kind {
     case .composer:
         if let credit = Credit(name: block.text, role: .composer) {
-            metadata.credits.append(credit)
+            info.credits.append(credit)
         }
 
     case .footer:
         if isRightsNoticeText(block.text) {
             if let notice = RightsNotice(text: block.text) {
-                metadata.rights.append(notice)
+                info.rights.append(notice)
             }
         } else if let remark = Remark(text: block.text, label: RemarkLabel.footer) {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
 
     case .title:
-        if metadata.title == nil {
-            metadata.title = block.text
+        if info.title == nil {
+            info.title = block.text
         } else {
-            metadata.subtitles.append(block.text)
+            info.subtitles.append(block.text)
         }
     }
 }

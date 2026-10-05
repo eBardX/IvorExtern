@@ -42,7 +42,7 @@ extension MIDI.Importer {
 
     private static func _addSongInformation(name: String,
                                             value: String,
-                                            to metadata: inout Work.Metadata) {
+                                            to info: inout Work.Info) {
         let role: Credit.Role? = switch name.lowercased() {
         case "artist":
             .artist
@@ -59,13 +59,13 @@ extension MIDI.Importer {
 
         if let role {
             if let credit = Credit(name: value, role: role) {
-                metadata.credits.append(credit)
+                info.credits.append(credit)
             }
         } else if name.lowercased() == "title" {
-            if metadata.title == nil {
-                metadata.title = value
-            } else if metadata.title != value.normalizingWhitespace() {
-                metadata.subtitles.append(value)
+            if info.title == nil {
+                info.title = value
+            } else if info.title != value.normalizingWhitespace() {
+                info.subtitles.append(value)
             }
         }
     }
@@ -119,7 +119,7 @@ extension MIDI.Importer {
                                           validated.division),
                         smpteStartTime: _makeStartTime(timeline,
                                                        validated.division),
-                        metadata: _makeMetadata(validated))
+                        info: _makeInfo(validated))
     }
 
     // A file with a timecode division and no tempo events has no beats to
@@ -292,6 +292,51 @@ extension MIDI.Importer {
         return beatMap
     }
 
+    // An SMF has no meta event for most metadata, so this reads what the
+    // conventions give it (RP-001): the first track's name is the title, as
+    // `determineWorkName` already reads it; every Copyright event is a
+    // rights notice, of no particular scope; and every Text event at tick
+    // zero on the first track is a remark about the whole work, since its
+    // text could be anything ("any amount of text describing anything") —
+    // except one labeled as a dedication (see `parseDedicationText(_:)`),
+    // which is the dedication.
+    // Text later in the track, which is tied to a point in time, isn't read.
+    // The RP-026 song information tags opening a track's lyrics are the
+    // one place an SMF names a composer, lyricist, or artist, and can carry
+    // a title too: one that differs from the first track's name is kept as
+    // a subtitle (RP-026 has it hold "Song Title / Sub Title etc.").
+    private static func _makeInfo(_ sequence: MIDI.Sequence) -> Work.Info {
+        var info = Work.Info(title: determineWorkName(sequence))
+
+        for event in sequence.tracks.flatMap(\.events) {
+            switch event {
+            case let .meta(_, .copyright(text)):
+                if let notice = RightsNotice(text: text.stringValue) {
+                    info.rights.append(notice)
+                }
+
+            case let .meta(_, .lyric(text)):
+                for (name, value) in parseSongInformation(text.stringValue) {
+                    _addSongInformation(name: name, value: value, to: &info)
+                }
+
+            default:
+                break
+            }
+        }
+
+        for text in sequence.tracks.first.map(_openingTexts) ?? [] {
+            if info.dedication == nil,
+               let dedication = parseDedicationText(text) {
+                info.dedication = dedication
+            } else if let remark = Remark(text: text) {
+                info.remarks.append(remark)
+            }
+        }
+
+        return info
+    }
+
     // Program Change events carry every `InstrumentMap` entry's own time and
     // (absent an override) instrument; Bank Select (CC 0 MSB / CC 32 LSB)
     // and Channel Volume events are stateful, not tied to any one entry, so
@@ -368,42 +413,6 @@ extension MIDI.Importer {
         }
 
         return instrumentMap
-    }
-
-    // An SMF has no meta event for most metadata, so this reads what the
-    // conventions give it (RP-001): the first track's name is the title, as
-    // `determineWorkName` already reads it; every Copyright event is a
-    // rights notice, of no particular scope; and every Text event at tick
-    // zero on the first track is a remark about the whole work, since its
-    // text could be anything ("any amount of text describing anything").
-    // Text later in the track, which is tied to a point in time, isn't read.
-    // The RP-026 song information tags opening a track's lyrics are the
-    // one place an SMF names a composer, lyricist, or artist, and can carry
-    // a title too: one that differs from the first track's name is kept as
-    // a subtitle (RP-026 has it hold "Song Title / Sub Title etc.").
-    private static func _makeMetadata(_ sequence: MIDI.Sequence) -> Work.Metadata {
-        var metadata = Work.Metadata(title: determineWorkName(sequence))
-
-        for event in sequence.tracks.flatMap(\.events) {
-            switch event {
-            case let .meta(_, .copyright(text)):
-                if let notice = RightsNotice(text: text.stringValue) {
-                    metadata.rights.append(notice)
-                }
-
-            case let .meta(_, .lyric(text)):
-                for (name, value) in parseSongInformation(text.stringValue) {
-                    _addSongInformation(name: name, value: value, to: &metadata)
-                }
-
-            default:
-                break
-            }
-        }
-
-        metadata.remarks = sequence.tracks.first.map(_remarks) ?? []
-
-        return metadata
     }
 
     private static func _makeStartElements(_ division: MIDI.Division) -> [Extra] {
@@ -531,14 +540,14 @@ extension MIDI.Importer {
         return voices
     }
 
-    // The remarks a track's Text events at tick zero make.
-    private static func _remarks(_ track: MIDI.Track) -> [Remark] {
+    // The text of a track's Text events at tick zero.
+    private static func _openingTexts(_ track: MIDI.Track) -> [String] {
         track.events.compactMap {
             guard case let .meta(eventTime, .text(text)) = $0,
                   eventTime == .zero
             else { return nil }
 
-            return Remark(text: text.stringValue)
+            return text.stringValue
         }
     }
 

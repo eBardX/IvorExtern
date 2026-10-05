@@ -1,7 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 // The `Remark.label` values the importers give the descriptive text fields
-// that have no dedicated home in `Work.Metadata`, and that the exporters
+// that have no dedicated home in `Work.Info`, and that the exporters
 // map back onto those fields. Sharing them is what lets
 // a remark cross formats intact: ABC `S:` and MusicXML `<source>` both
 // read and write `source`, so a source note imported from one is exported

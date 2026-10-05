@@ -210,6 +210,50 @@ extension Guido.Exporter {
         return events
     }
 
+    // The tags opening the first voice (see `determineWorkInfo(_:)` for
+    // the reverse mapping): `\title` for the title — or the work's name,
+    // without one — and again for each subtitle and alternate title, GMN's
+    // only kind of secondary title; `\composer` for each credit, with any
+    // role other than composer spelled out, since it's GMN's only creator
+    // tag; `\footer` for each rights notice and each remark labeled as a
+    // footer; and a bodiless `\label` for each remark labeled as a label.
+    // GMN has nothing to hold a parent work's title, a dedication, or any
+    // other remark.
+    // These tags hold a single line, so line breaks become spaces.
+    private static func _infoTags(_ info: Work.Info,
+                                  name: String) -> [GMNSymbol] {
+        var tags: [GMNTag] = []
+
+        for title in [info.title ?? name.nilIfEmpty].compactMap(\.self) + info.subtitles + info.alternateTitles {
+            tags.append(.titleBlock(GMNTitleBlock(kind: .title, text: title)))
+        }
+
+        for credit in info.credits {
+            let text = credit.role == .composer ? credit.name : describeCredit(credit)
+
+            tags.append(.titleBlock(GMNTitleBlock(kind: .composer, text: text)))
+        }
+
+        for notice in info.rights {
+            tags.append(.titleBlock(GMNTitleBlock(kind: .footer, text: singleLine(notice.text))))
+        }
+
+        for remark in info.remarks {
+            switch remark.label {
+            case RemarkLabel.footer:
+                tags.append(.titleBlock(GMNTitleBlock(kind: .footer, text: singleLine(remark.text))))
+
+            case RemarkLabel.label:
+                tags.append(.text(GMNText(kind: .label, text: singleLine(remark.text))))
+
+            default:
+                break
+            }
+        }
+
+        return tags.map { .tag($0) }
+    }
+
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, GMNInstrument)] {
         var directives: [(BeatTime, GMNInstrument)] = []
 
@@ -271,7 +315,7 @@ extension Guido.Exporter {
             var symbols: [GMNSymbol] = [.tag(.meter(GMNMeter(type: "4/4")))]
 
             if index == 0 {
-                symbols += _metadataTags(work.metadata, name: work.name)
+                symbols += _infoTags(work.info, name: work.name)
             }
 
             // `\instrument`'s `name` is Guido's only per-voice identity
@@ -449,49 +493,6 @@ extension Guido.Exporter {
         let measures = (range.upperBound.doubleValue / 4).rounded(.up)
 
         return max(1, UInt(measures))
-    }
-
-    // The tags opening the first voice (see `determineWorkMetadata(_:)` for
-    // the reverse mapping): `\title` for the title — or the work's name,
-    // without one — and again for each subtitle and alternate title, GMN's
-    // only kind of secondary title; `\composer` for each credit, with any
-    // role other than composer spelled out, since it's GMN's only creator
-    // tag; `\footer` for each rights notice and each remark labeled as a
-    // footer; and a bodiless `\label` for each remark labeled as a label.
-    // GMN has nothing to hold a parent work's title or any other remark.
-    // These tags hold a single line, so line breaks become spaces.
-    private static func _metadataTags(_ metadata: Work.Metadata,
-                                      name: String) -> [GMNSymbol] {
-        var tags: [GMNTag] = []
-
-        for title in [metadata.title ?? name.nilIfEmpty].compactMap(\.self) + metadata.subtitles + metadata.alternateTitles {
-            tags.append(.titleBlock(GMNTitleBlock(kind: .title, text: title)))
-        }
-
-        for credit in metadata.credits {
-            let text = credit.role == .composer ? credit.name : describeCredit(credit)
-
-            tags.append(.titleBlock(GMNTitleBlock(kind: .composer, text: text)))
-        }
-
-        for notice in metadata.rights {
-            tags.append(.titleBlock(GMNTitleBlock(kind: .footer, text: singleLine(notice.text))))
-        }
-
-        for remark in metadata.remarks {
-            switch remark.label {
-            case RemarkLabel.footer:
-                tags.append(.titleBlock(GMNTitleBlock(kind: .footer, text: singleLine(remark.text))))
-
-            case RemarkLabel.label:
-                tags.append(.text(GMNText(kind: .label, text: singleLine(remark.text))))
-
-            default:
-                break
-            }
-        }
-
-        return tags.map { .tag($0) }
     }
 
     // One event's own segment symbols: articulation-wrapped note/chord

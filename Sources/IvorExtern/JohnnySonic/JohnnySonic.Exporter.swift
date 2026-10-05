@@ -255,7 +255,7 @@ extension JohnnySonic.Exporter {
             comment += ": " + work.name
         }
 
-        return try _makeBoxed(comment: comment) + convertToJohnnySonicComments(work.metadata).map { .comment($0) }
+        return try _makeBoxed(comment: comment) + convertToJohnnySonicComments(work.info).map { .comment($0) }
     }
 
     private static func _makeTrailer(work: Work) throws(JohnnySonic.Error) -> [DKMCommand] {

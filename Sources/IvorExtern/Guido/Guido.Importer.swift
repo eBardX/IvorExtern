@@ -54,7 +54,7 @@ extension Guido.Importer {
         return Work(name: determineWorkName(validated),
                     content: .standardBeat(fillEmptyPartNames(parts),
                                            _makeTempoMap(contexts.flatMap(\.tempoEvents))),
-                    metadata: determineWorkMetadata(validated))
+                    info: determineWorkInfo(validated))
     }
 
     // Unlike `_makeTempoMap`, this isn't a uniform reassert-then-insert step

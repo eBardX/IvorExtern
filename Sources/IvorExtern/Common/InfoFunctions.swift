@@ -2,6 +2,7 @@
 
 internal import IvorModel
 
+private import Foundation
 private import XestiTools
 
 // MARK: Internal Functions
@@ -15,6 +16,14 @@ internal func describeCredit(_ credit: Credit) -> String {
     else { return credit.name }
 
     return "\(credit.name) (\(role.stringValue))"
+}
+
+// A dedication as free text, for a format with no home for one: labeled
+// the way `describeRemark(_:)` labels a remark — `"dedication: To my
+// teacher"` — so that `parseDedicationText(_:)` can tell it apart from
+// any other free text when it's read back.
+internal func describeDedication(_ dedication: String) -> String {
+    "\(dedicationLabel): \(dedication)"
 }
 
 // A remark as free text, for a format with no home for its label: the
@@ -35,9 +44,25 @@ internal func isRightsNoticeText(_ text: String) -> Bool {
     return ["©", "℗", "(c)", "copyright", "public domain", "all rights reserved"].contains { lowered.contains($0) }
 }
 
-// Collapses multi-line metadata text (a rights notice or remark keeps its
-// line breaks in the model) to the single line a format's text field can
-// hold.
+// The dedication in free text that `describeDedication(_:)` wrote, or
+// `nil` for any other text. The label is matched ignoring case.
+internal func parseDedicationText(_ text: String) -> String? {
+    let text = text.drop { $0.isWhitespace }
+    let prefix = dedicationLabel + ":"
+
+    guard text.lowercased().hasPrefix(prefix)
+    else { return nil }
+
+    return String(text.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+}
+
+// Collapses multi-line info text (a dedication, rights notice or remark
+// keeps its line breaks in the model) to the single line a format's text
+// field can hold.
 internal func singleLine(_ text: String) -> String {
     text.normalizingWhitespace()
 }
+
+// MARK: Private Constants
+
+private let dedicationLabel = "dedication"

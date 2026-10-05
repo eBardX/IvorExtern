@@ -11,17 +11,18 @@ import Testing
 import XestiNumbers
 import XestiTools
 
-struct MIDIMetadataTests {
+struct MIDIInfoTests {
 }
 
 // MARK: -
 
-extension MIDIMetadataTests {
+extension MIDIInfoTests {
     @Test
-    func convert_metaEvents_populateMetadata() throws {
+    func convert_metaEvents_populateInfo() throws {
         let key = MIDIData1Value(60)
         let conductor = SMFTrack(events: [.meta(.zero, .copyright(SMFText("(C) 1998 Acme"))),
                                           .meta(.zero, .sequenceTrackName(SMFText("Aubade"))),
+                                          .meta(.zero, .text(SMFText("Dedication: For Anna"))),
                                           .meta(.zero, .text(SMFText("Arranged for the festival"))),
                                           .meta(SMFEventTime(480), .text(SMFText("Later text"))),
                                           .meta(SMFEventTime(480), .endOfTrack)])
@@ -37,17 +38,18 @@ extension MIDIMetadataTests {
         let work = try MIDI.Importer().convert(SMFSequence(format: .format1,
                                                            division: .metrical(SMFTickRate(480)),
                                                            tracks: [conductor, melody]))
-        let metadata = work.metadata
+        let info = work.info
         let part = try #require(keyboardBeatParts(of: work)?.first)
         let entry = try #require(part.instrumentMap.first)
 
-        #expect(metadata.title == "Aubade")
-        #expect(metadata.subtitles == ["Dawn Song"])
-        #expect(metadata.credits == [Credit(name: "J. Smith", role: .composer),
-                                     Credit(name: "A. Poet", role: .lyricist),
-                                     Credit(name: "The Band", role: .artist)].compactMap(\.self))
-        #expect(metadata.rights == [RightsNotice(text: "(C) 1998 Acme")].compactMap(\.self))
-        #expect(metadata.remarks == [Remark(text: "Arranged for the festival")].compactMap(\.self))
+        #expect(info.title == "Aubade")
+        #expect(info.subtitles == ["Dawn Song"])
+        #expect(info.credits == [Credit(name: "J. Smith", role: .composer),
+                                 Credit(name: "A. Poet", role: .lyricist),
+                                 Credit(name: "The Band", role: .artist)].compactMap(\.self))
+        #expect(info.rights == [RightsNotice(text: "(C) 1998 Acme")].compactMap(\.self))
+        #expect(info.dedication == "For Anna")
+        #expect(info.remarks == [Remark(text: "Arranged for the festival")].compactMap(\.self))
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
     }
 
@@ -68,27 +70,28 @@ extension MIDIMetadataTests {
     }
 
     @Test
-    func roundTrip_metadata_preservesWhatMIDICanHold() throws {
+    func roundTrip_info_preservesWhatMIDICanHold() throws {
         let recovered = try roundTrip(_sampleWork(),
                                       exporter: MIDI.Exporter(),
                                       importer: MIDI.Importer(),
                                       fileFormat: .midi)
-        let metadata = recovered.metadata
+        let info = recovered.info
         let part = try #require(keyboardBeatParts(of: recovered)?.first)
         let entry = try #require(part.instrumentMap.first)
 
         #expect(recovered.name == "Aubade")
-        #expect(metadata.title == "Aubade")
-        #expect(metadata.subtitles.isEmpty)
-        #expect(metadata.credits.isEmpty)
-        #expect(metadata.rights == [RightsNotice(text: "© 1998 Acme\n(P) 1999 Acme")].compactMap(\.self))
-        #expect(metadata.remarks == [Remark(text: "J. Smith (composer)"),
-                                     Remark(text: "history: Written at dawn")].compactMap(\.self))
+        #expect(info.title == "Aubade")
+        #expect(info.subtitles.isEmpty)
+        #expect(info.dedication == "To my teacher\nwith thanks")
+        #expect(info.credits.isEmpty)
+        #expect(info.rights == [RightsNotice(text: "© 1998 Acme\n(P) 1999 Acme")].compactMap(\.self))
+        #expect(info.remarks == [Remark(text: "J. Smith (composer)"),
+                                 Remark(text: "history: Written at dawn")].compactMap(\.self))
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
     }
 
     @Test
-    func write_metadata_writesCopyrightFirst() throws {
+    func write_info_writesCopyrightFirst() throws {
         let sequence = try MIDI.Exporter().convert(_sampleWork())
         let conductor = try #require(sequence.tracks.first)
         let first = try #require(conductor.events.first)
@@ -102,7 +105,7 @@ extension MIDIMetadataTests {
 
 // MARK: -
 
-extension MIDIMetadataTests {
+extension MIDIInfoTests {
     private func _sampleWork() -> Work {
         var noteTable = NoteTable<BeatTime, NoteNumber>()
         var instrumentMap = InstrumentMap<BeatTime>()
@@ -118,11 +121,12 @@ extension MIDIMetadataTests {
 
         return Work(name: "Sketch",
                     content: .keyboardBeat([part], TempoMap()),
-                    metadata: Work.Metadata(title: "Aubade",
-                                            subtitles: ["Dawn Song"],
-                                            credits: [Credit(name: "J. Smith", role: .composer)].compactMap(\.self),
-                                            rights: [RightsNotice(text: "© 1998 Acme"),
-                                                     RightsNotice(text: "℗ 1999 Acme")].compactMap(\.self),
-                                            remarks: [Remark(text: "Written at dawn", label: "history")].compactMap(\.self)))
+                    info: Work.Info(title: "Aubade",
+                                    subtitles: ["Dawn Song"],
+                                    dedication: "To my teacher\nwith thanks",
+                                    credits: [Credit(name: "J. Smith", role: .composer)].compactMap(\.self),
+                                    rights: [RightsNotice(text: "© 1998 Acme"),
+                                             RightsNotice(text: "℗ 1999 Acme")].compactMap(\.self),
+                                    remarks: [Remark(text: "Written at dawn", label: "history")].compactMap(\.self)))
     }
 }

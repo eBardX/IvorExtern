@@ -9,18 +9,18 @@ import IvorTuning
 import Testing
 import XestiTools
 
-struct GuidoMetadataTests {
+struct GuidoInfoTests {
 }
 
 // MARK: -
 
-extension GuidoMetadataTests {
+extension GuidoInfoTests {
     @Test
     func read_footer_isRightsNoticeOrRemark() throws {
         let work = try _read(#"[ \footer<"© 1998 Acme"> \footer<"Engraved by hand"> c ]"#)
 
-        #expect(work.metadata.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
-        #expect(work.metadata.remarks == [Remark(text: "Engraved by hand", label: "footer")].compactMap(\.self))
+        #expect(work.info.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
+        #expect(work.info.remarks == [Remark(text: "Engraved by hand", label: "footer")].compactMap(\.self))
     }
 
     @Test
@@ -36,17 +36,17 @@ extension GuidoMetadataTests {
     func read_label_onlyLeadingBodilessLabelIsRemark() throws {
         let work = try _read(#"[ \label<"Theme"> c \label<"Later"> d ]"#)
 
-        #expect(work.metadata.remarks == [Remark(text: "Theme", label: "label")].compactMap(\.self))
+        #expect(work.info.remarks == [Remark(text: "Theme", label: "label")].compactMap(\.self))
     }
 
     @Test
-    func read_titleAndComposer_populateMetadata() throws {
+    func read_titleAndComposer_populateInfo() throws {
         let work = try _read(#"{ [ \title<"Sonata"> \title<"No. 1"> \composer<"J. Smith"> c ], [ \title<"Ignored"> e ] }"#)
 
         #expect(work.name == "Sonata: No. 1")
-        #expect(work.metadata.title == "Sonata")
-        #expect(work.metadata.subtitles == ["No. 1"])
-        #expect(work.metadata.composers == ["J. Smith"])
+        #expect(work.info.title == "Sonata")
+        #expect(work.info.subtitles == ["No. 1"])
+        #expect(work.info.composers == ["J. Smith"])
     }
 
     @Test
@@ -64,10 +64,10 @@ extension GuidoMetadataTests {
     }
 
     @Test
-    func write_metadata_writesLeadingTagsOfFirstVoice() throws {
+    func write_info_writesLeadingTagsOfFirstVoice() throws {
         let score = try Guido.Exporter().convert(Work(name: "Sketch",
                                                       content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap()),
-                                                      metadata: _sampleMetadata()))
+                                                      info: _sampleInfo()))
         let tags = try #require(score.voices.first).symbols.compactMap { symbol -> String? in
             switch symbol {
             case let .tag(.titleBlock(block)):
@@ -92,46 +92,48 @@ extension GuidoMetadataTests {
     }
 
     @Test
-    func roundTrip_metadata_preservesWhatGuidoCanHold() throws {
+    func roundTrip_info_preservesWhatGuidoCanHold() throws {
         let work = Work(name: "Aubade: Dawn Song: Morning Piece",
                         content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap()),
-                        metadata: _sampleMetadata())
+                        info: _sampleInfo())
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
                                       importer: Guido.Importer(),
                                       fileFormat: .gmn)
-        let metadata = recovered.metadata
+        let info = recovered.info
 
         #expect(recovered.name == work.name)
-        #expect(metadata.title == "Aubade")
-        #expect(metadata.subtitles == ["Dawn Song", "Morning Piece"])
-        #expect(metadata.alternateTitles.isEmpty)
-        #expect(metadata.parentWorkTitle == nil)
-        #expect(metadata.credits == [Credit(name: "J. Smith", role: .composer),
-                                     Credit(name: "A. Poet (lyricist)", role: .composer)].compactMap(\.self))
-        #expect(metadata.rights == [RightsNotice(text: "© 1998 Acme Line two")].compactMap(\.self))
-        #expect(metadata.remarks == [Remark(text: "Engraved by hand", label: "footer"),
-                                     Remark(text: "Theme", label: "label")].compactMap(\.self))
+        #expect(info.title == "Aubade")
+        #expect(info.subtitles == ["Dawn Song", "Morning Piece"])
+        #expect(info.alternateTitles.isEmpty)
+        #expect(info.parentWorkTitle == nil)
+        #expect(info.dedication == nil)
+        #expect(info.credits == [Credit(name: "J. Smith", role: .composer),
+                                 Credit(name: "A. Poet (lyricist)", role: .composer)].compactMap(\.self))
+        #expect(info.rights == [RightsNotice(text: "© 1998 Acme Line two")].compactMap(\.self))
+        #expect(info.remarks == [Remark(text: "Engraved by hand", label: "footer"),
+                                 Remark(text: "Theme", label: "label")].compactMap(\.self))
     }
 }
 
 // MARK: -
 
-extension GuidoMetadataTests {
+extension GuidoInfoTests {
     private func _read(_ gmn: String) throws -> Work {
         try Guido.Importer().convert(Guido.Parser().parse(Data(gmn.utf8)))
     }
 
-    private func _sampleMetadata() -> Work.Metadata {
-        Work.Metadata(title: "Aubade",
-                      subtitles: ["Dawn Song"],
-                      alternateTitles: ["Morning Piece"],
-                      parentWorkTitle: "Collected Pieces",
-                      credits: [Credit(name: "J. Smith", role: .composer),
-                                Credit(name: "A. Poet", role: .lyricist)].compactMap(\.self),
-                      rights: [RightsNotice(text: "© 1998 Acme\nLine two")].compactMap(\.self),
-                      remarks: [Remark(text: "Engraved by hand", label: "footer"),
-                                Remark(text: "Theme", label: "label"),
-                                Remark(text: "Dropped", label: "history")].compactMap(\.self))
+    private func _sampleInfo() -> Work.Info {
+        Work.Info(title: "Aubade",
+                  subtitles: ["Dawn Song"],
+                  alternateTitles: ["Morning Piece"],
+                  parentWorkTitle: "Collected Pieces",
+                  dedication: "To my teacher",
+                  credits: [Credit(name: "J. Smith", role: .composer),
+                            Credit(name: "A. Poet", role: .lyricist)].compactMap(\.self),
+                  rights: [RightsNotice(text: "© 1998 Acme\nLine two")].compactMap(\.self),
+                  remarks: [Remark(text: "Engraved by hand", label: "footer"),
+                            Remark(text: "Theme", label: "label"),
+                            Remark(text: "Dropped", label: "history")].compactMap(\.self))
     }
 }

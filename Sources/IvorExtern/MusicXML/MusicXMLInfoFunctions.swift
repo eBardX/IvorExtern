@@ -7,12 +7,15 @@ private import XestiTools
 
 // MARK: Internal Functions
 
-// The text printed on the first page: the title and every subtitle,
-// the one thing only a credit can hold. The title is printed too, so
-// that a renderer laying out the page from its credits shows it above
-// the subtitles.
+// The text printed on the first page: every subtitle and the
+// dedication, the things only a credit can hold. MusicXML has no standard
+// credit type for a dedication (the schema mentions one but names no
+// value), so it's typed `dedication`, which the free-text type allows.
+// The title is printed too, so that a renderer laying out the page from
+// its credits shows it above the rest.
 internal func convertToMusicXMLCredits(title: String?,
-                                       subtitles: [String]) -> [MXLCredit] {
+                                       subtitles: [String],
+                                       dedication: String?) -> [MXLCredit] {
     var credits: [MXLCredit] = []
 
     func add(_ kind: String, _ text: String) {
@@ -22,7 +25,7 @@ internal func convertToMusicXMLCredits(title: String?,
                                  page: 1))
     }
 
-    if let title, !subtitles.isEmpty {
+    if let title, !subtitles.isEmpty || dedication != nil {
         add("title", title)
     }
 
@@ -30,10 +33,14 @@ internal func convertToMusicXMLCredits(title: String?,
         add("subtitle", subtitle)
     }
 
+    if let dedication {
+        add("dedication", dedication)
+    }
+
     return credits
 }
 
-// The work's `<identification>` (see `determineWorkMetadata(_:)` for the
+// The work's `<identification>` (see `determineWorkInfo(_:)` for the
 // reverse mapping): a `<creator>` for each credit, typed with its role,
 // except that a transcriber is the `<encoder>`; a `<rights>` for each
 // notice, typed with its scope; and its remarks (see
@@ -41,21 +48,21 @@ internal func convertToMusicXMLCredits(title: String?,
 // plus a miscellaneous field for each alternate title, which MusicXML has
 // no element for. The work and movement numbers aren't remarks here: they
 // have elements of their own, outside `<identification>`.
-internal func convertToMusicXMLIdentification(_ metadata: Work.Metadata) -> MXLIdentification? {
-    let creators = metadata.credits.filter { $0.role != .transcriber }.map {
+internal func convertToMusicXMLIdentification(_ info: Work.Info) -> MXLIdentification? {
+    let creators = info.credits.filter { $0.role != .transcriber }.map {
         MXLTypedText(value: $0.name, kind: $0.role?.stringValue)
     }
-    let encoders = metadata.credits.filter { $0.role == .transcriber }.map {
+    let encoders = info.credits.filter { $0.role == .transcriber }.map {
         MXLTypedText(value: $0.name)
     }
-    let rights = metadata.rights.map {
+    let rights = info.rights.map {
         MXLTypedText(value: $0.text, kind: $0.scope?.stringValue)
     }
-    let remarks = metadata.remarks.filter {
+    let remarks = info.remarks.filter {
         $0.label != RemarkLabel.workNumber && $0.label != RemarkLabel.movementNumber
     }
     let base = convertToMusicXMLIdentification(remarks: remarks,
-                                               alternateTitles: metadata.alternateTitles,
+                                               alternateTitles: info.alternateTitles,
                                                encoders: encoders)
 
     guard !creators.isEmpty || !rights.isEmpty || base != nil
@@ -113,8 +120,8 @@ internal func convertToMusicXMLIdentification(remarks: [Remark],
 // `<movement-*>` and `<identification>`, and presentationally, in the
 // `<credit>`s printed on the page. The semantic layer is preferred, and a
 // credit is read only for what that layer lacks: the title when the score
-// has neither a work nor a movement title, every subtitle (which only a
-// credit can hold), and creators or rights when `<identification>` has
+// has neither a work nor a movement title, every subtitle and the
+// dedication (which only a credit can hold), and creators or rights when `<identification>` has
 // none. A credit's purpose is its `<credit-type>`, so one from a file
 // older than MusicXML 3.0, which has none, isn't read at all.
 //
@@ -125,49 +132,49 @@ internal func convertToMusicXMLIdentification(remarks: [Remark],
 // relations, and encoding descriptions have no dedicated home, so they're
 // kept as labeled remarks, as is each miscellaneous field, labeled with
 // its name.
-internal func determineWorkMetadata(_ score: MusicXML.Score) -> Work.Metadata {
-    var metadata = Work.Metadata()
+internal func determineWorkInfo(_ score: MusicXML.Score) -> Work.Info {
+    var info = Work.Info()
     let workTitle = score.work?.title?.nilIfEmpty
     let identification = score.identification
 
     if let movementTitle = score.movementTitle?.nilIfEmpty {
-        metadata.title = movementTitle
-        metadata.parentWorkTitle = workTitle
+        info.title = movementTitle
+        info.parentWorkTitle = workTitle
     } else {
-        metadata.title = workTitle
+        info.title = workTitle
     }
 
-    _addIdentification(identification, to: &metadata)
+    _addIdentification(identification, to: &info)
 
     _addCredits(score.credit,
-                to: &metadata,
+                to: &info,
                 hasCreators: !(identification?.creator.isEmpty ?? true),
                 hasRights: !(identification?.rights.isEmpty ?? true))
 
     for (label, value) in [(RemarkLabel.workNumber, score.work?.number), (RemarkLabel.movementNumber, score.movementNumber)] {
         if let value, let remark = Remark(text: value, label: label) {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
     }
 
     for item in _remarks(identification) {
         if let alternateTitle = item.alternateTitle {
-            metadata.alternateTitles.append(alternateTitle)
+            info.alternateTitles.append(alternateTitle)
         } else if let remark = item.remark {
-            metadata.remarks.append(remark)
+            info.remarks.append(remark)
         }
     }
 
-    return metadata
+    return info
 }
 
 // MARK: Private Functions
 
 private func _addCredits(_ credits: [MXLCredit],
-                         to metadata: inout Work.Metadata,
+                         to info: inout Work.Info,
                          hasCreators: Bool,
                          hasRights: Bool) {
-    let hadTitle = metadata.title != nil
+    let hadTitle = info.title != nil
 
     for credit in credits {
         guard let text = _creditText(credit)
@@ -175,22 +182,25 @@ private func _addCredits(_ credits: [MXLCredit],
 
         for kind in credit.kind.map({ $0.normalizingWhitespace().lowercased() }) {
             switch kind {
-            case "title" where !hadTitle && metadata.title == nil:
-                metadata.title = text
+            case "title" where !hadTitle && info.title == nil:
+                info.title = text
+
+            case "dedication" where info.dedication == nil:
+                info.dedication = text
 
             case "subtitle":
-                metadata.subtitles.append(text)
+                info.subtitles.append(text)
 
             case "arranger" where !hasCreators,
                  "composer" where !hasCreators,
                  "lyricist" where !hasCreators:
                 if let credit = Credit(name: text, role: Credit.Role(stringValue: kind)) {
-                    metadata.credits.append(credit)
+                    info.credits.append(credit)
                 }
 
             case "rights" where !hasRights:
                 if let notice = RightsNotice(text: text) {
-                    metadata.rights.append(notice)
+                    info.rights.append(notice)
                 }
 
             default:
@@ -201,25 +211,25 @@ private func _addCredits(_ credits: [MXLCredit],
 }
 
 private func _addIdentification(_ identification: MXLIdentification?,
-                                to metadata: inout Work.Metadata) {
+                                to info: inout Work.Info) {
     for creator in identification?.creator ?? [] {
         if let credit = Credit(name: creator.value,
                                role: creator.kind.flatMap { Credit.Role(stringValue: $0.normalizingWhitespace()) }) {
-            metadata.credits.append(credit)
+            info.credits.append(credit)
         }
     }
 
     for item in identification?.encoding?.items ?? [] {
         if case let .encoder(encoder) = item,
            let credit = Credit(name: encoder.value, role: .transcriber) {
-            metadata.credits.append(credit)
+            info.credits.append(credit)
         }
     }
 
     for rights in identification?.rights ?? [] {
         if let notice = RightsNotice(text: rights.value,
                                      scope: rights.kind.flatMap { RightsNotice.Scope(stringValue: $0.normalizingWhitespace()) }) {
-            metadata.rights.append(notice)
+            info.rights.append(notice)
         }
     }
 }

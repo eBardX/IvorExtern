@@ -165,22 +165,24 @@ extension MusicXML.Exporter {
                                                                             tempoMap: tempoMap)))
         }
 
-        let metadata = work.metadata
-        let title = metadata.title ?? work.name.nilIfEmpty
-        let parentTitle = metadata.parentWorkTitle
-        let workNumber = _firstRemark(metadata.remarks, RemarkLabel.workNumber)
+        let info = work.info
+        let title = info.title ?? work.name.nilIfEmpty
+        let parentTitle = info.parentWorkTitle
+        let workNumber = _firstRemark(info.remarks, RemarkLabel.workNumber)
         let xmlWork = parentTitle != nil || title != nil || workNumber != nil
             ? MXLWork(number: workNumber, title: parentTitle ?? title)
             : nil
 
         // A movement's title is the title of the work, and the work it
-        // belongs to is its parent (see `determineWorkMetadata(_:)`), so
+        // belongs to is its parent (see `determineWorkInfo(_:)`), so
         // without a parent the title is the work title alone.
         return MusicXML.Score(work: xmlWork,
-                              movementNumber: _firstRemark(metadata.remarks, RemarkLabel.movementNumber),
+                              movementNumber: _firstRemark(info.remarks, RemarkLabel.movementNumber),
                               movementTitle: parentTitle != nil ? title : nil,
-                              identification: convertToMusicXMLIdentification(metadata),
-                              credit: convertToMusicXMLCredits(title: title, subtitles: metadata.subtitles),
+                              identification: convertToMusicXMLIdentification(info),
+                              credit: convertToMusicXMLCredits(title: title,
+                                                               subtitles: info.subtitles,
+                                                               dedication: info.dedication),
                               partList: MXLPartList(items: scoreParts.map { .scorePart($0) }),
                               parts: xmlParts)
     }

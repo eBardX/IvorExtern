@@ -49,7 +49,7 @@ extension MusicXML.Importer {
         return try Work(name: determineWorkName(score),
                         content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
                                                _makeTempoMap(results.flatMap(\.tempoEvents))),
-                        metadata: determineWorkMetadata(score))
+                        info: determineWorkInfo(score))
     }
 
     // Each Ivor `Part` carries a single note table, so a MusicXML part with
