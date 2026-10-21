@@ -23,7 +23,7 @@ extension MIDIImporterTests {
         let channel = MIDIChannel(1)
         let bankSelectMSB = MIDIChannelMessage.controlChange(channel, .bankSelectMSB, MIDIData1Value(1))
         let bankSelectLSB = MIDIChannelMessage.controlChange(channel, .bankSelectLSB, MIDIData1Value(2))
-        let programChange = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let programChange = MIDIChannelMessage.programChange(channel, MIDIProgram(41))
         let track = SMFTrack(events: [.midi(.zero, bankSelectMSB),
                                       .midi(.zero, bankSelectLSB),
                                       .midi(.zero, programChange),
@@ -49,7 +49,7 @@ extension MIDIImporterTests {
     @Test
     func convert_instrumentNameEvent_emptyText_fallsBackToGeneralMIDIName() throws {
         let emptyName = try #require(SMFText(stringValue: ""))
-        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
+        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIProgram(41))
         let track = SMFTrack(events: [.meta(.zero, .instrumentName(emptyName)),
                                       .midi(.zero, programChange),
                                       .meta(.zero, .endOfTrack)])
@@ -67,7 +67,7 @@ extension MIDIImporterTests {
     @Test
     func convert_instrumentNameEvent_precedingProgramChange_overridesGeneralMIDIName() throws {
         let name = try #require(SMFText(stringValue: "Fiddle"))
-        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
+        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIProgram(41))
         let track = SMFTrack(events: [.meta(.zero, .instrumentName(name)),
                                       .midi(.zero, programChange),
                                       .meta(.zero, .endOfTrack)])
@@ -177,7 +177,7 @@ extension MIDIImporterTests {
 
     @Test
     func convert_programChangeEvent_populatesInstrumentMap() throws {
-        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIData1Value(40))
+        let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIProgram(41))
         let track = SMFTrack(events: [.midi(.zero, programChange),
                                       .meta(.zero, .endOfTrack)])
         let sequence = SMFSequence(format: .format1,
@@ -194,7 +194,7 @@ extension MIDIImporterTests {
     @Test
     func convert_programChangeEvent_populatesMidiChannelExtra() throws {
         let channel = MIDIChannel(3)
-        let programChange = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let programChange = MIDIChannelMessage.programChange(channel, MIDIProgram(41))
         let track = SMFTrack(events: [.midi(.zero, programChange),
                                       .meta(.zero, .endOfTrack)])
         let sequence = SMFSequence(format: .format1,
@@ -273,7 +273,7 @@ extension MIDIImporterTests {
 
     @Test
     func convert_unnamedTrackOnChannel10WithProgramChange_partNamedPercussion() throws {
-        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(10), MIDIData1Value(0)))])
+        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(10), MIDIProgram(1)))])
 
         #expect(try unnamedPartNames(track) == ["Percussion"])
     }
@@ -282,14 +282,14 @@ extension MIDIImporterTests {
     func convert_unnamedTrackWithInstrumentName_partNamedByInstrumentName() throws {
         let name = try #require(SMFText(stringValue: "Fiddle"))
         let track = SMFTrack(events: [.meta(.zero, .instrumentName(name)),
-                                      .midi(.zero, .programChange(MIDIChannel(10), MIDIData1Value(40)))])
+                                      .midi(.zero, .programChange(MIDIChannel(10), MIDIProgram(41)))])
 
         #expect(try unnamedPartNames(track) == ["Fiddle"])
     }
 
     @Test
     func convert_unnamedTrackWithProgramChange_partNamedByGeneralMIDIName() throws {
-        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(1), MIDIData1Value(40)))])
+        let track = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(1), MIDIProgram(41)))])
 
         #expect(try unnamedPartNames(track) == ["Violin"])
     }
@@ -481,7 +481,7 @@ extension MIDIImporterTests {
         let key = MIDIData1Value(60)
         let tempoTrack = SMFTrack(events: [.meta(.zero, .smpteOffset(offset)),
                                            .meta(.zero, .endOfTrack)])
-        let noteTrack = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(1), MIDIData1Value(40))),
+        let noteTrack = SMFTrack(events: [.midi(.zero, .programChange(MIDIChannel(1), MIDIProgram(41))),
                                           .midi(.zero, .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
                                           .midi(SMFEventTime(300), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
                                           .meta(SMFEventTime(300), .endOfTrack)])

@@ -4,6 +4,8 @@ internal import Foundation
 internal import IvorGMN
 internal import IvorModel
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers
@@ -258,7 +260,9 @@ extension Guido.Exporter {
         var directives: [(BeatTime, GMNInstrument)] = []
 
         for entry in instrumentMap {
-            let midi = intValue(entry.extras, .midiProgram).map { $0 - 1 } ?? generalMIDIProgramNumber(name: entry.instrument.stringValue)
+            let exactProgram = intValue(entry.extras, .midiProgram)
+            let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
+            let midi = (exactProgram ?? derivedProgram).map { $0 - 1 }
 
             let name = stringValue(entry.extras, .instrumentName) ?? entry.instrument.stringValue
 

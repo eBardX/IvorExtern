@@ -23,7 +23,6 @@ extension MIDI {
         case tooManyParts(Int)
         case unexpectedNoteOff(channel: Channel, key: NoteNumber, time: EventTime)
         case unpairedNoteOn(channel: Channel, key: NoteNumber, time: EventTime)
-        case unsupportedDivision(Division)
         case unsupportedFileFormat(String)
         case unsupportedPitchNotation(PitchNotation)
         case validationFailure([MIDI.Validator.Issue])
@@ -95,9 +94,6 @@ extension MIDI.Error: EnhancedError {
 
         case let .unpairedNoteOn(channel, key, time):
             "Unpaired note-on on channel \(channel.uintValue) for key \(key.uintValue) at time \(time.uintValue) with no matching note-off"
-
-        case let .unsupportedDivision(division):
-            "Unsupported SMF division: ‘\(division)’"
 
         case let .unsupportedFileFormat(fileFormat):
             "Unsupported file format: ‘\(fileFormat)’"

@@ -6,6 +6,8 @@ internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import XestiNumbers
 
 // MARK: Internal Functions
@@ -220,15 +222,18 @@ internal func convertToGuidoTempo(_ tempo: Tempo, text: String? = nil) -> GMNTem
 // the tag's one non-omissible parameter. `MIDI` only stands in when a name
 // was never written, which the required-parameter promotion rule (see
 // `GMNInstrument`'s doc comment) makes impossible in a well-formed score, but
-// this still degrades gracefully rather than assuming it.
+// this still degrades gracefully rather than assuming it. `MIDI` is the raw
+// 0–127 program-change value, so a value outside that range has no GM name
+// and also degrades to `.vanilla`; the importer keeps it, unchanged, in the
+// `midiProgram` extra.
 internal func convertToInstrument(_ instrument: GMNInstrument) -> Instrument {
     guard instrument.instrumentName.isEmpty
     else { return Instrument(stringValue: instrument.instrumentName) ?? .vanilla }
 
-    guard let midi = instrument.midi
+    guard let program = instrument.midi.flatMap({ UInt(exactly: $0) }).flatMap({ MIDIProgram(uintValue: $0 + 1) })
     else { return .vanilla }
 
-    return Instrument(stringValue: generalMIDIInstrumentName(program: midi)) ?? .vanilla
+    return Instrument(stringValue: GM1Instrument(program: program).name) ?? .vanilla
 }
 
 internal func convertToStandardPitch(_ pitch: Guido.Pitch) throws(Guido.Error) -> Pitch {

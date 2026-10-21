@@ -1,11 +1,15 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+// swiftlint:disable file_length
+
 internal import IvorModel
 internal import IvorMXL
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import XestiNumbers
 
 // MARK: Internal Functions
@@ -143,10 +147,10 @@ internal func convertToInstrument(_ scorePart: MusicXML.ScorePart) -> Instrument
         return Instrument(stringValue: generalMIDIPercussionName(note: Int(unpitched.uintValue) - 1))
     }
 
-    guard let program = midiInstrument?.midiProgram
+    guard let program = midiInstrument?.midiProgram.flatMap({ MIDIProgram(uintValue: $0.uintValue) })
     else { return nil }
 
-    return Instrument(stringValue: generalMIDIInstrumentName(program: Int(program.uintValue) - 1))
+    return Instrument(stringValue: GM1Instrument(program: program).name)
 }
 
 // A quarter-note-based `BeatDuration` expressed in the work's own

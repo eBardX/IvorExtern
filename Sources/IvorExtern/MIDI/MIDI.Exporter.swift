@@ -385,11 +385,11 @@ extension MIDI.Exporter {
 
         for entry in instrumentMap {
             let exactProgram = intValue(entry.extras, .midiProgram).flatMap {
-                $0 >= 1 ? MIDI.ProgramNumber(uintValue: UInt($0 - 1)) : nil
+                $0 >= 1 ? MIDI.Program(uintValue: UInt($0)) : nil
             }
 
             if let eventTime = tickMap.eventTime(at: entry.time),
-               let program = exactProgram ?? convertToMIDIProgramNumber(entry.instrument) {
+               let program = exactProgram ?? convertToMIDIProgram(entry.instrument) {
                 if let bank = intValue(entry.extras, .midiBank), bank >= 1 {
                     let raw = UInt(bank - 1)
 

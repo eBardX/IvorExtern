@@ -26,7 +26,7 @@ extension MIDIFunctionsTests {
 
     @Test
     func convertToInstrument_looksUpGeneralMIDIName() {
-        #expect(convertToInstrument(MIDIData1Value(40)) == Instrument("Violin"))
+        #expect(convertToInstrument(MIDIProgram(41)) == Instrument("Violin"))
     }
 
     @Test
@@ -55,6 +55,16 @@ extension MIDIFunctionsTests {
         let panValue = try #require(convertToMIDIPanValue(.right))
 
         #expect(panValue == MIDIData1Value(127))
+    }
+
+    @Test
+    func convertToMIDIProgram_generalMIDIName_returnsProgram() {
+        #expect(convertToMIDIProgram(Instrument("Violin")) == MIDIProgram(41))
+    }
+
+    @Test
+    func convertToMIDIProgram_negativeFallbackForm_returnsNil() {
+        #expect(convertToMIDIProgram(Instrument("Program -5")) == nil)
     }
 
     @Test

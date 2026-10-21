@@ -54,7 +54,7 @@ extension MIDITickMapTests {
     @Test
     func subscript_timeCode_invertsBeatMap() throws {
         let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
-        var beatMap = try MIDI.BeatMap(division: .timeCode(timeCode))
+        var beatMap = MIDI.BeatMap(division: .timeCode(timeCode))
 
         try beatMap.append(eventTime: SMFEventTime(1_234), tempo: 461_538)
         try beatMap.append(eventTime: SMFEventTime(5_678), tempo: 700_001)

@@ -107,14 +107,14 @@ extension MIDIExporterTests {
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
 
-        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.ProgramNumber? in
+        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.Program? in
             guard case let .midi(_, .programChange(_, program)) = event
             else { return nil }
 
             return program
         }
 
-        #expect(programChanges == [MIDI.ProgramNumber(0), MIDI.ProgramNumber(11)])
+        #expect(programChanges == [MIDI.Program(1), MIDI.Program(12)])
     }
 
     @Test
@@ -159,14 +159,14 @@ extension MIDIExporterTests {
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
 
-        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.ProgramNumber? in
+        let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.Program? in
             guard case let .midi(_, .programChange(_, program)) = event
             else { return nil }
 
             return program
         }
 
-        #expect(programChanges == [MIDI.ProgramNumber(11)])
+        #expect(programChanges == [MIDI.Program(12)])
     }
 
     @Test

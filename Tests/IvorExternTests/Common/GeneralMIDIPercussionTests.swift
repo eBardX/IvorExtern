@@ -15,6 +15,16 @@ extension GeneralMIDIPercussionTests {
     }
 
     @Test
+    func generalMIDIPercussionName_closedHiHatNote_usesSpecSpelling() {
+        #expect(generalMIDIPercussionName(note: 42) == "Closed Hi Hat")
+    }
+
+    @Test
+    func generalMIDIPercussionName_negativeNote_returnsFallback() {
+        #expect(generalMIDIPercussionName(note: -1) == "Percussion -1")
+    }
+
+    @Test
     func generalMIDIPercussionName_outOfRangeNote_returnsFallback() {
         #expect(generalMIDIPercussionName(note: 128) == "Percussion 128")
     }

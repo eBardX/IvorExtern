@@ -6,6 +6,7 @@ internal import IvorTiming
 internal import IvorTuning
 
 private import Foundation
+private import IvorGeneralMIDI
 private import IvorMIDI
 private import IvorSMF
 private import XestiNumbers
@@ -17,8 +18,8 @@ internal func convertToDynamic(_ keyVelocity: MIDI.KeyVelocity) -> Dynamic? {
     Dynamic(numberValue: Number(Double(keyVelocity.uintValue) / 127.0))
 }
 
-internal func convertToInstrument(_ program: MIDI.ProgramNumber) -> Instrument {
-    Instrument(stringValue: generalMIDIInstrumentName(program: Int(program.uintValue))) ?? .vanilla
+internal func convertToInstrument(_ program: MIDI.Program) -> Instrument {
+    Instrument(stringValue: GM1Instrument(program: program).name) ?? .vanilla
 }
 
 internal func convertToMIDIEventTime(_ beatTime: BeatTime,
@@ -38,11 +39,8 @@ internal func convertToMIDIPanValue(_ pan: Pan) -> MIDI.PanValue? {
     MIDI.PanValue(uintValue: UInt((((pan.stereo.doubleValue + 1.0) / 2.0) * 127.0).rounded()))
 }
 
-internal func convertToMIDIProgramNumber(_ instrument: Instrument) -> MIDI.ProgramNumber? {
-    guard let program = generalMIDIProgramNumber(name: instrument.stringValue)
-    else { return nil }
-
-    return MIDI.ProgramNumber(uintValue: UInt(program))
+internal func convertToMIDIProgram(_ instrument: Instrument) -> MIDI.Program? {
+    GM1Instrument(name: instrument.stringValue)?.program
 }
 
 internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {

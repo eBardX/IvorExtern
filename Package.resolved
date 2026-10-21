@@ -1,5 +1,5 @@
 {
-  "originHash" : "f3281f366841fe601ed9c897757f42f08da8a0e7afbbbb676adda8bb42a15563",
+  "originHash" : "22d60844fcbab996f709584fbad6cb6bf6918b991d6e79013a6ea448734325b1",
   "pins" : [
     {
       "identity" : "bigint",
@@ -29,6 +29,15 @@
       }
     },
     {
+      "identity" : "ivorgeneralmidi",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/eBardX/IvorGeneralMIDI.git",
+      "state" : {
+        "revision" : "8d7d5baeb54f3e38c8d44736e5b38a637f950ae2",
+        "version" : "0.2.1"
+      }
+    },
+    {
       "identity" : "ivorgmn",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorGMN.git",
@@ -42,8 +51,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMIDI.git",
       "state" : {
-        "revision" : "0d83c46356254a7853ad83b32e6f5b424740438f",
-        "version" : "0.1.0"
+        "revision" : "96d85011bff159573a5d366e656e6907f6e6d692",
+        "version" : "0.3.0"
       }
     },
     {
@@ -69,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorSMF.git",
       "state" : {
-        "revision" : "6cc719590e2d042984f548658a53de4088c4e3e4",
-        "version" : "0.3.1"
+        "revision" : "317d79e15c2f414ebc7000291970ad3c3732fb79",
+        "version" : "0.4.0"
       }
     },
     {

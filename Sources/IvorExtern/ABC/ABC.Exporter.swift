@@ -4,6 +4,8 @@ internal import Foundation
 internal import IvorABC
 internal import IvorModel
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers
@@ -265,9 +267,9 @@ extension ABC.Exporter {
     // A `program`/`instrument` pair emits `%%MIDI program [c] n`, `n` in
     // its native 1–128 form — the ABC standard's and abc2midi.txt's own
     // convention, matching the `midiProgram` extra's "1-128 convention"
-    // (see `EXTRAS_CANDIDATES.md`) — so no adjustment is needed on the
-    // exact-extra path, while a name-derived lookup (0-based) still needs
-    // its own `+1`. A `midiChannel` extra with no resolvable program (an
+    // (see `EXTRAS_CANDIDATES.md`) and `MIDIProgram`'s — so neither the
+    // exact-extra path nor a name-derived lookup needs any adjustment. A
+    // `midiChannel` extra with no resolvable program (an
     // `.vanilla` instrument left over from a channel-only import — see
     // `ABC.Importer._makeInstrumentMap`) falls back to a standalone
     // `%%MIDI channel n` instead of dropping the channel entirely.
@@ -277,7 +279,7 @@ extension ABC.Exporter {
 
         for entry in instrumentMap {
             let exactProgram = intValue(entry.extras, .midiProgram)
-            let derivedProgram = generalMIDIProgramNumber(name: entry.instrument.stringValue).map { $0 + 1 }
+            let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
 
             if let program = exactProgram ?? derivedProgram {
                 let value = if let channel = intValue(entry.extras, .midiChannel) {

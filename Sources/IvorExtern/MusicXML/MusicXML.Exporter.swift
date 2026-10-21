@@ -4,6 +4,8 @@ internal import Foundation
 internal import IvorModel
 internal import IvorMXL
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import IvorTiming
 private import IvorTuning
 private import XestiNumbers
@@ -587,7 +589,7 @@ extension MusicXML.Exporter {
                                                   abbreviation: stringValue(first?.extras, .instrumentAbbreviation)))
 
             let exactProgram = intValue(first?.extras, .midiProgram)
-            let derivedProgram = generalMIDIProgramNumber(name: instrument.stringValue).map { $0 + 1 }
+            let derivedProgram = GM1Instrument(name: instrument.stringValue).map { Int($0.program.uintValue) }
             let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
             let midiChannel = intValue(first?.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
             let midiBank = intValue(first?.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }

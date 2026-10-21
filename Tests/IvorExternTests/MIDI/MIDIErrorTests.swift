@@ -127,14 +127,6 @@ extension MIDIErrorTests {
     }
 
     @Test
-    func unsupportedDivision_message() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps24, ticksPerFrame: 40))
-        let error = MIDI.Error.unsupportedDivision(.timeCode(timeCode))
-
-        #expect(error.message.hasPrefix("Unsupported SMF division:"))
-    }
-
-    @Test
     func unsupportedFileFormat_message() {
         let error = MIDI.Error.unsupportedFileFormat("midi")
 

@@ -43,7 +43,7 @@ extension MIDIVoiceTests {
                              startTime: SMFEventTime(0))
         let pan = MIDIChannelMessage.controlChange(channel, .panMSB, MIDIData1Value(0x60))
         let panEvent = SMFEvent.midi(SMFEventTime(0), pan)
-        let program = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let program = MIDIChannelMessage.programChange(channel, MIDIProgram(41))
         let programChangeEvent = SMFEvent.midi(SMFEventTime(0), program)
         let bank = MIDIChannelMessage.controlChange(channel, .bankSelectMSB, MIDIData1Value(1))
         let bankSelectEvent = SMFEvent.midi(SMFEventTime(0), bank)

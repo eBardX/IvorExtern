@@ -21,12 +21,9 @@ extension MIDI {
         // second — one exact division by the frame rate and ticks per frame —
         // so the quarter notes a tick spans depend on the tempo in effect,
         // and every tempo change starts a new entry.
-        internal init(division: MIDI.Division) throws(MIDI.Error) {
+        internal init(division: MIDI.Division) {
             switch division {
             case let .metrical(tickRate):
-                guard tickRate.uintValue > 0
-                else { throw MIDI.Error.unsupportedDivision(division) }
-
                 self.tickRate = tickRate.uintValue
                 self.ticksPerSecond = nil
 

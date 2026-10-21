@@ -8,6 +8,8 @@ internal import IvorTuning
 
 internal import XestiTools
 
+private import IvorGeneralMIDI
+private import IvorMIDI
 private import XestiNumbers
 
 // MARK: Internal Functions
@@ -281,9 +283,9 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 //
 // Both the ABC 2.0 draft standard (§14.1) and `abc2midi.txt` itself
 // document `program-number` as 1–128 — the human-facing GM convention,
-// same as MusicXML's `<midi-program>` — not the raw 0–127 wire value, so
-// it's converted to a 0-based index before the table lookup. The returned
-// `program` stays in its native 1–128 form, matching the `midiProgram`
+// same as MusicXML's `<midi-program>` and `MIDIProgram` — not the raw
+// 0–127 wire value, so it looks up its GM name unchanged. The returned
+// `program` stays in that native 1–128 form, matching the `midiProgram`
 // extra's own "1-128 convention" (see `EXTRAS_CANDIDATES.md`).
 internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Instrument, channel: Int?, program: Int)? {
     guard directive.name.stringValue.lowercased() == "midi"
@@ -295,10 +297,8 @@ internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Ins
           keyword.lowercased() == "program",
           let programToken = tokens.last,
           let program = Int(programToken),
-          (1...128).contains(program)
-    else { return nil }
-
-    guard let instrument = Instrument(stringValue: generalMIDIInstrumentName(program: program - 1))
+          let midiProgram = UInt(exactly: program).flatMap({ MIDIProgram(uintValue: $0) }),
+          let instrument = Instrument(stringValue: GM1Instrument(program: midiProgram).name)
     else { return nil }
 
     let channel = tokens.count == 3 ? Int(tokens[1]) : nil

@@ -272,7 +272,7 @@ extension MIDI.Importer {
 
     private static func _makeBeatMap(_ division: MIDI.Division,
                                      _ timeline: [MIDI.Event]) throws(MIDI.Error) -> MIDI.BeatMap {
-        var beatMap = try MIDI.BeatMap(division: division)
+        var beatMap = MIDI.BeatMap(division: division)
 
         for event in timeline {
             switch event {
@@ -384,7 +384,7 @@ extension MIDI.Importer {
             case let .midi(eventTime, .programChange(_, program)):
                 let time = timeMap.time(at: eventTime)
                 var elements = [Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]),
-                                Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue) + 1)])]
+                                Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))])]
 
                 if let volume {
                     elements.append(Extra(name: Extra.midiVolume.name,

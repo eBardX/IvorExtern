@@ -31,7 +31,7 @@ extension MIDIInfoTests {
                                        .meta(.zero, .lyric(SMFText("{@LATIN}{#Title=Dawn Song}{#Composer=J. Smith}"))),
                                        .meta(.zero, .lyric(SMFText("{#Lyrics=A. Poet}{#Artist=The Band}{#}"))),
                                        .meta(.zero, .instrumentName(SMFText("Flauto 1"))),
-                                       .midi(.zero, .programChange(MIDIChannel(1), MIDIData1Value(73))),
+                                       .midi(.zero, .programChange(MIDIChannel(1), MIDIProgram(74))),
                                        .midi(.zero, .noteOn(MIDIChannel(1), key, MIDIData1Value(100))),
                                        .midi(SMFEventTime(480), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))),
                                        .meta(SMFEventTime(480), .endOfTrack)])

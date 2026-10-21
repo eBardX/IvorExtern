@@ -106,7 +106,7 @@ extension MIDIImporterNotePairerTests {
     func ingest_programChange_collected() throws {
         let t0 = SMFEventTime(0)
         let channel = MIDIChannel(1)
-        let program = MIDIChannelMessage.programChange(channel, MIDIData1Value(40))
+        let program = MIDIChannelMessage.programChange(channel, MIDIProgram(41))
         var pairer = MIDI.Importer.NotePairer(channel: channel)
 
         try pairer.ingest(.midi(t0, program))
