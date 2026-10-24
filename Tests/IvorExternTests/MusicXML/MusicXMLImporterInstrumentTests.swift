@@ -51,7 +51,8 @@ extension MusicXMLImporterInstrumentTests {
         }
 
         #expect(foundChannel == 3)
-        #expect(foundBank == 131)
+        // `<midi-bank>131</midi-bank>` numbers from 1.
+        #expect(foundBank == 130)
     }
 
     @Test

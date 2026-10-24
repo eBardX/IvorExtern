@@ -308,7 +308,7 @@ extension MIDIExporterTests {
 
         try instrumentMap.insert(time: BeatTime(0),
                                  instrument: #require(Instrument(stringValue: "Vibraphone")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(131)])]))
+                                 extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(130)])]))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
@@ -330,7 +330,7 @@ extension MIDIExporterTests {
             return value
         }
 
-        // Bank 131, 1-based -> raw 130 -> MSB 1, LSB 2.
+        // Bank 130 -> MSB 1, LSB 2.
         #expect(bankMSB == [MIDIData1Value(1)])
         #expect(bankLSB == [MIDIData1Value(2)])
 

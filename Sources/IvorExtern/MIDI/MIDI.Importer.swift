@@ -393,7 +393,7 @@ extension MIDI.Importer {
 
                 if let bankMSB, let bankLSB {
                     elements.append(Extra(name: Extra.midiBank.name,
-                                          values: [.int(Int((bankMSB << 7) | bankLSB) + 1)]))
+                                          values: [.int(Int((bankMSB << 7) | bankLSB))]))
                 }
 
                 if let instrumentName = instrumentName.map({ normalizeName($0) })?.nilIfEmpty {

@@ -390,11 +390,9 @@ extension MIDI.Exporter {
 
             if let eventTime = tickMap.eventTime(at: entry.time),
                let program = exactProgram ?? convertToMIDIProgram(entry.instrument) {
-                if let bank = intValue(entry.extras, .midiBank), bank >= 1 {
-                    let raw = UInt(bank - 1)
-
-                    if let msb = MIDIData1Value(uintValue: raw >> 7),
-                       let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
+                if let bank = intValue(entry.extras, .midiBank).flatMap(UInt.init(exactly:)) {
+                    if let msb = MIDIData1Value(uintValue: bank >> 7),
+                       let lsb = MIDIData1Value(uintValue: bank & 0x7f) {
                         events.append(.midi(eventTime, .controlChange(channel, .bankSelectMSB, msb)))
                         events.append(.midi(eventTime, .controlChange(channel, .bankSelectLSB, lsb)))
                     }

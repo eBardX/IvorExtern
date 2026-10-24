@@ -234,8 +234,10 @@ extension MusicXML.Importer {
                 elements.append(Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]))
             }
 
+            // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from
+            // 0, the value sent.
             if let bank = midiInstrument?.midiBank {
-                elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue))]))
+                elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue) - 1)]))
             }
 
             // `<midi-program>`/`<midi-unpitched>` are already 1-based, per

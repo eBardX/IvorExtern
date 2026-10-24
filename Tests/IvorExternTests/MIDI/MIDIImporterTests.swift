@@ -42,8 +42,8 @@ extension MIDIImporterTests {
             foundBank = intValue(entry.extras, .midiBank)
         }
 
-        // MSB 1, LSB 2 -> (1 << 7) | 2 == 130, plus the 1-based convention.
-        #expect(foundBank == 131)
+        // MSB 1, LSB 2 -> (1 << 7) | 2 == 130.
+        #expect(foundBank == 130)
     }
 
     @Test

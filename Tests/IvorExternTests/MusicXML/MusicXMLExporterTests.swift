@@ -183,7 +183,7 @@ extension MusicXMLExporterTests {
         try instrumentMap.insert(time: BeatTime(0),
                                  instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
                                  extras: Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(3)]),
-                                                           Extra(name: Extra.midiBank.name, values: [.int(131)])]))
+                                                           Extra(name: Extra.midiBank.name, values: [.int(130)])]))
 
         let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
@@ -195,6 +195,7 @@ extension MusicXMLExporterTests {
         }.first)
 
         #expect(scorePart.group2.first?.midiInstrument?.midiChannel?.uintValue == 3)
+        // `<midi-bank>` numbers from 1.
         #expect(scorePart.group2.first?.midiInstrument?.midiBank?.uintValue == 131)
     }
 

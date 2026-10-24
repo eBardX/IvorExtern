@@ -592,7 +592,8 @@ extension MusicXML.Exporter {
             let derivedProgram = GM1Instrument(name: instrument.stringValue).map { Int($0.program.uintValue) }
             let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
             let midiChannel = intValue(first?.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
-            let midiBank = intValue(first?.extras, .midiBank).flatMap { MXLMidi16384(uintValue: UInt($0)) }
+            // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from 0.
+            let midiBank = intValue(first?.extras, .midiBank).flatMap { $0 >= 0 ? MXLMidi16384(uintValue: UInt($0 + 1)) : nil }
             let exactUnpitched = intValue(first?.extras, .midiUnpitched)
             let derivedUnpitched = generalMIDIPercussionNote(name: instrument.stringValue).map { $0 + 1 }
             let midiUnpitched = (exactUnpitched ?? derivedUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
