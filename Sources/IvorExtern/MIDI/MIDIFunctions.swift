@@ -40,7 +40,7 @@ internal func convertToMIDIPanValue(_ pan: Pan) -> MIDI.PanValue? {
 }
 
 internal func convertToMIDIProgram(_ instrument: Instrument) -> MIDI.Program? {
-    GM1Instrument(name: instrument.stringValue)?.program
+    instrument.generalMIDIInstrument?.program
 }
 
 internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {

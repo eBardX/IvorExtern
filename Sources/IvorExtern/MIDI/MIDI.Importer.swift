@@ -359,8 +359,8 @@ extension MIDI.Importer {
                                                                         channel: MIDI.Channel,
                                                                         _ timeMap: TimeMap) -> InstrumentMap<TimeMap.TimeType> {
         var instrumentMap = InstrumentMap<TimeMap.TimeType>()
-        var bankMSB: UInt?
-        var bankLSB: UInt?
+        var bankMSB: MIDIData1Value?
+        var bankLSB: MIDIData1Value?
         var volume: UInt?
         var instrumentName: String?
 
@@ -373,10 +373,10 @@ extension MIDI.Importer {
                 instrumentName = text.stringValue.nilIfEmpty
 
             case let .midi(_, .controlChange(_, .bankSelectMSB, value)):
-                bankMSB = value.uintValue
+                bankMSB = value
 
             case let .midi(_, .controlChange(_, .bankSelectLSB, value)):
-                bankLSB = value.uintValue
+                bankLSB = value
 
             case let .midi(_, .controlChange(_, .channelVolumeMSB, value)):
                 volume = value.uintValue
@@ -393,7 +393,7 @@ extension MIDI.Importer {
 
                 if let bankMSB, let bankLSB {
                     elements.append(Extra(name: Extra.midiBank.name,
-                                          values: [.int(Int((bankMSB << 7) | bankLSB))]))
+                                          values: [.int(Int(MIDIBank(msb: bankMSB, lsb: bankLSB).uintValue))]))
                 }
 
                 if let instrumentName = instrumentName.map({ normalizeName($0) })?.nilIfEmpty {

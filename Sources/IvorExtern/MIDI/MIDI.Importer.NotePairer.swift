@@ -119,10 +119,14 @@ extension MIDI.Importer.NotePairer {
     // MARK: Private Instance Methods
 
     private mutating func _checkPendingNotes() throws(MIDI.Error) {
-        let pending = openNotes.flatMap { key, opens in
+        let opened: [(key: MIDI.NoteNumber, startTime: MIDI.EventTime)] = openNotes.flatMap { key, opens in
             opens.map { (key: key, startTime: $0.startTime) }
-        }.sorted {
-            $0.startTime != $1.startTime ? $0.startTime < $1.startTime : $0.key.uintValue < $1.key.uintValue
+        }
+        let pending = opened.sorted { lhs, rhs in
+            guard lhs.startTime == rhs.startTime
+            else { return lhs.startTime < rhs.startTime }
+
+            return lhs.key.uintValue < rhs.key.uintValue
         }
 
         guard let first = pending.first
