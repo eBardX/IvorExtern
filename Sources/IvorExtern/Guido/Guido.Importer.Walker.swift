@@ -352,7 +352,8 @@ extension Guido.Importer.Walker {
                 .downBow
 
             default:
-                Extra(name: Extra.articulation.name, values: [.string("bow")])
+                Extra(name: Extra.articulation.name,
+                      values: [.string("bow")])
             }
 
         case .fermata:
@@ -365,7 +366,7 @@ extension Guido.Importer.Walker {
             .marcato
 
         case .pizzicato:
-            .pizzicato
+            convertToPizzicatoExtra(articulation.type)
 
         case .staccato:
             .staccato

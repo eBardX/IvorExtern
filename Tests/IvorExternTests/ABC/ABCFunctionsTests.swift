@@ -58,47 +58,65 @@ extension ABCFunctionsTests {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "channel 1")
 
-        #expect(convertToInstrument(directive) == nil)
+        #expect(convertToInstrument(directive, programBase: 0) == nil)
     }
 
     @Test
     func convertToInstrument_nonMIDIDirective_returnsNil() {
         let directive = ABCDirective(name: .linebreak, value: "program 40")
 
-        #expect(convertToInstrument(directive) == nil)
+        #expect(convertToInstrument(directive, programBase: 0) == nil)
     }
 
-    @Test
-    func convertToInstrument_programOutOfRange_returnsNil() throws {
+    @Test(arguments: [(0, "program 128"), (0, "program -1"), (1, "program 129"), (1, "program 0")])
+    func convertToInstrument_programOutOfRange_returnsNil(_ programBase: Int,
+                                                          _ value: String) throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
-        let directive = ABCDirective(name: name, value: "program 129")
+        let directive = ABCDirective(name: name, value: value)
 
-        #expect(convertToInstrument(directive) == nil)
+        #expect(convertToInstrument(directive, programBase: programBase) == nil)
     }
 
     @Test
     func convertToInstrument_programWithChannel_usesTrailingProgramNumber() throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "program 1 41")
-        let resolved = convertToInstrument(directive)
+        let resolved = convertToInstrument(directive, programBase: 1)
 
         #expect(resolved?.instrument == Instrument("Violin"))
         #expect(resolved?.channel == 1)
         #expect(resolved?.program == 41)
     }
 
-    // `program 40` is 1-based per the ABC standard and `abc2midi.txt`, so
-    // it names GM patch 40 ("Synth Bass 2", 0-based index 39) — not the
-    // 0-based index 40 ("Violin") a naive pass-through would produce.
-    @Test
-    func convertToInstrument_programWithoutChannel_looksUpGeneralMIDIName() throws {
+    // abc2midi counts from 0 by default, so `program 40` is the MIDI wire
+    // value 40, General MIDI program 41 ("Violin"); counting from 1, as the
+    // ABC standard does, it's program 40 ("Synth Bass 2").
+    @Test(arguments: [(0, "Violin", 41), (1, "Synth Bass 2", 40)])
+    func convertToInstrument_programWithoutChannel_countsFromProgramBase(_ programBase: Int,
+                                                                         _ expectedName: String,
+                                                                         _ expectedProgram: Int) throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
         let directive = ABCDirective(name: name, value: "program 40")
-        let resolved = convertToInstrument(directive)
+        let resolved = convertToInstrument(directive, programBase: programBase)
 
-        #expect(resolved?.instrument == Instrument("Synth Bass 2"))
+        #expect(resolved?.instrument == Instrument(expectedName))
         #expect(resolved?.channel == nil)
-        #expect(resolved?.program == 40)
+        #expect(resolved?.program == expectedProgram)
+    }
+
+    @Test(arguments: [("programbase 0", 0), ("programbase 1", 1), ("programbase 7", 1), ("ProgramBase 0", 0)])
+    func convertToProgramBase_programBaseDirective_returnsZeroOrOne(_ value: String,
+                                                                    _ expected: Int) throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+
+        #expect(convertToProgramBase(ABCDirective(name: name, value: value)) == expected)
+    }
+
+    @Test(arguments: ["program 40", "programbase", "programbase one"])
+    func convertToProgramBase_otherDirective_returnsNil(_ value: String) throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+
+        #expect(convertToProgramBase(ABCDirective(name: name, value: value)) == nil)
     }
 
     @Test
@@ -174,6 +192,42 @@ extension ABCFunctionsTests {
         let tempo = try #require(ABCTempo(lengths: [], rate: nil, text: "Allegro"))
 
         #expect(convertToTempo(tempo) == nil)
+    }
+
+    @Test(arguments: ["program 41", "voice Tb mute", "voice instrument=0", "voice instrument=129", "voice Tb"])
+    func convertToVoiceInstrument_noUsableInstrument_returnsNil(_ value: String) throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+
+        #expect(convertToVoiceInstrument(ABCDirective(name: name, value: value)) == nil)
+    }
+
+    @Test
+    func convertToVoiceInstrument_nonMIDIDirective_returnsNil() {
+        let directive = ABCDirective(name: .linebreak, value: "voice instrument=59")
+
+        #expect(convertToVoiceInstrument(directive) == nil)
+    }
+
+    @Test
+    func convertToVoiceInstrument_withIDAndBank_convertsBankToZeroBased() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let resolved = convertToVoiceInstrument(ABCDirective(name: name, value: "voice Tb instrument=59 bank=2 mute"))
+
+        #expect(resolved?.voiceID?.stringValue == "Tb")
+        #expect(resolved?.instrument == Instrument("Tuba"))
+        #expect(resolved?.program == 59)
+        #expect(resolved?.bank == 1)
+    }
+
+    @Test
+    func convertToVoiceInstrument_withoutIDOrBank_leavesBothNil() throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+        let resolved = convertToVoiceInstrument(ABCDirective(name: name, value: "voice instrument=41"))
+
+        #expect(resolved != nil)
+        #expect(resolved?.voiceID == nil)
+        #expect(resolved?.instrument == Instrument("Violin"))
+        #expect(resolved?.bank == nil)
     }
 
     @Test

@@ -151,7 +151,9 @@ internal func convertToGuidoPitch(_ pitch: Pitch) throws(Guido.Error) -> GMNPitc
 // MusicXML's `other…` cases do, so the `articulation` catch-all extra has
 // nothing to convert to here and is silently dropped on export — a real,
 // documented asymmetry, not a bug: Guido's own closed vocabulary is simply
-// narrower than what this vocabulary's catch-all needs to hold.
+// narrower than what this vocabulary's catch-all needs to hold. The one
+// exception is a pizzicato variant the importer put there (see
+// `convertToPizzicatoExtra(_:)`), which goes back to `\pizz<type=…>`.
 internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
     switch extra.name {
     case Extra.accent.name:
@@ -174,6 +176,11 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
 
     case Extra.pizzicato.name:
         GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.articulation.name:
+        _convertToPizzicatoType(extra).flatMap {
+            GMNArticulation(kind: .pizzicato, type: $0, body: body).map { GMNTag.articulation($0) }
+        }
 
     case Extra.upBow.name:
         GMNArticulation(kind: .bow, type: "up", body: body).map { GMNTag.articulation($0) }
@@ -234,6 +241,20 @@ internal func convertToInstrument(_ instrument: GMNInstrument) -> Instrument {
     else { return .vanilla }
 
     return Instrument(stringValue: GM1Instrument(program: program).name) ?? .vanilla
+}
+
+// guidolib's `\pizz` draws a left-hand pizzicato (a `+`) by default, and
+// that or an unrecognized `type` reads as the plain `pizzicato` flag. Its
+// four other types have no flag of their own, so each goes to the
+// `articulation` catch-all as `<type>Pizzicato` (`"snapPizzicato"`, say),
+// where `convertToGuidoTag(_:body:)` finds it again on export.
+internal func convertToPizzicatoExtra(_ type: String?) -> Extra {
+    guard let type = type?.lowercased(),
+          pizzicatoTypes.contains(type)
+    else { return .pizzicato }
+
+    return Extra(name: Extra.articulation.name,
+                 values: [.string(type + pizzicatoSuffix)])
 }
 
 internal func convertToStandardPitch(_ pitch: Guido.Pitch) throws(Guido.Error) -> Pitch {
@@ -321,6 +342,11 @@ internal func determineWorkName(_ score: Guido.Score) -> String {
 
     return titles.joined(separator: ": ")
 }
+
+// MARK: Private Constants
+
+private let pizzicatoSuffix = "Pizzicato"
+private let pizzicatoTypes: Set<String> = ["bartok", "buzz", "fingernail", "snap"]
 
 // MARK: Private Functions
 
@@ -459,6 +485,16 @@ private func _convertToStandardPitchOctave(_ gpOctave: Int) throws(Guido.Error) 
 // and part names — metadata the walk never surfaces on its own (it builds a
 // note table, not a tag stream), so it is read from the validated,
 // pre-walk AST instead.
+private func _convertToPizzicatoType(_ extra: Extra) -> String? {
+    guard case let .string(text)? = extra.values.first,
+          text.hasSuffix(pizzicatoSuffix)
+    else { return nil }
+
+    let type = String(text.dropLast(pizzicatoSuffix.count))
+
+    return pizzicatoTypes.contains(type) ? type : nil
+}
+
 private func _findTags(_ symbols: [Guido.Symbol]) -> [Guido.Tag] {
     var tags: [Guido.Tag] = []
 

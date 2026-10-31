@@ -172,6 +172,46 @@ extension GuidoRoundTripTests {
     }
 
     @Test
+    func roundTrip_pizzicatoVariants_preservesTypes() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: Extras(elements: [.pizzicato]))
+        table.insert(attack: BeatTime(1),
+                     duration: BeatDuration(1),
+                     pitch: "D4",
+                     extras: Extras(elements: [Extra(name: Extra.articulation.name, values: [.string("snapPizzicato")])]))
+        table.insert(attack: BeatTime(2),
+                     duration: BeatDuration(1),
+                     pitch: "E4",
+                     extras: Extras(elements: [Extra(name: Extra.articulation.name, values: [.string("bow")])]))
+
+        let part = Part(name: "Violin", noteTable: table)
+        let work = Work(name: "Pizzicato", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        var flags: [(pizzicato: Bool, articulation: String?)] = []
+
+        for note in recoveredPart.noteTable {
+            flags.append((hasFlag(note.extras, .pizzicato), stringValue(note.extras, .articulation)))
+        }
+
+        #expect(flags.count == 3)
+        #expect(flags[0].pizzicato)
+        #expect(flags[0].articulation == nil)
+        #expect(!flags[1].pizzicato)
+        #expect(flags[1].articulation == "snapPizzicato")
+        #expect(flags[2].articulation == nil)   // Guido has no tag for a free-text articulation
+    }
+
+    @Test
     func roundTrip_tempo_preservesFlatValue() throws {
         var tempoMap = TempoMap()
 

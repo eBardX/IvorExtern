@@ -136,6 +136,23 @@ internal func determineTimeCode(_ content: Work.Content) -> MIDI.TimeCode? {
     }
 }
 
+// The exact key velocity an importer kept on a dynamic-map entry (the
+// `velocity` extra), keyed by the entry's time. A note attacked at one of
+// these times sounds at that velocity rather than one converted from the
+// dynamic level.
+internal func exactKeyVelocities<TimeType: TimeProtocol>(in dynamicMap: DynamicMap<TimeType>) -> [TimeType: MIDI.KeyVelocity] {
+    var result: [TimeType: MIDI.KeyVelocity] = [:]
+
+    for entry in dynamicMap {
+        if let velocity = intValue(entry.extras, .velocity),
+           let value = MIDI.KeyVelocity(uintValue: UInt(clamping: velocity)) {
+            result[entry.time] = value
+        }
+    }
+
+    return result
+}
+
 // The start time a file with this division implies when it has no SMPTE
 // Offset: 00:00:00:00 at a timecode division's frame rate, or the default
 // under a metrical one. `MIDI.Importer` gives such a file's work this start

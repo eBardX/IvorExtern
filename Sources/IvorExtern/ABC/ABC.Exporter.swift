@@ -51,6 +51,11 @@ extension ABC.Exporter {
         }
     }
 
+    // MARK: Private Type Properties
+
+    private static let midiDirectiveName = ABCDirective.Name(stringValue: "MIDI").require()
+    private static let programKeyword    = "program"
+
     // MARK: Private Type Methods
 
     // Lays one part's notes onto the fixed 4/4 grid: a note or chord
@@ -264,33 +269,44 @@ extension ABC.Exporter {
         return fields
     }
 
-    // A `program`/`instrument` pair emits `%%MIDI program [c] n`, `n` in
-    // its native 1–128 form — the ABC standard's and abc2midi.txt's own
-    // convention, matching the `midiProgram` extra's "1-128 convention"
-    // (see `EXTRAS_CANDIDATES.md`) and `MIDIProgram`'s — so neither the
-    // exact-extra path nor a name-derived lookup needs any adjustment. A
-    // `midiChannel` extra with no resolvable program (an
+    // A `program`/`instrument` pair emits `%%MIDI program [c] n`, written
+    // in the voice's own body, where abc2midi applies it to that voice. `n`
+    // is the `midiProgram` extra's 1–128 General MIDI number, so the header
+    // says `%%MIDI programbase 1` (see `_makeHeader`); abc2midi otherwise
+    // counts from 0. A `midiChannel` extra with no resolvable program (an
     // `.vanilla` instrument left over from a channel-only import — see
     // `ABC.Importer._makeInstrumentMap`) falls back to a standalone
     // `%%MIDI channel n` instead of dropping the channel entirely.
+    //
+    // `program` has no room for a bank, so an entry with a `midiBank` extra
+    // also writes ABC 2.1's `%%MIDI voice instrument=n bank=m`, `m`
+    // counting from 1 (see `convertToVoiceInstrument(_:)`). abc2midi
+    // ignores it, which is why `program` is still written; the importer
+    // prefers it. It names no voice, so it applies to the voice whose body
+    // it's written in.
     private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, ABCDirective)] {
         var directives: [(BeatTime, ABCDirective)] = []
-        let name = ABCDirective.Name(stringValue: "MIDI").require()
 
         for entry in instrumentMap {
             let exactProgram = intValue(entry.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
+            let channel = intValue(entry.extras, .midiChannel)
 
             if let program = exactProgram ?? derivedProgram {
-                let value = if let channel = intValue(entry.extras, .midiChannel) {
-                    "program \(channel) \(program)"
+                let value = if let channel {
+                    "\(programKeyword) \(channel) \(program)"
                 } else {
-                    "program \(program)"
+                    "\(programKeyword) \(program)"
                 }
 
-                directives.append((entry.time, ABCDirective(name: name, value: value)))
-            } else if let channel = intValue(entry.extras, .midiChannel) {
-                directives.append((entry.time, ABCDirective(name: name, value: "channel \(channel)")))
+                directives.append((entry.time, ABCDirective(name: midiDirectiveName, value: value)))
+
+                if let bank = intValue(entry.extras, .midiBank) {
+                    directives.append((entry.time, ABCDirective(name: midiDirectiveName,
+                                                                value: "voice instrument=\(program) bank=\(bank + 1)")))
+                }
+            } else if let channel {
+                directives.append((entry.time, ABCDirective(name: midiDirectiveName, value: "channel \(channel)")))
             }
         }
 
@@ -426,6 +442,14 @@ extension ABC.Exporter {
                                                        index: index,
                                                        count: parts.count))))
             }
+        }
+
+        let writesProgram = parts.contains { part in
+            _instrumentDirectives(part.instrumentMap).contains { $0.1.value.hasPrefix(programKeyword + " ") }
+        }
+
+        if writesProgram {
+            header.append(.directive(ABCDirective(name: midiDirectiveName, value: "programbase 1")))
         }
 
         // K:C, spelling every altered pitch class with an explicit

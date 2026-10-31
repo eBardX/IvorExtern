@@ -152,6 +152,31 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_instrumentMap_midiBankExtra_emitsProgramThenVoiceDirective() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0),
+                                 instrument: #require(Instrument(stringValue: "Church Organ")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(20)]),
+                                                           Extra(name: Extra.midiBank.name, values: [.int(8)])]))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let values = tune.body.compactMap { entry -> String? in
+            guard case let .directive(directive) = entry
+            else { return nil }
+
+            return directive.value
+        }
+
+        #expect(values == ["program 20", "voice instrument=20 bank=9"])
+    }
+
+    @Test
     func convert_instrumentMap_midiChannelExtra_emitsChannelToken() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -199,6 +224,28 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_instrumentMap_recognizedName_emitsProgramBaseOneInHeader() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
+
+        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let values = tune.header.compactMap { entry -> String? in
+            guard case let .directive(directive) = entry
+            else { return nil }
+
+            return directive.value
+        }
+
+        #expect(values == ["programbase 1"])
+    }
+
+    @Test
     func convert_instrumentMap_unrecognizedName_omitsDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -212,6 +259,7 @@ extension ABCExporterTests {
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
 
         #expect(!tune.body.contains { if case .directive = $0 { true } else { false } })
+        #expect(!tune.header.contains { if case .directive = $0 { true } else { false } })
     }
 
     @Test

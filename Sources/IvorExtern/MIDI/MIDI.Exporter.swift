@@ -149,17 +149,15 @@ extension MIDI.Exporter {
 
         events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)
 
-        let exactVelocityByTime = _exactVelocityByTime(part.dynamicMap)
+        let exactVelocityByTime = exactKeyVelocities(in: part.dynamicMap)
 
         events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
-        // Note-off velocity is sampled from `dynamicMap` at the note's
-        // *release* time. For a multi-note ramp this yields an
-        // interpolated blend rather than a genuine "release velocity"
-        // value — MIDI's actual note-off velocity is discarded at import
-        // (see `Context.handleNote`) and stored nowhere in the model.
-        // Harmless for most playback, but semantically odd; not fixable
-        // here without a model change.
+        // Note-off velocity is the note's `midiReleaseVelocity`, if it has
+        // one, or else 64, which MIDI prescribes for a release velocity
+        // nobody measured (see `Context.handleNote`). The dynamic at the
+        // release time isn't a stand-in: that's a loudness, not how fast the
+        // key came up.
         for note in part.noteTable {
             let attTime = note.attack
             let relTime = try tickMap.releaseTime(attack: attTime,
@@ -173,8 +171,8 @@ extension MIDI.Exporter {
                 let attKeyVelocity = exactVelocityByTime[attTime]
                     ?? convertToMIDIKeyVelocity(part.dynamicMap[attTime])
                     ?? defaultKeyVelocity
-                let relKeyVelocity = exactVelocityByTime[relTime]
-                    ?? convertToMIDIKeyVelocity(part.dynamicMap[relTime])
+                let relKeyVelocity = intValue(note.extras, .midiReleaseVelocity)
+                    .flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
                     ?? defaultKeyVelocity
 
                 events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
@@ -290,18 +288,6 @@ extension MIDI.Exporter {
     // `Extra+DynamicMap.swift`) held at each `DynamicMap` entry that carries
     // one, keyed by beat time so the note-emission loop can prefer it over
     // `convertToMIDIKeyVelocity(_:)`'s re-derivation from `Dynamic`.
-    private static func _exactVelocityByTime<TimeType: TimeProtocol>(_ dynamicMap: DynamicMap<TimeType>) -> [TimeType: MIDI.KeyVelocity] {
-        var result: [TimeType: MIDI.KeyVelocity] = [:]
-
-        for entry in dynamicMap {
-            if let velocity = intValue(entry.extras, .velocity),
-               let value = MIDI.KeyVelocity(uintValue: UInt(velocity)) {
-                result[entry.time] = value
-            }
-        }
-
-        return result
-    }
 
     // `expressionValue` is additive expressive data with no rounding
     // counterpart to fall back to (unlike `velocity`, which always has

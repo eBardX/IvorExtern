@@ -27,9 +27,19 @@ private import IvorTuning
 /// one, which is then reset to bank 0 (see
 /// ``IvorMIDI/MIDIPatch/selectionMessages(on:after:)``).
 ///
-/// For now every note sounds at a fixed velocity, and a note that glides
-/// plays its start key only. Only a keyboard-pitch, wall-time work can be
-/// made into a performance.
+/// Each note sounds at the velocity of the part’s dynamic level at its
+/// attack, so a crescendo rises note by note — or, where an importer kept
+/// the exact velocity on a dynamic-map entry at that time, at that.
+///
+/// Pan is per channel, so each channel takes the pan of the first part that
+/// plays on it, and a later part that shares the channel sends none. A part
+/// sends its pan on every channel it owns at the start, and again at a
+/// pan-map entry or one of its attacks where the pan has changed, so a
+/// glide between entries moves note by note. An entry’s exact 14-bit pan,
+/// where an importer kept one, is sent as it is.
+///
+/// For now a note that glides plays its start key only. Only a
+/// keyboard-pitch, wall-time work can be made into a performance.
 public struct WorkPerformance {
 
     // MARK: Public Initializers
@@ -59,6 +69,13 @@ public struct WorkPerformance {
             events += partEvents
 
             partChannelSets.append(channels)
+        }
+
+        var ownedChannels: Set<MIDIChannel> = []
+
+        for (part, channels) in zip(parts, partChannelSets) {
+            events += Self._panEvents(for: part,
+                                      on: channels.filter { ownedChannels.insert($0).inserted })
         }
 
         self.duration = events.map(\.time).max() ?? .zero
@@ -115,7 +132,7 @@ extension WorkPerformance {
     // MARK: Private Type Properties
 
     private static let channels = (1...16).filter { $0 != 10 }.map { MIDIChannel(clamping: $0) }
-    private static let velocity = MIDIData1Value(clamping: 100)
+    private static let defaultVelocity = MIDIData1Value(clamping: 64)
 
     // MARK: Private Type Methods
 
@@ -168,9 +185,14 @@ extension WorkPerformance {
             patches[channel] = patch
         }
 
+        let exactVelocities = exactKeyVelocities(in: part.dynamicMap)
+
         for note in part.noteTable {
             let (channel, _) = resolve(part.instrumentMap[note.attack])
             let key = MIDIData1Value(clamping: note.startPitch.uintValue)
+            let velocity = exactVelocities[note.attack]
+                ?? convertToMIDIKeyVelocity(part.dynamicMap[note.attack])
+                ?? defaultVelocity
 
             events.append(Event(time: note.attack,
                                 message: .noteOn(channel, key, velocity)))
@@ -179,6 +201,62 @@ extension WorkPerformance {
         }
 
         return (events, patches.keys.sorted())
+    }
+
+    // A part's pan on `channels`, the ones it owns.
+    private static func _panEvents(for part: Part<WallTime, NoteNumber>,
+                                   on channels: [MIDIChannel]) -> [Event] {
+        guard !channels.isEmpty
+        else { return [] }
+
+        var exactPans: [WallTime: Int] = [:]
+        var times: Set<WallTime> = [.zero]
+
+        for entry in part.panMap {
+            times.insert(entry.time)
+
+            if let midiPan = intValue(entry.extras, .midiPan) {
+                exactPans[entry.time] = midiPan
+            }
+        }
+
+        for note in part.noteTable {
+            times.insert(note.attack)
+        }
+
+        var events: [Event] = []
+        var previous: (msb: MIDIData1Value, lsb: MIDIData1Value?)?
+
+        for time in times.sorted() {
+            let value: (msb: MIDIData1Value, lsb: MIDIData1Value?)
+
+            if let midiPan = exactPans[time] {
+                let raw = UInt(clamping: midiPan)
+
+                value = (MIDIData1Value(clamping: raw >> 7), MIDIData1Value(clamping: raw & 0x7f))
+            } else if let msb = convertToMIDIPanValue(part.panMap[time]) {
+                value = (msb, nil)
+            } else {
+                continue
+            }
+
+            guard previous.map({ $0.msb != value.msb || $0.lsb != value.lsb }) ?? true
+            else { continue }
+
+            previous = value
+
+            for channel in channels {
+                events.append(Event(time: time,
+                                    message: .controlChange(channel, .panMSB, value.msb)))
+
+                if let lsb = value.lsb {
+                    events.append(Event(time: time,
+                                        message: .controlChange(channel, .panLSB, lsb)))
+                }
+            }
+        }
+
+        return events
     }
 
     private static func _resolve(_ instrument: Instrument,

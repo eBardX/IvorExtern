@@ -204,6 +204,33 @@ extension MIDIRoundTripTests {
         #expect(midiPan == 9_001)
     }
 
+    @Test(arguments: [nil, 1, 40, 127])
+    func roundTrip_midiReleaseVelocity_preservesValue(_ velocity: Int?) throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: NoteNumber(60),
+                     extras: velocity.map { Extras(elements: [Extra(name: Extra.midiReleaseVelocity.name, values: [.int($0)])]) })
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "ReleaseVelocity", content: .keyboardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
+
+        var recoveredVelocities: [Int?] = []
+
+        for note in recoveredPart.noteTable {
+            recoveredVelocities.append(intValue(note.extras, .midiReleaseVelocity))
+        }
+
+        #expect(recoveredVelocities == [velocity])
+    }
+
     @Test
     func roundTrip_midiVolume_preservesExactValue() throws {
         var table = NoteTable<BeatTime, NoteNumber>()

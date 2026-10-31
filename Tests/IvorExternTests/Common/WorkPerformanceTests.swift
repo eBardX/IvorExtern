@@ -48,7 +48,8 @@ extension WorkPerformanceTests {
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part])),
                                                        realization: realization))
 
-        #expect(performance.events.map(\.message) == [.programChange(1, 20)])
+        #expect(performance.events.map(\.message) == [.programChange(1, 20),
+                                                      .controlChange(1, .panMSB, 64)])
     }
 
     @Test
@@ -82,7 +83,7 @@ extension WorkPerformanceTests {
         let performance = try #require(WorkPerformance(work: Self.keyboardWallWork([[(0, 1, 60), (1, 1, 60)]])))
         let atOne = performance.events.filter { $0.time == Self.wallTime(1) }.map(\.message)
 
-        #expect(atOne == [.noteOff(1, 60, 0), .noteOn(1, 60, 100)])
+        #expect(atOne == [.noteOff(1, 60, 0), .noteOn(1, 60, 64)])
     }
 
     //
@@ -92,13 +93,11 @@ extension WorkPerformanceTests {
     func events_backToBackNotes_releaseBeforeRetriggeringDespiteRounding() throws {
         let performance = try #require(WorkPerformance(work: Self.keyboardWallWork([[(29.381986, 1.304348, 78),
                                                                                      (30.686334, 0.652174, 78)]])))
-        let notes = performance.events.map(\.message).filter {
-            if case .programChange = $0 { false } else { true }
-        }
+        let notes = performance.events.map(\.message).filter(Self.isNote)
 
-        #expect(notes == [.noteOn(1, 78, 100),
+        #expect(notes == [.noteOn(1, 78, 64),
                           .noteOff(1, 78, 0),
-                          .noteOn(1, 78, 100),
+                          .noteOn(1, 78, 64),
                           .noteOff(1, 78, 0)])
     }
 
@@ -113,9 +112,25 @@ extension WorkPerformanceTests {
                                                        realization: realization))
         let expected: [MIDIChannelMessage] = [.controlChange(1, .bankSelectMSB, 121),
                                               .controlChange(1, .bankSelectLSB, 1),
-                                              .programChange(1, 5)]
+                                              .programChange(1, 5),
+                                              .controlChange(1, .panMSB, 64)]
 
         #expect(performance.events.map(\.message) == expected)
+    }
+
+    @Test
+    func events_dynamicRamp_risesNoteByNote() throws {
+        var part = try #require(Self.keyboardWallParts([[(0, 1, 60), (2, 1, 62), (4, 1, 64)]]).first)
+
+        part.dynamicMap.insert(time: .zero, dynamic: .pp)
+        part.dynamicMap.insert(time: Self.wallTime(4), dynamic: .ff)
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
+
+        //
+        // pp is 0.3 and ff 0.8, so halfway is 0.55: 38, 70 and 102 out of 127.
+        //
+        #expect(Self.noteOnVelocities(performance) == [38, 70, 102])
     }
 
     @Test
@@ -130,6 +145,20 @@ extension WorkPerformanceTests {
         }
 
         #expect(channels == [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 1])
+    }
+
+    @Test
+    func events_exactVelocity_winsAtItsTime() throws {
+        var part = try #require(Self.keyboardWallParts([[(0, 1, 60), (1, 1, 62)]]).first)
+
+        part.dynamicMap.insert(time: .zero, dynamic: .f)
+        part.dynamicMap.insert(time: Self.wallTime(1),
+                               dynamic: .f,
+                               extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(77)])]))
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
+
+        #expect(Self.noteOnVelocities(performance) == [89, 77])
     }
 
     @Test
@@ -159,7 +188,8 @@ extension WorkPerformanceTests {
 
         #expect(performance.events.map(\.message) == [.controlChange(1, .bankSelectMSB, 121),
                                                       .controlChange(1, .bankSelectLSB, 1),
-                                                      .programChange(1, 20)])
+                                                      .programChange(1, 20),
+                                                      .controlChange(1, .panMSB, 64)])
     }
 
     @Test
@@ -186,6 +216,58 @@ extension WorkPerformanceTests {
     }
 
     @Test
+    func events_panExact14Bit_sendsMSBThenLSB() throws {
+        var part = try #require(Self.keyboardWallParts([[(0, 1, 60)]]).first)
+
+        part.panMap.insert(time: .zero,
+                           pan: .center,
+                           extras: Extras(elements: [Extra(name: Extra.midiPan.name, values: [.int(64 * 128 + 8)])]))
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
+
+        #expect(Self.panMessages(performance) == [.controlChange(1, .panMSB, 64),
+                                                  .controlChange(1, .panLSB, 8)])
+    }
+
+    @Test
+    func events_panGlide_movesNoteByNoteAndSkipsRepeats() throws {
+        var part = try #require(Self.keyboardWallParts([[(0, 1, 60), (2, 1, 62), (3, 1, 64), (6, 1, 65)]]).first)
+
+        part.panMap.insert(time: .zero, pan: .left)
+        part.panMap.insert(time: Self.wallTime(4), pan: .center)
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
+        let pans = performance.events.compactMap { event -> (WallTime, UInt)? in
+            guard case let .controlChange(_, .panMSB, value) = event.message
+            else { return nil }
+
+            return (event.time, value.uintValue)
+        }
+
+        //
+        // Left at 0, partway at 2 and 3, centre at 4; the note at 6 is still centre, so nothing more.
+        //
+        #expect(pans.map(\.0) == [.zero, Self.wallTime(2), Self.wallTime(3), Self.wallTime(4)])
+        #expect(pans.first?.1 == 0)
+        #expect(pans.last?.1 == 64)
+        #expect(pans.dropFirst().dropLast().allSatisfy { (1..<64).contains($0.1) })
+        #expect(pans[1].1 < pans[2].1)
+    }
+
+    @Test
+    func events_panSharedChannel_firstPartWins() throws {
+        var parts = Self.keyboardWallParts(Array(repeating: [(0, 1, 60)], count: 16))
+
+        parts[15].panMap.insert(time: .zero, pan: .right)
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+        let channelOnePans = Self.panMessages(performance).filter { $0.channel == 1 }
+
+        #expect(performance.partChannels[15] == 1)
+        #expect(channelOnePans == [.controlChange(1, .panMSB, 64)])
+    }
+
+    @Test
     func events_percussion_playsOnChannel10() throws {
         let work = Self.keyboardWallWork([[(0, 1, 36)]])
         let part = try #require(work.part(work.partIDs[0], as: Part<WallTime, NoteNumber>.self))
@@ -193,7 +275,7 @@ extension WorkPerformanceTests {
         let performance = try #require(WorkPerformance(work: work,
                                                        realization: realization))
 
-        #expect(performance.events.map(\.message.channel.uintValue) == [10, 10, 10])
+        #expect(performance.events.map(\.message.channel.uintValue) == [10, 10, 10, 10])
         #expect(performance.partChannelSets.map { $0.map(\.uintValue) } == [[10]])
     }
 
@@ -201,13 +283,11 @@ extension WorkPerformanceTests {
     func init_keyboardWallWork_sortsNotesByTime() throws {
         let performance = try #require(WorkPerformance(work: Self.keyboardWallWork([[(1, 0.5, 62)],
                                                                                     [(0, 2, 50)]])))
-        let notes = performance.events.filter {
-            if case .programChange = $0.message { false } else { true }
-        }
+        let notes = performance.events.filter { Self.isNote($0.message) }
 
         #expect(performance.duration == Self.wallTime(2))
-        #expect(notes == [WorkPerformance.Event(time: Self.wallTime(0), message: .noteOn(2, 50, 100)),
-                          WorkPerformance.Event(time: Self.wallTime(1), message: .noteOn(1, 62, 100)),
+        #expect(notes == [WorkPerformance.Event(time: Self.wallTime(0), message: .noteOn(2, 50, 64)),
+                          WorkPerformance.Event(time: Self.wallTime(1), message: .noteOn(1, 62, 64)),
                           WorkPerformance.Event(time: Self.wallTime(1.5), message: .noteOff(1, 62, 0)),
                           WorkPerformance.Event(time: Self.wallTime(2), message: .noteOff(2, 50, 0))])
     }
@@ -219,12 +299,14 @@ extension WorkPerformanceTests {
     }
 
     @Test
-    func event_sameTime_ordersOffsBanksProgramsOns() {
+    func event_sameTime_ordersOffsBanksProgramsPansOns() {
         let time = Self.wallTime(1)
         let ordered: [MIDIChannelMessage] = [.noteOff(1, 60, 0),
                                              .controlChange(1, .bankSelectMSB, 121),
                                              .controlChange(1, .bankSelectLSB, 1),
                                              .programChange(1, 20),
+                                             .controlChange(1, .panMSB, 64),
+                                             .controlChange(1, .panLSB, 8),
                                              .controlChange(1, .sustain, 0),
                                              .noteOn(1, 60, 100)]
         let events = ordered.reversed().map { WorkPerformance.Event(time: time, message: $0) }
@@ -240,6 +322,39 @@ extension WorkPerformanceTests {
 
     // MARK: Private Type Methods
 
+    private static func isNote(_ message: MIDIChannelMessage) -> Bool {
+        switch message {
+        case .noteOff,
+             .noteOn:
+            true
+
+        default:
+            false
+        }
+    }
+
+    private static func noteOnVelocities(_ performance: WorkPerformance) -> [UInt] {
+        performance.events.compactMap { event in
+            guard case let .noteOn(_, _, velocity) = event.message
+            else { return nil }
+
+            return velocity.uintValue
+        }
+    }
+
+    private static func panMessages(_ performance: WorkPerformance) -> [MIDIChannelMessage] {
+        performance.events.map(\.message).filter {
+            switch $0 {
+            case .controlChange(_, .panLSB, _),
+                 .controlChange(_, .panMSB, _):
+                true
+
+            default:
+                false
+            }
+        }
+    }
+
     private static func assignment(_ kind: Patch.Kind,
                                    channel: Int? = nil) throws -> PatchTable.Assignment {
         let patch = try #require(Patch(kind))
@@ -251,8 +366,8 @@ extension WorkPerformanceTests {
     //
     // Each part is a list of notes as (attack, duration, key), in seconds.
     //
-    private static func keyboardWallWork(_ parts: [[(Double, Double, UInt)]]) -> Work {
-        let parts = parts.enumerated().map { offset, notes in
+    private static func keyboardWallParts(_ parts: [[(Double, Double, UInt)]]) -> [Part<WallTime, NoteNumber>] {
+        parts.enumerated().map { offset, notes in
             var noteTable = NoteTable<WallTime, NoteNumber>()
 
             for (attack, duration, key) in notes {
@@ -264,8 +379,10 @@ extension WorkPerformanceTests {
             return Part<WallTime, NoteNumber>(name: "Part \(offset + 1)",
                                               noteTable: noteTable)
         }
+    }
 
-        return Work(content: .keyboardWall(parts))
+    private static func keyboardWallWork(_ parts: [[(Double, Double, UInt)]]) -> Work {
+        Work(content: .keyboardWall(keyboardWallParts(parts)))
     }
 
     private static func noteNumber(_ uintValue: UInt) -> NoteNumber {

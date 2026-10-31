@@ -43,6 +43,21 @@ extension GuidoFunctionsTests {
         #expect(convertToInstrument(instrument) == .vanilla)
     }
 
+    @Test(arguments: [nil, "lefthand", "LeftHand", "pluck"])
+    func convertToPizzicatoExtra_noOrUnknownType_returnsPizzicatoFlag(_ type: String?) {
+        #expect(convertToPizzicatoExtra(type) == .pizzicato)
+    }
+
+    @Test(arguments: [("bartok", "bartokPizzicato"),
+                      ("buzz", "buzzPizzicato"),
+                      ("Fingernail", "fingernailPizzicato"),
+                      ("snap", "snapPizzicato")])
+    func convertToPizzicatoExtra_variantType_returnsArticulationCatchAll(_ type: String,
+                                                                         _ expected: String) {
+        #expect(convertToPizzicatoExtra(type) == Extra(name: Extra.articulation.name,
+                                                       values: [.string(expected)]))
+    }
+
     @Test
     func convertToStandardPitch_emptyName_throws() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))

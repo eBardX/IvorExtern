@@ -11,9 +11,10 @@ extension WorkPerformance {
     /// it.
     ///
     /// Events at the same time are ordered note-offs first, then bank
-    /// selects (MSB, then LSB), then program changes, then note-ons, so that
-    /// a note repeated back to back sounds again — with its new instrument,
-    /// if the instrument changes there.
+    /// selects (MSB, then LSB), then program changes, then pan (MSB, then
+    /// LSB), then any other control change, then note-ons, so that a note
+    /// repeated back to back sounds again — with its new instrument and
+    /// pan, if they change there.
     public struct Event {
 
         // MARK: Public Initializers
@@ -52,17 +53,23 @@ extension WorkPerformance.Event {
         case .controlChange(_, .bankSelectMSB, _):
             1
 
+        case .controlChange(_, .panLSB, _):
+            5
+
+        case .controlChange(_, .panMSB, _):
+            4
+
         case .noteOff:
             0
 
         case .noteOn:
-            5
+            7
 
         case .programChange:
             3
 
         default:
-            4
+            6
         }
     }
 }

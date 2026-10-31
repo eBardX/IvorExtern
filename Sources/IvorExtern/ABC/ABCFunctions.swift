@@ -269,8 +269,8 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
     }
 }
 
-// abc2midi's `%%MIDI program [channel] program-number` directive is the only
-// mechanism this format gives for instrument assignment — ABC itself has no
+// abc2midi's `%%MIDI program [channel] program-number` directive is the
+// usual way to give an ABC voice an instrument — ABC itself has no
 // built-in instrument concept. `ABCDirective.Name` only recognizes a
 // handful of standard directive names with typed payloads (see its doc
 // comment), so a `MIDI` directive's own `program`/channel/program-number
@@ -278,16 +278,16 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 // value text instead. The optional leading MIDI channel number, when
 // written, is the middle token between `program` and the trailing program
 // number — surfaced as `channel` for a `midiChannel` extra (see
-// `Extra+InstrumentMap.swift`); `nil` when the directive omits it (just
-// `program program-number`, no channel token at all).
+// `Extra+InstrumentMap.swift`); `nil` when the directive omits it.
 //
-// Both the ABC 2.0 draft standard (§14.1) and `abc2midi.txt` itself
-// document `program-number` as 1–128 — the human-facing GM convention,
-// same as MusicXML's `<midi-program>` and `MIDIProgram` — not the raw
-// 0–127 wire value, so it looks up its GM name unchanged. The returned
-// `program` stays in that native 1–128 form, matching the `midiProgram`
-// extra's own "1-128 convention" (see `EXTRAS_CANDIDATES.md`).
-internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Instrument, channel: Int?, program: Int)? {
+// `program-number` counts from `programBase` (see
+// `convertToProgramBase(_:)`). abc2midi has counted from 0 since 2003, the
+// MIDI wire value, but its old documentation said 1–128, and the ABC
+// standard followed that; abc2midi's `CHANGES` (June 2 2017) tells the
+// story. The returned `program` is always the 1–128 General MIDI number,
+// as the `midiProgram` extra holds it.
+internal func convertToInstrument(_ directive: ABCDirective,
+                                  programBase: Int) -> (instrument: Instrument, channel: Int?, program: Int)? {
     guard directive.name.stringValue.lowercased() == "midi"
     else { return nil }
 
@@ -296,7 +296,8 @@ internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Ins
     guard let keyword = tokens.first,
           keyword.lowercased() == "program",
           let programToken = tokens.last,
-          let program = Int(programToken),
+          let number = Int(programToken),
+          case let program = number - programBase + 1,
           let midiProgram = UInt(exactly: program).flatMap({ MIDIProgram(uintValue: $0) }),
           let instrument = Instrument(stringValue: GM1Instrument(program: midiProgram).name)
     else { return nil }
@@ -304,6 +305,22 @@ internal func convertToInstrument(_ directive: ABCDirective) -> (instrument: Ins
     let channel = tokens.count == 3 ? Int(tokens[1]) : nil
 
     return (instrument, channel, program)
+}
+
+// abc2midi's `%%MIDI programbase n`, which says whether `%%MIDI program`
+// numbers count from 0 or 1. Like abc2midi, any `n` but 0 means 1.
+internal func convertToProgramBase(_ directive: ABCDirective) -> Int? {
+    guard directive.name.stringValue.lowercased() == "midi"
+    else { return nil }
+
+    let tokens = directive.value.split(whereSeparator: \.isWhitespace)
+
+    guard tokens.count == 2,
+          tokens[0].lowercased() == "programbase",
+          let base = Int(tokens[1])
+    else { return nil }
+
+    return base == 0 ? 0 : 1
 }
 
 // A standalone `%%MIDI channel n` directive — no `program` token — sets the
@@ -323,6 +340,58 @@ internal func convertToChannel(_ directive: ABCDirective) -> Int? {
     else { return nil }
 
     return channel
+}
+
+// ABC 2.1's own `%%MIDI voice [ID] [instrument=n [bank=m]] [mute]`
+// directive (§11.2), which assigns an instrument to one voice — the voice
+// `ID` names or, without one, the current voice. Both numbers count from
+// 1, whatever `%%MIDI programbase` says (abc2midi doesn't read this
+// directive at all): `n` is the 1–128 General MIDI number, as the
+// `midiProgram` extra holds it, but `bank` comes back as `m − 1`, the
+// 0-based combined Bank Select value the `midiBank` extra holds, so the
+// default bank 1 is bank 0. A directive with no `instrument=` (just
+// `mute`, say) assigns nothing and gives `nil`; `mute` itself is ignored,
+// as there's nowhere to keep it, and so is a `bank=` out of range.
+internal func convertToVoiceInstrument(_ directive: ABCDirective) -> ABC.VoiceInstrument? {
+    guard directive.name.stringValue.lowercased() == "midi"
+    else { return nil }
+
+    var tokens = directive.value.split(whereSeparator: \.isWhitespace)[...]
+
+    guard tokens.popFirst()?.lowercased() == "voice"
+    else { return nil }
+
+    var voiceID: ABC.Voice.ID?
+
+    if let first = tokens.first,
+       !first.contains("="),
+       first.lowercased() != "mute" {
+        voiceID = ABC.Voice.ID(stringValue: String(first))
+        tokens.removeFirst()
+    }
+
+    var settings: [String: Int] = [:]
+
+    for token in tokens {
+        let pair = token.split(separator: "=", maxSplits: 1)
+
+        if pair.count == 2,
+           let value = Int(pair[1]) {
+            settings[pair[0].lowercased()] = value
+        }
+    }
+
+    guard let program = settings["instrument"],
+          let midiProgram = UInt(exactly: program).flatMap({ MIDIProgram(uintValue: $0) }),
+          let instrument = Instrument(stringValue: GM1Instrument(program: midiProgram).name)
+    else { return nil }
+
+    let bank = settings["bank"].flatMap { (1...16_384).contains($0) ? $0 - 1 : nil }
+
+    return ABC.VoiceInstrument(bank: bank,
+                               instrument: instrument,
+                               program: program,
+                               voiceID: voiceID)
 }
 
 internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {

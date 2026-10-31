@@ -108,6 +108,73 @@ extension ABCRoundTripTests {
     }
 
     @Test
+    func roundTrip_midiBank_preservesEachPartsInstrumentAndBank() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var organMap = InstrumentMap<BeatTime>()
+
+        try organMap.insert(time: BeatTime(0),
+                            instrument: #require(Instrument(stringValue: "Church Organ")),
+                            extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(20)]),
+                                                      Extra(name: Extra.midiBank.name, values: [.int(8)])]))
+
+        var fluteMap = InstrumentMap<BeatTime>()
+
+        try fluteMap.insert(time: BeatTime(0),
+                            instrument: #require(Instrument(stringValue: "Flute")),
+                            extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(74)]),
+                                                      Extra(name: Extra.midiBank.name, values: [.int(0)])]))
+
+        let parts = [Part(name: "Organ", noteTable: table, instrumentMap: organMap),
+                     Part(name: "Flute", noteTable: table, instrumentMap: fluteMap)]
+        let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        var found: [(String, Int?)] = []
+
+        for name in ["Organ", "Flute"] {
+            for entry in try namedStandardPart(recovered, name).instrumentMap {
+                found.append((entry.instrument.stringValue, intValue(entry.extras, .midiBank)))
+            }
+        }
+
+        #expect(found.map(\.0) == ["Church Organ", "Flute"])
+        #expect(found.map(\.1) == [8, 0])
+    }
+
+    @Test
+    func roundTrip_multiPart_preservesEachPartsInstrument() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+
+        var parts: [Part<BeatTime, Pitch>] = []
+
+        for name in ["Flute", "Bassoon"] {
+            var instrumentMap = InstrumentMap<BeatTime>()
+
+            try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: name)))
+            parts.append(Part(name: name, noteTable: table, instrumentMap: instrumentMap))
+        }
+
+        let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        #expect(try namedStandardPart(recovered, "Flute").instrumentMap[.zero] == Instrument("Flute"))
+        #expect(try namedStandardPart(recovered, "Bassoon").instrumentMap[.zero] == Instrument("Bassoon"))
+    }
+
+    @Test
     func roundTrip_multiPart_preservesEachPartsNotes() throws {
         var table1 = NoteTable<BeatTime, Pitch>()
 
