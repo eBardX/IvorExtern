@@ -128,7 +128,7 @@ extension JohnnySonicExporterTests {
         table.insert(attack: BeatTime(0),
                      duration: BeatDuration(1),
                      pitch: NoteNumber(60),
-                     extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(100)])]))
+                     extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(100)])]))
 
         var dynamicMap = DynamicMap<BeatTime>()
 

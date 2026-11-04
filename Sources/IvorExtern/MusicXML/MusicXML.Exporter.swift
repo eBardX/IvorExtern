@@ -482,6 +482,9 @@ extension MusicXML.Exporter {
     // Every pitch in a chord shares the same union of markers — see
     // `ABC.Exporter._unionElements(_:)` for why a chord-wide union, not a
     // per-pitch split, is this vocabulary's accepted chord simplification.
+    // A pitch's own `releaseVelocity` is the exception: it's per-note data,
+    // not a marker, so it's written as that pitch's `end-dynamics`, on the
+    // segment where `isLastSegment` is true.
     private static func _makeNoteItems(pitches: [Pitch],
                                        duration: MXLPositiveDivisions,
                                        tiedFromPrevious: Bool,
@@ -520,7 +523,8 @@ extension MusicXML.Exporter {
             let note = MXLNote(content: .regularNote(fullNote: MXLFullNote(isChord: index > 0, content: .pitch(mxlPitch)),
                                                      duration: duration,
                                                      tie: ties),
-                               notations: notationItems.isEmpty ? [] : [MXLNotations(items: notationItems)])
+                               notations: notationItems.isEmpty ? [] : [MXLNotations(items: notationItems)],
+                               endDynamics: isLastSegment ? convertToMusicXMLEndDynamics(extrasList[index]) : nil)
 
             items.append(.note(note))
         }

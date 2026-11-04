@@ -229,11 +229,11 @@ extension MIDIImporterTests {
         var dynamicVelocities: [Int?] = []
 
         for note in part.noteTable {
-            noteVelocities[note.startPitch.uintValue] = intValue(note.extras, .velocity)
+            noteVelocities[note.startPitch.uintValue] = intValue(note.extras, .attackVelocity)
         }
 
         for entry in part.dynamicMap {
-            dynamicVelocities.append(intValue(entry.extras, .velocity))
+            dynamicVelocities.append(intValue(entry.extras, .attackVelocity))
         }
 
         // A chord's notes share an attack, so only the notes themselves can tell their

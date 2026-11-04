@@ -347,6 +347,24 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_releaseVelocityExtra_emitsEndDynamicsOnLastSegmentOnly() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(3),
+                     duration: BeatDuration(2),
+                     pitch: "C4",
+                     extras: Extras(elements: [Extra(name: Extra.releaseVelocity.name, values: [.int(40)])]))
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let score = try MusicXML.Exporter().convert(work)
+        let notes = pitchedNotes(in: score)
+
+        // 40 / 90 = 44.444…%, rounded to two decimal places.
+        #expect(notes.map(\.endDynamics) == [nil, 44.44])
+        #expect(notes.allSatisfy { $0.dynamics == nil })
+    }
+
+    @Test
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -745,6 +763,33 @@ extension MusicXMLExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         #expect(recoveredPart.panMap[.zero] == Pan(vertical: 45))
+    }
+
+    @Test(arguments: [nil, 1, 40, 64, 127])
+    func roundTrip_releaseVelocity_preservesValue(_ velocity: Int?) throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: velocity.map { Extras(elements: [Extra(name: Extra.releaseVelocity.name, values: [.int($0)])]) })
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "ReleaseVelocity", content: .standardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
+
+        var recoveredVelocities: [Int?] = []
+
+        for note in recoveredPart.noteTable {
+            recoveredVelocities.append(intValue(note.extras, .releaseVelocity))
+        }
+
+        #expect(recoveredVelocities == [velocity])
     }
 
     @Test

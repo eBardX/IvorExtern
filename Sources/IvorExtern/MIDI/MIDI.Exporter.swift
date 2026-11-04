@@ -201,7 +201,7 @@ extension MIDI.Exporter {
 
         events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
-        // Note-off velocity is the note's `midiReleaseVelocity`, if it has
+        // Note-off velocity is the note's `releaseVelocity`, if it has
         // one, or else 64, which MIDI prescribes for a release velocity
         // nobody measured (see `Context.handleNote`). The dynamic at the
         // release time isn't a stand-in: that's a loudness, not how fast the
@@ -219,7 +219,7 @@ extension MIDI.Exporter {
                 let attKeyVelocity = exactKeyVelocity(note.extras)
                     ?? convertToMIDIKeyVelocity(part.dynamicMap[attTime])
                     ?? defaultKeyVelocity
-                let relKeyVelocity = intValue(note.extras, .midiReleaseVelocity)
+                let relKeyVelocity = intValue(note.extras, .releaseVelocity)
                     .flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
                     ?? defaultKeyVelocity
 
@@ -276,7 +276,7 @@ extension MIDI.Exporter {
     }
 
     // `expressionValue` is additive expressive data with no rounding
-    // counterpart to fall back to (unlike `velocity`, which always has
+    // counterpart to fall back to (unlike `attackVelocity`, which always has
     // `Dynamic`'s own re-derivation to fall back to) — emitted only when
     // present, never synthesized.
     private static func _expressionEvents<TickMap: MIDI.ExportTimeMap>(_ dynamicMap: DynamicMap<TickMap.TimeType>,

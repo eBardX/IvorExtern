@@ -366,13 +366,6 @@ internal func convertToTempo(_ sound: MXLSound) -> Tempo? {
     return Tempo(uintValue: uintValue)
 }
 
-// The exact key velocity (MIDI-style 1-127 scale) a note's own `dynamics`
-// percent converts to, kept on the note as its `velocity` extra (see
-// `Extra+Ivor.swift`).
-internal func convertToVelocity(_ note: MXLNote) -> Int? {
-    _convertToVelocity(percent: note.dynamics)
-}
-
 // Some notation software (MuseScore, at least) writes the literal string
 // "MusicXML Part" into `<part-name>` — marked non-printing — for a
 // single-instrument score whose user never set a real part name; the
@@ -730,16 +723,6 @@ private func _convertToStandardPitchOctave(_ mpOctave: MusicXML.Octave) throws(M
     else { throw MusicXML.Error.unrecognizedPitchOctave(Int(mpOctave.uintValue)) }
 
     return octave
-}
-
-private func _convertToVelocity(percent: MXLNonNegativeDecimal?) -> Int? {
-    guard let percent,
-          percent > 0
-    else { return nil }
-
-    let velocity = percent / 100 * 90
-
-    return min(127, max(1, Int(velocity.rounded())))
 }
 
 // How many quarter notes a metronome mark's beat unit is worth — the same

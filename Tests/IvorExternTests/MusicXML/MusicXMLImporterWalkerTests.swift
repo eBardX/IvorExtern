@@ -472,7 +472,7 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
-    func walk_noteWithDynamicsAttribute_recordsVelocityExtra() throws {
+    func walk_noteWithDynamicsAttribute_recordsAttackVelocityExtra() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
             <score-partwise version="4.0">
@@ -499,7 +499,38 @@ extension MusicXMLImporterWalkerTests {
         // 71.1% of 90 = 63.99, rounds to 64 (a note's own `dynamics`
         // attribute converts identically to MIDI's own velocity scale,
         // per the shared-scale design note in `MusicXMLFunctions.swift`).
-        #expect(intValue(voice.noteTable.first?.extras, .velocity) == 64)
+        #expect(intValue(voice.noteTable.first?.extras, .attackVelocity) == 64)
+    }
+
+    @Test
+    func walk_noteWithEndDynamicsAttribute_recordsReleaseVelocityExtra() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note end-dynamics="44.44">
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        // 44.44% of 90 = 39.996, rounds to 40, on the same scale as a
+        // note's own `dynamics` attribute.
+        #expect(intValue(voice.noteTable.first?.extras, .releaseVelocity) == 40)
+        #expect(intValue(voice.noteTable.first?.extras, .attackVelocity) == nil)
     }
 
     @Test
@@ -638,6 +669,47 @@ extension MusicXMLImporterWalkerTests {
         #expect(notes.count == 1)
         #expect(notes.first?.attack == .zero)
         #expect(notes.first?.duration == BeatDuration(2))
+    }
+
+    @Test
+    func walk_tiedNotes_keepFirstAttackAndLastReleaseVelocity() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note dynamics="100" end-dynamics="50">
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                    <tie type="start"/>
+                  </note>
+                  <note dynamics="50" end-dynamics="100">
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                    <tie type="stop"/>
+                    <tie type="start"/>
+                  </note>
+                  <note dynamics="20" end-dynamics="20">
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                    <tie type="stop"/>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let voice = try #require(try MusicXML.Importer.Walker().walk(score,
+                                                                     order: [0]).first?.part.voices.first)
+        let extras = voice.noteTable.first?.extras
+
+        // 100% of 90 = 90 from the first note; 20% of 90 = 18 from the last.
+        #expect(intValue(extras, .attackVelocity) == 90)
+        #expect(intValue(extras, .releaseVelocity) == 18)
     }
 
     @Test

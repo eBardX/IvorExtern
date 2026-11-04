@@ -135,7 +135,7 @@ internal func convertToTempo(_ bpm: Double) -> Tempo {
 }
 
 // A JohnnySonic volume (0–10) as the exact key velocity (0–127) kept on a
-// note as its `velocity` extra.
+// note as its `attackVelocity` extra.
 internal func convertToVelocity(_ volume: Double) -> Int {
     min(127, max(0, Int((volume * 12.7).rounded())))
 }

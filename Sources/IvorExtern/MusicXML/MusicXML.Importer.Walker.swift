@@ -215,8 +215,8 @@ extension MusicXML.Importer.Walker {
     // finding — is left unattached rather than guessed at; only the
     // `other…` free-text escape-hatch cases fall through to the
     // `articulation` catch-all, matching how ABC's open decoration names do.
-    // The note's own `dynamics` attribute, if any, is kept too, as its exact
-    // `velocity`.
+    // The note's own `dynamics` and `end-dynamics` attributes, if any, are
+    // kept too, as its exact `attackVelocity` and `releaseVelocity`.
     private static func _noteExtras(_ note: MXLNote) -> Extras? {
         var elements: [Extra] = []
 
@@ -248,8 +248,12 @@ extension MusicXML.Importer.Walker {
             }
         }
 
-        if let velocity = convertToVelocity(note) {
-            elements.append(Extra(name: Extra.velocity.name, values: [.int(velocity)]))
+        if let velocity = convertToAttackVelocity(note) {
+            elements.append(Extra(name: Extra.attackVelocity.name, values: [.int(velocity)]))
+        }
+
+        if let velocity = convertToReleaseVelocity(note) {
+            elements.append(Extra(name: Extra.releaseVelocity.name, values: [.int(velocity)]))
         }
 
         return elements.isEmpty ? nil : Extras(elements: elements)
@@ -413,10 +417,12 @@ extension MusicXML.Importer.Walker {
         if hasStop,
            var pending = context.pendingTies[voiceID]?[pitch] {
             pending.duration += duration
-            // A tied note is attacked once, so only the first note's
-            // `velocity` counts; a continuation's would otherwise replace it.
-            pending.extras = Self._mergedExtras(pending.extras,
-                                                extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.velocity.name }) })
+            // A tied note is attacked once and released once, so only the
+            // first note's `attackVelocity` counts, and only the last note's
+            // `releaseVelocity`; whichever of the pair comes first in the
+            // merged extras is the one read.
+            pending.extras = Self._mergedExtras(pending.extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.releaseVelocity.name }) },
+                                                extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.attackVelocity.name }) })
 
             if hasStart {
                 context.pendingTies[voiceID, default: [:]][pitch] = pending

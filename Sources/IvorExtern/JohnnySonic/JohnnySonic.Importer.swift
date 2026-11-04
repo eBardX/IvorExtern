@@ -146,7 +146,7 @@ extension JohnnySonic.Importer {
                              duration: bdur,
                              startPitch: sfreq,
                              endPitch: efreq,
-                             extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                             extras: Extras(elements: [Extra(name: Extra.attackVelocity.name,
                                                              values: [.int(convertToVelocity(note.volume))])]))
 
             if let dynamic = convertToDynamic(note.volume) {
@@ -195,7 +195,7 @@ extension JohnnySonic.Importer {
                              duration: bdur,
                              startPitch: snnum,
                              endPitch: ennum,
-                             extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                             extras: Extras(elements: [Extra(name: Extra.attackVelocity.name,
                                                              values: [.int(convertToVelocity(note.volume))])]))
 
             if let dynamic = convertToDynamic(note.volume) {

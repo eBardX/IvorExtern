@@ -690,11 +690,11 @@ extension MIDIExporterTests {
         table.insert(attack: BeatTime(0),
                      duration: BeatDuration(1),
                      pitch: NoteNumber(60),
-                     extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(100)])]))
+                     extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(100)])]))
         table.insert(attack: BeatTime(1),
                      duration: BeatDuration(1),
                      pitch: NoteNumber(62),
-                     extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(50)])]))
+                     extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(50)])]))
 
         var work = Work(name: "Legato", content: .keyboardBeat([Part(name: "Piano", noteTable: table)], TempoMap()))
 
@@ -713,6 +713,31 @@ extension MIDIExporterTests {
     }
 
     // MIDI can only represent instantaneous tempo changes; after the first pass, further roundtrips must not alter the TempoMap.
+    @Test
+    func roundTrip_attackVelocity_preservesExactValue() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: NoteNumber(60),
+                     extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(77)])]))
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0), dynamic: .mf)
+
+        let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
+        let work = Work(name: "Velocity", content: .keyboardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
+
+        #expect(intValue(recoveredPart.noteTable.first?.extras, .attackVelocity) == 77)
+    }
+
     @Test
     func roundtrip_dynamicRamp_survivesExportReimport() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
@@ -947,33 +972,6 @@ extension MIDIExporterTests {
         #expect(midiPan == 9_001)
     }
 
-    @Test(arguments: [nil, 1, 40, 127])
-    func roundTrip_midiReleaseVelocity_preservesValue(_ velocity: Int?) throws {
-        var table = NoteTable<BeatTime, NoteNumber>()
-
-        table.insert(attack: BeatTime(0),
-                     duration: BeatDuration(1),
-                     pitch: NoteNumber(60),
-                     extras: velocity.map { Extras(elements: [Extra(name: Extra.midiReleaseVelocity.name, values: [.int($0)])]) })
-
-        let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "ReleaseVelocity", content: .keyboardBeat([part], TempoMap()))
-
-        let recovered = try roundTrip(work,
-                                      exporter: MIDI.Exporter(),
-                                      importer: MIDI.Importer(),
-                                      fileFormat: .midi)
-        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
-
-        var recoveredVelocities: [Int?] = []
-
-        for note in recoveredPart.noteTable {
-            recoveredVelocities.append(intValue(note.extras, .midiReleaseVelocity))
-        }
-
-        #expect(recoveredVelocities == [velocity])
-    }
-
     @Test
     func roundTrip_midiVolume_preservesExactValue() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
@@ -1096,6 +1094,33 @@ extension MIDIExporterTests {
         #expect(!recoveredPart.panMap.isEmpty)
     }
 
+    @Test(arguments: [nil, 1, 40, 127])
+    func roundTrip_releaseVelocity_preservesValue(_ velocity: Int?) throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: BeatTime(0),
+                     duration: BeatDuration(1),
+                     pitch: NoteNumber(60),
+                     extras: velocity.map { Extras(elements: [Extra(name: Extra.releaseVelocity.name, values: [.int($0)])]) })
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "ReleaseVelocity", content: .keyboardBeat([part], TempoMap()))
+
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
+
+        var recoveredVelocities: [Int?] = []
+
+        for note in recoveredPart.noteTable {
+            recoveredVelocities.append(intValue(note.extras, .releaseVelocity))
+        }
+
+        #expect(recoveredVelocities == [velocity])
+    }
+
     @Test
     func roundtrip_tempoMap_accelerando_isStableAfterFirstPass() throws {
         var smoothTempoMap = TempoMap()
@@ -1195,31 +1220,6 @@ extension MIDIExporterTests {
         let recoveredTempoMap = try #require(recovered.tempoMap)
 
         expectTempoMapsMatch(recoveredTempoMap, tempoMap)
-    }
-
-    @Test
-    func roundTrip_velocity_preservesExactValue() throws {
-        var table = NoteTable<BeatTime, NoteNumber>()
-
-        table.insert(attack: BeatTime(0),
-                     duration: BeatDuration(1),
-                     pitch: NoteNumber(60),
-                     extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(77)])]))
-
-        var dynamicMap = DynamicMap<BeatTime>()
-
-        dynamicMap.insert(time: BeatTime(0), dynamic: .mf)
-
-        let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Velocity", content: .keyboardBeat([part], TempoMap()))
-
-        let recovered = try roundTrip(work,
-                                      exporter: MIDI.Exporter(),
-                                      importer: MIDI.Importer(),
-                                      fileFormat: .midi)
-        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
-
-        #expect(intValue(recoveredPart.noteTable.first?.extras, .velocity) == 77)
     }
 
     @Test

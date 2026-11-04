@@ -556,7 +556,7 @@ extension MusicXMLImporterTests {
         var dynamicVelocities: [Int?] = []
 
         for entry in part.dynamicMap {
-            dynamicVelocities.append(intValue(entry.extras, .velocity))
+            dynamicVelocities.append(intValue(entry.extras, .attackVelocity))
         }
 
         //
@@ -565,7 +565,7 @@ extension MusicXMLImporterTests {
         //
         #expect(part.dynamicMap[.zero] == Dynamic(numberValue: Number(numerator: 81, denominator: 127)))
         #expect(dynamicVelocities.allSatisfy { $0 == nil })
-        #expect(intValue(part.noteTable.first?.extras, .velocity) == nil)
+        #expect(intValue(part.noteTable.first?.extras, .attackVelocity) == nil)
     }
 
     @Test
@@ -673,7 +673,7 @@ extension MusicXMLImporterTests {
         var velocities: [Int?] = []
 
         for note in part.noteTable {
-            velocities.append(intValue(note.extras, .velocity))
+            velocities.append(intValue(note.extras, .attackVelocity))
         }
 
         // One note, attacked once: 90% of 90 is 81; the continuation's 45 doesn't replace it.

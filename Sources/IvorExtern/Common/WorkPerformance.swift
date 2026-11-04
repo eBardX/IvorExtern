@@ -29,7 +29,7 @@ private import IvorTuning
 ///
 /// Each note sounds at the velocity of the part’s dynamic level at its
 /// attack, so a crescendo rises note by note — or, where an importer kept
-/// the note’s exact velocity (its `velocity` extra), at that.
+/// the note’s exact velocity (its `attackVelocity` extra), at that.
 ///
 /// Pan is per channel, so each channel takes the pan of the first part that
 /// plays on it, and a later part that shares the channel sends none. A part

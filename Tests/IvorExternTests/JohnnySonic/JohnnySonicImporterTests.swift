@@ -179,11 +179,11 @@ extension JohnnySonicImporterTests {
         var dynamicVelocities: [Int?] = []
 
         for note in parts[0].noteTable {
-            noteVelocities.append(intValue(note.extras, .velocity))
+            noteVelocities.append(intValue(note.extras, .attackVelocity))
         }
 
         for entry in parts[0].dynamicMap {
-            dynamicVelocities.append(intValue(entry.extras, .velocity))
+            dynamicVelocities.append(intValue(entry.extras, .attackVelocity))
         }
 
         // 5 × 12.7 = 63.5, which rounds to 64.

@@ -1,5 +1,5 @@
 {
-  "originHash" : "2f96642fa6638d10fea3974afe1654130010a67347b9e7011a51c3063c1bbe8b",
+  "originHash" : "bd3c9192ffce9484fd48379e4caf6db238d05d49e772447fd22e14d6c13356f0",
   "pins" : [
     {
       "identity" : "bigint",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "b61f5db3f33a2118a1f8753b1def7dd40d4fcf96",
-        "version" : "0.47.0"
+        "revision" : "84baad911618ff5d8b672ba58c04e6ca48de1628",
+        "version" : "0.48.0"
       }
     },
     {

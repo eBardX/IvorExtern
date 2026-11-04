@@ -56,7 +56,7 @@ extension JohnnySonic.Exporter {
         for note in part.noteTable {
             let startBeat  = convertToJohnnySonicBeat(note.attack)
             let duration   = convertToJohnnySonicDuration(note.duration)
-            let volume     = intValue(note.extras, .velocity).map { Double($0) / 12.7 }
+            let volume     = intValue(note.extras, .attackVelocity).map { Double($0) / 12.7 }
                 ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)
@@ -90,7 +90,7 @@ extension JohnnySonic.Exporter {
         for note in part.noteTable {
             let startBeat  = convertToJohnnySonicBeat(note.attack)
             let duration   = convertToJohnnySonicDuration(note.duration)
-            let volume     = intValue(note.extras, .velocity).map { Double($0) / 12.7 }
+            let volume     = intValue(note.extras, .attackVelocity).map { Double($0) / 12.7 }
                 ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)

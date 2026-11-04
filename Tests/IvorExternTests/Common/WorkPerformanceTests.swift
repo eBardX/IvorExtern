@@ -172,7 +172,7 @@ extension WorkPerformanceTests {
 
         part.dynamicMap.insert(time: .zero, dynamic: .f)
         part.noteTable.updateExtras(noteID: second.noteID,
-                                    extras: Extras(elements: [Extra(name: Extra.velocity.name, values: [.int(77)])]))
+                                    extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(77)])]))
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
 

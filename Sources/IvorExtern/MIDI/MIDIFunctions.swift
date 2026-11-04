@@ -129,11 +129,11 @@ internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {
     return determineTrackName(track0) ?? ""
 }
 
-// The exact key velocity an importer kept on a note (its `velocity`
+// The exact key velocity an importer kept on a note (its `attackVelocity`
 // extra), if any. A note with one sounds at that velocity rather than one
 // converted from the dynamic level at its attack.
 internal func exactKeyVelocity(_ extras: Extras?) -> MIDI.KeyVelocity? {
-    intValue(extras, .velocity).flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
+    intValue(extras, .attackVelocity).flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
 }
 
 // The start time a file with this division implies when it has no SMPTE
