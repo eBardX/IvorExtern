@@ -574,6 +574,28 @@ internal func isNoteMessage(_ message: MIDIChannelMessage) -> Bool {
     }
 }
 
+internal func expressionValues(_ performance: WorkPerformance) -> [(time: WallTime, value: UInt)] {
+    performance.events.compactMap { event in
+        guard case let .controlChange(_, .expressionControllerMSB, value) = event.message
+        else { return nil }
+
+        return (event.time, value.uintValue)
+    }
+}
+
+internal func messagesWithoutExpression(_ performance: WorkPerformance) -> [MIDIChannelMessage] {
+    performance.events.map(\.message).filter {
+        switch $0 {
+        case .controlChange(_, .expressionControllerLSB, _),
+             .controlChange(_, .expressionControllerMSB, _):
+            false
+
+        default:
+            true
+        }
+    }
+}
+
 internal func noteOnVelocities(_ performance: WorkPerformance) -> [UInt] {
     performance.events.compactMap { event in
         guard case let .noteOn(_, _, velocity) = event.message

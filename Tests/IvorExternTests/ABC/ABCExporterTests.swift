@@ -82,6 +82,28 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_stepAfterLeadingEntry_emitsMarksAndNoHairpin() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(4), pitch: "C4")
+        table.insert(attack: BeatTime(4), duration: BeatDuration(4), pitch: "D4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0), dynamic: .p)
+        dynamicMap.insert(time: BeatTime(4), dynamic: .p)
+        dynamicMap.insert(time: BeatTime(4), dynamic: .f)
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let names = decorations(in: tune).map(\.name.stringValue)
+
+        #expect(names.contains("p"))
+        #expect(names.contains("f"))
+        #expect(!names.contains { $0.hasPrefix("crescendo") || $0.hasPrefix("diminuendo") })
+    }
+
+    @Test
     func convert_distinctTimeDynamicPair_emitsHairpin() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

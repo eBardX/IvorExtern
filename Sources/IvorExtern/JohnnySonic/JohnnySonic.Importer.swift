@@ -149,12 +149,25 @@ extension JohnnySonic.Importer {
                              extras: Extras(elements: [Extra(name: Extra.attackVelocity.name,
                                                              values: [.int(convertToVelocity(note.volume))])]))
 
+            // A note's volume and location are steps, not the ends of ramps
+            // from the note before, so the values in effect are reasserted
+            // first; an unchanged value collapses into one entry.
             if let dynamic = convertToDynamic(note.volume) {
+                if !dynamicMap.isEmpty {
+                    dynamicMap.insert(time: attackTime,
+                                      dynamic: dynamicMap[attackTime])
+                }
+
                 dynamicMap.insert(time: attackTime,
                                   dynamic: dynamic)
             }
 
             if let pan = convertToPan(note.location) {
+                if !panMap.isEmpty {
+                    panMap.insert(time: attackTime,
+                                  pan: panMap[attackTime])
+                }
+
                 panMap.insert(time: attackTime,
                               pan: pan)
             }
@@ -198,12 +211,25 @@ extension JohnnySonic.Importer {
                              extras: Extras(elements: [Extra(name: Extra.attackVelocity.name,
                                                              values: [.int(convertToVelocity(note.volume))])]))
 
+            // A note's volume and location are steps, not the ends of ramps
+            // from the note before, so the values in effect are reasserted
+            // first; an unchanged value collapses into one entry.
             if let dynamic = convertToDynamic(note.volume) {
+                if !dynamicMap.isEmpty {
+                    dynamicMap.insert(time: attackTime,
+                                      dynamic: dynamicMap[attackTime])
+                }
+
                 dynamicMap.insert(time: attackTime,
                                   dynamic: dynamic)
             }
 
             if let pan = convertToPan(note.location) {
+                if !panMap.isEmpty {
+                    panMap.insert(time: attackTime,
+                                  pan: panMap[attackTime])
+                }
+
                 panMap.insert(time: attackTime,
                               pan: pan)
             }

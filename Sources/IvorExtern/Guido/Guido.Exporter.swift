@@ -146,49 +146,22 @@ extension Guido.Exporter {
         return Guido.Score(variables: [], voices: voices)
     }
 
-    // Reduces a dynamic map's (time, level) entries into mark/ramp
-    // annotations, per the module-wide positional convention: two entries at
-    // the *same* time are an instantaneous step, emitted as a single
-    // `\intensity` mark using the post-jump level; two entries at *different*
-    // times are a ramp. A trailing unpaired entry gets a plain mark.
+    // A dynamic map's shapes as annotations: a mark as a `\intensity` mark,
+    // and a ramp as a dynamic ramp.
     private static func _dynamicAnnotations(_ dynamicMap: DynamicMap<BeatTime>) -> [DynamicAnnotation] {
-        guard !dynamicMap.isEmpty
-        else { return [] }
+        DynamicShape.shapes(of: dynamicMap).map {
+            switch $0 {
+            case let .mark(time, dynamic, mark):
+                .mark(time: time, dynamic: dynamic, mark: mark)
 
-        var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
-
-        for entry in dynamicMap {
-            entries.append((entry.time, entry.dynamic, stringValue(entry.extras, .dynamicMark)))
-        }
-
-        var annotations: [DynamicAnnotation] = []
-        var index = 0
-
-        while index < entries.count {
-            let (time, dynamic, mark) = entries[index]
-
-            if index + 1 < entries.count, entries[index + 1].time == time {
-                let (_, nextDynamic, nextMark) = entries[index + 1]
-
-                annotations.append(.mark(time: time, dynamic: nextDynamic, mark: nextMark))
-                index += 2
-            } else if index + 1 < entries.count {
-                let (endTime, endDynamic, _) = entries[index + 1]
-                let direction: GMNDynamicRamp.Direction = endDynamic > dynamic ? .crescendo : .diminuendo
-
-                annotations.append(.ramp(start: time,
-                                         startDynamic: dynamic,
-                                         end: endTime,
-                                         endDynamic: endDynamic,
-                                         direction: direction))
-                index += 2
-            } else {
-                annotations.append(.mark(time: time, dynamic: dynamic, mark: mark))
-                index += 1
+            case let .ramp(start, startDynamic, end, endDynamic):
+                .ramp(start: start,
+                      startDynamic: startDynamic,
+                      end: end,
+                      endDynamic: endDynamic,
+                      direction: endDynamic > startDynamic ? .crescendo : .diminuendo)
             }
         }
-
-        return annotations
     }
 
     // Every note table entry is walked once, in time order. Consecutive

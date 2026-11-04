@@ -31,12 +31,21 @@ private import IvorTuning
 /// attack, so a crescendo rises note by note — or, where an importer kept
 /// the note’s exact velocity (its `attackVelocity` extra), at that.
 ///
-/// Pan is per channel, so each channel takes the pan of the first part that
-/// plays on it, and a later part that shares the channel sends none. A part
-/// sends its pan on every channel it owns at the start, and again at a
-/// pan-map entry or one of its attacks where the pan has changed, so a
-/// glide between entries moves note by note. An entry’s exact 14-bit pan,
-/// where an importer kept one, is sent as it is.
+/// Pan and expression are per channel, so each channel takes those of the
+/// first part that plays on it, and a later part that shares the channel
+/// sends none. A part sends its pan on every channel it owns at the start,
+/// and again at a pan-map entry or one of its attacks where the pan has
+/// changed, and throughout a glide while a note sounds. An entry’s exact
+/// 14-bit pan, where an importer kept one, is sent as it is.
+///
+/// A part also sends expression (CC 11) on every channel it owns except
+/// percussion, starting at the start, so that a crescendo or diminuendo
+/// reaches a note already sounding, wherever a held note would otherwise
+/// drift audibly from the written level. The expression is relative to the
+/// velocity: a note attacking during one has a higher velocity, so it still
+/// sounds at the written level. Where an importer kept a file’s exact
+/// expression (the `expressionValue` extra of a dynamic-map entry), that is
+/// sent as it is instead.
 ///
 /// For now a note that glides plays its start key only. Only a
 /// keyboard-pitch, wall-time work can be made into a performance.
@@ -59,23 +68,34 @@ public struct WorkPerformance {
 
         let partChannels = parts.indices.map { Self.channels[$0 % Self.channels.count] }
         var events: [Event] = []
+        var ownedChannels: Set<MIDIChannel> = []
         var partChannelSets: [[MIDIChannel]] = []
+        var partSounds: [[Instrument: (MIDIChannel, MIDIPatch)]] = []
 
         for (part, channel) in zip(parts, partChannels) {
-            let (partEvents, channels) = Self._events(for: part,
-                                                      on: channel,
-                                                      realization: realization)
+            let (patchEvents, channels, sounds) = Self._patchEvents(for: part,
+                                                                    on: channel,
+                                                                    realization: realization)
 
-            events += partEvents
+            events += patchEvents
 
             partChannelSets.append(channels)
+            partSounds.append(sounds)
         }
 
-        var ownedChannels: Set<MIDIChannel> = []
+        for (index, part) in parts.enumerated() {
+            let channels = partChannelSets[index].filter { ownedChannels.insert($0).inserted }
+            let expressive = channels.filter { $0 != Self.percussionChannel }
+            let expression = Expression(part: part)
 
-        for (part, channels) in zip(parts, partChannelSets) {
+            events += Self._noteEvents(for: part,
+                                       sounds: partSounds[index],
+                                       expression: expression,
+                                       on: Set(expressive))
             events += Self._panEvents(for: part,
-                                      on: channels.filter { ownedChannels.insert($0).inserted })
+                                      on: channels,
+                                      expression: expression)
+            events += expression.events(on: expressive)
         }
 
         self.duration = events.map(\.time).max() ?? .zero
@@ -133,14 +153,42 @@ extension WorkPerformance {
 
     private static let channels = (1...16).filter { $0 != 10 }.map { MIDIChannel(clamping: $0) }
     private static let defaultVelocity = MIDIData1Value(clamping: 64)
+    private static let percussionChannel = MIDIChannel(clamping: 10)
 
     // MARK: Private Type Methods
 
-    // A part's events, and every channel it plays on. Its instruments are taken in the order they come in: each
-    // channel's first patch is sent at the start, and a later one only if it differs from the channel's patch by then.
-    private static func _events(for part: Part<WallTime, NoteNumber>,
-                                on partChannel: MIDIChannel,
-                                realization: Realization?) -> ([Event], [MIDIChannel]) {
+    // A part's notes. An attack on one of `expressiveChannels` takes account of the expression there.
+    private static func _noteEvents(for part: Part<WallTime, NoteNumber>,
+                                    sounds: [Instrument: (MIDIChannel, MIDIPatch)],
+                                    expression: Expression,
+                                    on expressiveChannels: Set<MIDIChannel>) -> [Event] {
+        var events: [Event] = []
+
+        for note in part.noteTable {
+            guard let (channel, _) = sounds[part.instrumentMap[note.attack]]
+            else { continue }
+
+            let key = MIDIData1Value(clamping: note.startPitch.uintValue)
+            let velocity = exactKeyVelocity(note.extras)
+                ?? convertToMIDIKeyVelocity(part.dynamicMap[note.attack])
+                ?? defaultVelocity
+            let attackVelocity = expressiveChannels.contains(channel) ? expression.velocity(velocity, at: note.attack) : velocity
+
+            events.append(Event(time: note.attack,
+                                message: .noteOn(channel, key, attackVelocity)))
+            events.append(Event(time: note.release,
+                                message: .noteOff(channel, key, MIDIData1Value(clamping: 0))))
+        }
+
+        return events
+    }
+
+    // A part's patch changes, every channel it plays on, and how each of its instruments sounds. Its instruments are
+    // taken in the order they come in: each channel's first patch is sent at the start, and a later one only if it
+    // differs from the channel's patch by then.
+    private static func _patchEvents(for part: Part<WallTime, NoteNumber>,
+                                     on partChannel: MIDIChannel,
+                                     realization: Realization?) -> ([Event], [MIDIChannel], [Instrument: (MIDIChannel, MIDIPatch)]) {
         var resolved: [Instrument: (MIDIChannel, MIDIPatch)] = [:]
 
         func resolve(_ instrument: Instrument) -> (MIDIChannel, MIDIPatch) {
@@ -185,47 +233,23 @@ extension WorkPerformance {
             patches[channel] = patch
         }
 
-        for note in part.noteTable {
-            let (channel, _) = resolve(part.instrumentMap[note.attack])
-            let key = MIDIData1Value(clamping: note.startPitch.uintValue)
-            let velocity = exactKeyVelocity(note.extras)
-                ?? convertToMIDIKeyVelocity(part.dynamicMap[note.attack])
-                ?? defaultVelocity
-
-            events.append(Event(time: note.attack,
-                                message: .noteOn(channel, key, velocity)))
-            events.append(Event(time: note.release,
-                                message: .noteOff(channel, key, MIDIData1Value(clamping: 0))))
-        }
-
-        return (events, patches.keys.sorted())
+        return (events, patches.keys.sorted(), resolved)
     }
 
     // A part's pan on `channels`, the ones it owns.
     private static func _panEvents(for part: Part<WallTime, NoteNumber>,
-                                   on channels: [MIDIChannel]) -> [Event] {
+                                   on channels: [MIDIChannel],
+                                   expression: Expression) -> [Event] {
         guard !channels.isEmpty
         else { return [] }
 
-        var exactPans: [WallTime: Int] = [:]
-        var times: Set<WallTime> = [.zero]
-
-        for entry in part.panMap {
-            times.insert(entry.time)
-
-            if let midiPan = intValue(entry.extras, .midiPan) {
-                exactPans[entry.time] = midiPan
-            }
-        }
-
-        for note in part.noteTable {
-            times.insert(note.attack)
-        }
+        let (times, exactPans) = _panTimes(for: part,
+                                           expression: expression)
 
         var events: [Event] = []
         var previous: (msb: MIDIData1Value, lsb: MIDIData1Value?)?
 
-        for time in times.sorted() {
+        for time in times {
             let value: (msb: MIDIData1Value, lsb: MIDIData1Value?)
 
             if let midiPan = exactPans[time] {
@@ -257,6 +281,32 @@ extension WorkPerformance {
         return events
     }
 
+    // The times a part's pan may change, in order, and the exact pans among them.
+    private static func _panTimes(for part: Part<WallTime, NoteNumber>,
+                                  expression: Expression) -> ([WallTime], [WallTime: Int]) {
+        var exactPans: [WallTime: Int] = [:]
+        var times: Set<WallTime> = [.zero]
+
+        for entry in part.panMap {
+            times.insert(entry.time)
+
+            if let midiPan = intValue(entry.extras, .midiPan) {
+                exactPans[entry.time] = midiPan
+            }
+        }
+
+        for note in part.noteTable {
+            times.insert(note.attack)
+        }
+
+        for (start, end) in zip(part.panMap, part.panMap.dropFirst()) where start.time < end.time && start.pan != end.pan {
+            times.formUnion(expression.gridTimes(from: start.time,
+                                                 through: end.time))
+        }
+
+        return (times.sorted(), exactPans)
+    }
+
     private static func _resolve(_ instrument: Instrument,
                                  in partID: PartID,
                                  on partChannel: MIDIChannel,
@@ -268,7 +318,7 @@ extension WorkPerformance {
         let channel = if let channel = assignment.channel {
             MIDIChannel(clamping: channel)
         } else if assignment.patch.isPercussion {
-            MIDIChannel(clamping: 10)
+            percussionChannel
         } else {
             partChannel
         }

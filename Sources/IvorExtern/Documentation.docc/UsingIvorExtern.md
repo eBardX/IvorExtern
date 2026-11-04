@@ -91,14 +91,14 @@ let playable    = try work.convert(timeBasis: .wall, pitchNotation: .keyboard)!
 let performance = WorkPerformance(work: playable)!
 
 performance.duration        // when the last note ends
-performance.events          // bank selects, program changes, pan, notes, …
+performance.events          // bank selects, program changes, pan, expression, notes, …
 ```
 
 Without a realization, each instrument sounds as the General MIDI instrument
 its name matches. Event times are exact `WallTime` values, never floating-point
 seconds, so events at the same moment stay together; at the same time,
-note-offs come first, then bank selects, program changes, pan, other
-controllers, and note-ons.
+note-offs come first, then bank selects, program changes, pan, expression,
+other controllers, and note-ons.
 
 Each part plays on a channel of its own, given in
 ``WorkPerformance/partChannels``, unless an instrument’s assignment moves it;

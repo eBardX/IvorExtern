@@ -134,56 +134,30 @@ extension ABC.Exporter {
         }
     }
 
-    // Reduces a dynamic map's (time, level) entries into decoration
-    // placements, per the module-wide positional convention: two entries
-    // at the *same* time are an instantaneous step, emitted as a single
-    // mark using the post-jump level; two entries at *different* times are
-    // a ramp, emitted as a `!crescendo(!`/`!crescendo)!` (or diminuendo)
-    // hairpin pair spanning them. A trailing unpaired entry gets a plain
-    // mark. Only the ten standard levels convert to a decoration name (see
-    // `convertToABCDecorationName(_:)`); anything else is silently dropped
-    // rather than rounded to the nearest one.
+    // A dynamic map's shapes as decoration placements: a mark as a single
+    // decoration, and a ramp as a `!crescendo(!`/`!crescendo)!` (or
+    // diminuendo) hairpin pair spanning it. Only the ten standard levels
+    // convert to a decoration name (see `convertToABCDecorationName(_:)`);
+    // anything else is silently dropped rather than rounded to the nearest
+    // one.
     private static func _dynamicAnnotations(_ dynamicMap: DynamicMap<BeatTime>) -> [BeatTime: [ABCDecoration.Name]] {
-        guard !dynamicMap.isEmpty
-        else { return [:] }
-
-        var entries: [(time: BeatTime, dynamic: Dynamic, mark: String?)] = []
-
-        for entry in dynamicMap {
-            entries.append((entry.time, entry.dynamic, stringValue(entry.extras, .dynamicMark)))
-        }
-
         var annotations: [BeatTime: [ABCDecoration.Name]] = [:]
-        var index = 0
 
-        while index < entries.count {
-            let (time, dynamic, mark) = entries[index]
-
-            if index + 1 < entries.count, entries[index + 1].time == time {
-                let (_, nextDynamic, nextMark) = entries[index + 1]
-
-                if let name = nextMark.flatMap({ ABCDecoration.Name(stringValue: $0) }) ?? convertToABCDecorationName(nextDynamic) {
-                    annotations[time, default: []].append(name)
-                }
-
-                index += 2
-            } else if index + 1 < entries.count {
-                let (endTime, endDynamic, _) = entries[index + 1]
-                let direction = endDynamic > dynamic ? "crescendo" : "diminuendo"
-
-                if let openName = ABCDecoration.Name(stringValue: direction + "("),
-                   let closeName = ABCDecoration.Name(stringValue: direction + ")") {
-                    annotations[time, default: []].append(openName)
-                    annotations[endTime, default: []].append(closeName)
-                }
-
-                index += 2
-            } else {
+        for shape in DynamicShape.shapes(of: dynamicMap) {
+            switch shape {
+            case let .mark(time, dynamic, mark):
                 if let name = mark.flatMap({ ABCDecoration.Name(stringValue: $0) }) ?? convertToABCDecorationName(dynamic) {
                     annotations[time, default: []].append(name)
                 }
 
-                index += 1
+            case let .ramp(start, startDynamic, end, endDynamic):
+                let direction = endDynamic > startDynamic ? "crescendo" : "diminuendo"
+
+                if let openName = ABCDecoration.Name(stringValue: direction + "("),
+                   let closeName = ABCDecoration.Name(stringValue: direction + ")") {
+                    annotations[start, default: []].append(openName)
+                    annotations[end, default: []].append(closeName)
+                }
             }
         }
 

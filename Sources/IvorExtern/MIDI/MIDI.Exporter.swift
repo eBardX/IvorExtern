@@ -389,13 +389,24 @@ extension MIDI.Exporter {
     // convention) so `MIDI.Importer`'s same-tick merge — which reads events
     // in emission order, not MIDI-standard byte order — already knows the
     // LSB by the time it processes the MSB that actually creates the
-    // `PanMap` entry.
+    // `PanMap` entry. Entries at the same time are a step, so only the last
+    // of them is written.
     private static func _panEvents<TickMap: MIDI.ExportTimeMap>(_ panMap: PanMap<TickMap.TimeType>,
                                                                 channel: MIDI.Channel,
                                                                 tickMap: TickMap) -> [MIDI.Event] {
-        var events: [MIDI.Event] = []
+        var entries: [PanMap<TickMap.TimeType>.Entry] = []
 
         for entry in panMap {
+            if entries.last?.time == entry.time {
+                entries.removeLast()
+            }
+
+            entries.append(entry)
+        }
+
+        var events: [MIDI.Event] = []
+
+        for entry in entries {
             guard let eventTime = tickMap.eventTime(at: entry.time)
             else { continue }
 

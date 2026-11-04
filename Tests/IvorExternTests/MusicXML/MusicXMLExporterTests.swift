@@ -347,6 +347,25 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_panStep_emitsOnlyTheNewPan() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(4), duration: BeatDuration(1), pitch: "D4")
+
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: BeatTime(0), pan: .left)
+        panMap.insert(time: BeatTime(4), pan: .left)
+        panMap.insert(time: BeatTime(4), pan: .right)
+
+        let part = Part(name: "", noteTable: table, panMap: panMap)
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+
+        #expect(sounds(in: score).compactMap(\.pan) == [-90, 90])
+    }
+
+    @Test
     func convert_releaseVelocityExtra_emitsEndDynamicsOnLastSegmentOnly() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

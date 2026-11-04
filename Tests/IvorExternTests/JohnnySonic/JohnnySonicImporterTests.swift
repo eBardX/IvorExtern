@@ -192,6 +192,28 @@ extension JohnnySonicImporterTests {
     }
 
     @Test
+    func convert_noteVolumeAndLocation_areSteps() throws {
+        let notes = [(0.0, 2.0, -0.5), (4.0, 8.0, 0.5)].map { beat, volume, location in
+            JohnnySonic.Command.pitchesNote(DKMPitchesNote(startBeat: beat,
+                                                           duration: 1,
+                                                           volume: volume,
+                                                           location: location,
+                                                           startPitch: 60,
+                                                           endPitch: 60,
+                                                           instrument: "Piano"))
+        }
+        let work = try JohnnySonic.Importer().convert(JohnnySonic.Score(commands: notes))
+        let part = try #require(keyboardBeatParts(of: work)?.first)
+
+        #expect(part.dynamicMap.map(\.time) == [BeatTime(0), BeatTime(4), BeatTime(4)])
+        #expect(part.dynamicMap[BeatTime(2)] == part.dynamicMap[BeatTime(0)])
+        #expect(part.dynamicMap[BeatTime(4)] != part.dynamicMap[BeatTime(0)])
+        #expect(part.panMap.map(\.time) == [BeatTime(0), BeatTime(4), BeatTime(4)])
+        #expect(part.panMap[BeatTime(2)] == part.panMap[BeatTime(0)])
+        #expect(part.panMap[BeatTime(4)] != part.panMap[BeatTime(0)])
+    }
+
+    @Test
     func convert_tempoAfterEnd_isIgnored() throws {
         let note = DKMPitchesNote(startBeat: 0,
                                   duration: 1,

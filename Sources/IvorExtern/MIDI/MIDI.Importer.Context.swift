@@ -57,7 +57,10 @@ extension MIDI.Importer.Context {
     // The note-on velocity is kept exactly on the note itself, as
     // `attackVelocity`, so it travels with the note through every transform; the
     // dynamic map gets the level it implies, for everything that reads
-    // dynamics. A note-off velocity of 0 (often a zero-velocity note-on
+    // dynamics. That level is a step, not the end of a ramp from the note
+    // before, so the level in effect is reasserted first; an unchanged
+    // level collapses into one entry. Notes must come in time order. A
+    // note-off velocity of 0 (often a zero-velocity note-on
     // standing in for the note-off) or 64 (what MIDI prescribes for a
     // device that doesn't sense release velocity) says nothing about the
     // note, so only another value is kept, as `releaseVelocity`.
@@ -81,6 +84,11 @@ extension MIDI.Importer.Context {
                          extras: Extras(elements: elements))
 
         if let dynamic = convertToDynamic(note.onVelocity) {
+            if !dynamicMap.isEmpty {
+                dynamicMap.insert(time: attack,
+                                  dynamic: dynamicMap[attack])
+            }
+
             dynamicMap.insert(time: attack,
                               dynamic: dynamic)
         }
@@ -90,7 +98,9 @@ extension MIDI.Importer.Context {
     // this MSB event's tick — combined into a 14-bit `midiPan` extra (see
     // `Extra+PanMap.swift`) alongside the existing 7-bit `Pan` conversion,
     // which stays MSB-only (matching every other format's coarser
-    // resolution).
+    // resolution). A Pan event is a step, not the end of a glide from the
+    // one before, so the pan in effect is reasserted first; events must
+    // come in time order.
     internal mutating func handlePan(_ eventTime: MIDI.EventTime,
                                      _ panValue: MIDI.PanValue,
                                      _ panLSB: UInt?) {
@@ -102,6 +112,11 @@ extension MIDI.Importer.Context {
         let extras = panLSB.map {
             Extras(elements: [Extra(name: Extra.midiPan.name,
                                     values: [.int(Int((panValue.uintValue << 7) | $0))])])
+        }
+
+        if !panMap.isEmpty {
+            panMap.insert(time: time,
+                          pan: panMap[time])
         }
 
         panMap.insert(time: time,
