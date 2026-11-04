@@ -2,6 +2,8 @@
 
 extension Guido.Importer.Context.DynamicEvent {
 
+    // MARK: Internal Nested Types
+
     // Which way a `DynamicEvent` should be rendered into a `DynamicMap`: an
     // `\intensity` mark is an instant change, so it needs the reassert-then-
     // insert step every other importer's `TempoMap`/`PanMap` builder uses; a

@@ -9,6 +9,9 @@ private import IvorTuning
 private import XestiTools
 
 extension ABC {
+
+    // MARK: Internal Nested Types
+
     internal struct Importer {
     }
 }
@@ -46,11 +49,14 @@ extension ABC.Importer {
             guard result.identity != nil || !_isEmptyImplicitVoice(result.context)
             else { return nil }
 
+            let (instrumentMap, extras) = _makeInstrumentMapAndExtras(voiceID: result.identity?.id,
+                                                                      directives: directives)
+
             return Part(name: determinePartName(result.identity),
                         noteTable: result.context.noteTable,
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
-                        instrumentMap: _makeInstrumentMap(voiceID: result.identity?.id,
-                                                          directives: directives))
+                        instrumentMap: instrumentMap,
+                        extras: extras)
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 
@@ -132,10 +138,6 @@ extension ABC.Importer {
         directives.lazy.compactMap(convert).first
     }
 
-    private static func _isMIDIDirective(_ directive: ABCDirective) -> Bool {
-        directive.name.stringValue.lowercased() == "midi"
-    }
-
     // `ABC.Importer.Walker._routed` always seeds an accumulator for the
     // implicit voice (no `V:` field has matched it yet) so that a plain,
     // voiceless tune still has somewhere to land — see that type's own
@@ -147,6 +149,10 @@ extension ABC.Importer {
     // `identity == nil`).
     private static func _isEmptyImplicitVoice(_ context: ABC.Importer.Context) -> Bool {
         context.noteTable.timeRange == nil && context.dynamicEvents.isEmpty
+    }
+
+    private static func _isMIDIDirective(_ directive: ABCDirective) -> Bool {
+        directive.name.stringValue.lowercased() == "midi"
     }
 
     // Unlike `_makeTempoMap`, this isn't a uniform reassert-then-insert step
@@ -322,19 +328,16 @@ extension ABC.Importer {
     // it's written (one naming another voice is skipped), and `%%MIDI
     // voice` wins over `%%MIDI program`. A `program` directive's own channel
     // token wins over a standalone `channel` directive, and that channel
-    // applies whichever directive gave the instrument.
+    // applies whichever directive gave the instrument. It's kept in the
+    // part's own `midiChannel` extra rather than on an instrument map
+    // entry, since it holds for the whole tune.
     //
     // `%%MIDI program` numbers count from `%%MIDI programbase`: 0 unless a
     // directive says 1, as in abc2midi, though the ABC standard counts from
     // 1. abc2midi keeps the last `programbase` it reads, so this does too.
     //
-    // A `channel` directive with no instrument at all still produces an
-    // entry, as `.vanilla`, so its `midiChannel` extra has somewhere to
-    // live; an empty `InstrumentMap` would otherwise be indistinguishable
-    // from "no MIDI directives at all" (see this type's own
-    // `Instrument.vanilla` default).
-    private static func _makeInstrumentMap(voiceID: ABC.Voice.ID?,
-                                           directives: MIDIDirectives) -> InstrumentMap<BeatTime> {
+    private static func _makeInstrumentMapAndExtras(voiceID: ABC.Voice.ID?,
+                                                    directives: MIDIDirectives) -> (InstrumentMap<BeatTime>, Extras?) {
         let own = directives.byVoice[voiceID] ?? []
         let programBase = directives.all.compactMap(convertToProgramBase).last ?? 0
 
@@ -363,17 +366,15 @@ extension ABC.Importer {
             elements.append(Extra(name: Extra.midiProgram.name, values: [.int(program.program)]))
         }
 
-        if let channel {
-            elements.append(Extra(name: Extra.midiChannel.name, values: [.int(channel)]))
-        }
-
         var instrumentMap = InstrumentMap<BeatTime>()
 
         if !elements.isEmpty {
             instrumentMap.insert(time: .zero, instrument: instrument, extras: Extras(elements: elements))
         }
 
-        return instrumentMap
+        let extras = channel.map { Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int($0)])]) }
+
+        return (instrumentMap, extras)
     }
 
     // The same prev/curr double-insert step MIDI's and Guido's `TempoMap`

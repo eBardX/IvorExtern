@@ -6,6 +6,9 @@ internal import IvorTuning
 internal import XestiTools
 
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     internal enum Error {
         case convertFailure((any EnhancedError)?)
         case durationBeforeDivisions(String)
@@ -34,6 +37,9 @@ extension MusicXML {
 // MARK: - EnhancedError
 
 extension MusicXML.Error: EnhancedError {
+
+    // MARK: Internal Instance Properties
+
     internal var category: Category? {
         Category("IvorExtern")
     }

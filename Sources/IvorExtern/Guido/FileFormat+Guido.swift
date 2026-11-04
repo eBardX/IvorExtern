@@ -4,6 +4,9 @@ private import IvorTiming
 private import IvorTuning
 
 extension FileFormat {
+
+    // MARK: Internal Type Properties
+
     internal static let gmn = Self(displayName: "Guido Score File",
                                    filenameExtensions: ["gmn"],
                                    pitchNotations: [.standard],

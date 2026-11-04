@@ -4,6 +4,8 @@ internal import XestiNumbers
 
 extension Guido {
 
+    // MARK: Internal Nested Types
+
     // A fully resolved duration, expressed as a fraction of a whole note —
     // dots and inheritance already applied. Unlike the upstream playback
     // model's equivalent type, a numerator/denominator pair reduced by hand,

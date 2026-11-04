@@ -104,19 +104,19 @@ extension ABCFunctionsTests {
         #expect(resolved?.program == expectedProgram)
     }
 
+    @Test(arguments: ["program 40", "programbase", "programbase one"])
+    func convertToProgramBase_otherDirective_returnsNil(_ value: String) throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+
+        #expect(convertToProgramBase(ABCDirective(name: name, value: value)) == nil)
+    }
+
     @Test(arguments: [("programbase 0", 0), ("programbase 1", 1), ("programbase 7", 1), ("ProgramBase 0", 0)])
     func convertToProgramBase_programBaseDirective_returnsZeroOrOne(_ value: String,
                                                                     _ expected: Int) throws {
         let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
 
         #expect(convertToProgramBase(ABCDirective(name: name, value: value)) == expected)
-    }
-
-    @Test(arguments: ["program 40", "programbase", "programbase one"])
-    func convertToProgramBase_otherDirective_returnsNil(_ value: String) throws {
-        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
-
-        #expect(convertToProgramBase(ABCDirective(name: name, value: value)) == nil)
     }
 
     @Test
@@ -194,18 +194,18 @@ extension ABCFunctionsTests {
         #expect(convertToTempo(tempo) == nil)
     }
 
-    @Test(arguments: ["program 41", "voice Tb mute", "voice instrument=0", "voice instrument=129", "voice Tb"])
-    func convertToVoiceInstrument_noUsableInstrument_returnsNil(_ value: String) throws {
-        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
-
-        #expect(convertToVoiceInstrument(ABCDirective(name: name, value: value)) == nil)
-    }
-
     @Test
     func convertToVoiceInstrument_nonMIDIDirective_returnsNil() {
         let directive = ABCDirective(name: .linebreak, value: "voice instrument=59")
 
         #expect(convertToVoiceInstrument(directive) == nil)
+    }
+
+    @Test(arguments: ["program 41", "voice Tb mute", "voice instrument=0", "voice instrument=129", "voice Tb"])
+    func convertToVoiceInstrument_noUsableInstrument_returnsNil(_ value: String) throws {
+        let name = try #require(ABCDirective.Name(stringValue: "MIDI"))
+
+        #expect(convertToVoiceInstrument(ABCDirective(name: name, value: value)) == nil)
     }
 
     @Test
@@ -236,22 +236,6 @@ extension ABCFunctionsTests {
     }
 
     @Test
-    func determinePartName_voiceWithoutNameOrSubname_usesVoiceID() throws {
-        let id = try #require(ABCVoice.ID(stringValue: "T1"))
-        let voice = try #require(ABCVoice(id: id))
-
-        #expect(determinePartName(voice) == "T1")
-    }
-
-    @Test(arguments: ["1", "12", "V2", "v3"])
-    func determinePartName_voiceNumberIDWithoutName_returnsEmptyString(_ idValue: String) throws {
-        let id = try #require(ABCVoice.ID(stringValue: idValue))
-        let voice = try #require(ABCVoice(id: id))
-
-        #expect(determinePartName(voice).isEmpty)
-    }
-
-    @Test
     func determinePartName_nameWithExtraWhitespace_collapsesIt() throws {
         let id = try #require(ABCVoice.ID(stringValue: "T1"))
         let voice = try #require(ABCVoice(id: id, properties: ["nm": "  Tenor   Sax "]))
@@ -273,6 +257,22 @@ extension ABCFunctionsTests {
         let voice = try #require(ABCVoice(id: id, properties: ["snm": #"T.\nSx."#]))
 
         #expect(determinePartName(voice) == "T. Sx.")
+    }
+
+    @Test(arguments: ["1", "12", "V2", "v3"])
+    func determinePartName_voiceNumberIDWithoutName_returnsEmptyString(_ idValue: String) throws {
+        let id = try #require(ABCVoice.ID(stringValue: idValue))
+        let voice = try #require(ABCVoice(id: id))
+
+        #expect(determinePartName(voice).isEmpty)
+    }
+
+    @Test
+    func determinePartName_voiceWithoutNameOrSubname_usesVoiceID() throws {
+        let id = try #require(ABCVoice.ID(stringValue: "T1"))
+        let voice = try #require(ABCVoice(id: id))
+
+        #expect(determinePartName(voice) == "T1")
     }
 
     @Test

@@ -51,6 +51,9 @@ extension FileFormat {
 // MARK: - CustomStringConvertible
 
 extension FileFormat: CustomStringConvertible {
+
+    // MARK: Internal Instance Properties
+
     internal var description: String {
         displayName
     }
@@ -59,6 +62,9 @@ extension FileFormat: CustomStringConvertible {
 // MARK: - Equatable
 
 extension FileFormat: Equatable {
+
+    // MARK: Internal Type Methods
+
     internal static func == (lhs: Self,
                              rhs: Self) -> Bool {
         lhs.uniqueID == rhs.uniqueID

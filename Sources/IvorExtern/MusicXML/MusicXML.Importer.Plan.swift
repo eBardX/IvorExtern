@@ -23,6 +23,8 @@ private import IvorMXL
 // the element."
 extension MusicXML.Importer {
 
+    // MARK: Internal Nested Types
+
     internal struct Plan {
 
         // MARK: Internal Initializers

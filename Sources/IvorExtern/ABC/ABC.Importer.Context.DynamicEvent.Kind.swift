@@ -2,6 +2,8 @@
 
 extension ABC.Importer.Context.DynamicEvent {
 
+    // MARK: Internal Nested Types
+
     // Which way a `DynamicEvent` should be rendered into a `DynamicMap`: a
     // dynamics decoration is an instant change, so it needs the
     // reassert-then-insert step every other importer's `TempoMap`/`PanMap`

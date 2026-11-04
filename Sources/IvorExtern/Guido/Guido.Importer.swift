@@ -9,6 +9,9 @@ private import IvorTuning
 private import XestiTools
 
 extension Guido {
+
+    // MARK: Internal Nested Types
+
     internal struct Importer {
     }
 }
@@ -48,7 +51,8 @@ extension Guido.Importer {
             Part(name: normalizeName(context.instrumentName ?? determinePartName(voice)),
                  noteTable: context.noteTable,
                  dynamicMap: _makeDynamicMap(context.dynamicEvents),
-                 instrumentMap: _makeInstrumentMap(context.instrumentEvents))
+                 instrumentMap: _makeInstrumentMap(context.instrumentEvents,
+                                                   firstAttack: context.noteTable.timeRange?.lowerBound))
         }
 
         return Work(name: determineWorkName(validated),
@@ -101,10 +105,17 @@ extension Guido.Importer {
     // interpolation — so one plain insert per `\instrument` tag is enough.
     // The tag's name is the instrument's display name as well as its
     // playback designation, so it's also kept as an `instrumentName` extra.
-    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)]) -> InstrumentMap<BeatTime> {
+    //
+    // Before its first entry, an `InstrumentMap` gives its default
+    // instrument. Notes before the first tag genuinely have no instrument,
+    // so they keep the default. But a first tag that no note precedes (one
+    // after a leading rest, say) is moved to zero, so that the default
+    // doesn't sound, or show up among the part's instruments, for a rest.
+    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)],
+                                           firstAttack: BeatTime?) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
 
-        for event in events.sorted(by: { $0.beatTime < $1.beatTime }) {
+        for (idx, event) in events.sorted(by: { $0.beatTime < $1.beatTime }).enumerated() {
             var elements: [Extra] = []
 
             if let midi = event.tag.midi {
@@ -115,7 +126,9 @@ extension Guido.Importer {
                 elements.append(Extra(name: Extra.instrumentName.name, values: [.string(name)]))
             }
 
-            instrumentMap.insert(time: event.beatTime,
+            let isUnpreceded = idx == 0 && firstAttack.map { $0 >= event.beatTime } ?? true
+
+            instrumentMap.insert(time: isUnpreceded ? .zero : event.beatTime,
                                  instrument: event.instrument,
                                  extras: elements.isEmpty ? nil : Extras(elements: elements))
         }

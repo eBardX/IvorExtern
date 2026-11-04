@@ -18,6 +18,16 @@ internal struct MusicXML {
     internal typealias Step          = MXLStep
     internal typealias Validator     = MXLValidator
 
+    // MARK: Internal Instance Properties
+
+    internal let exporter = Self.Exporter()
+    internal let importer = Self.Importer()
+}
+
+// MARK: -
+
+extension MusicXML {
+
     // MARK: Internal Type Properties
 
     // The names of the `<miscellaneous-field>`s that hold what MusicXML has
@@ -25,11 +35,6 @@ internal struct MusicXML {
     // other remark is a field named for its label).
     internal static let alternateTitleFieldName = "alternate title"
     internal static let remarkFieldName         = "remark"
-
-    // MARK: Internal Instance Properties
-
-    internal let exporter = Self.Exporter()
-    internal let importer = Self.Importer()
 }
 
 // MARK: - Exportable

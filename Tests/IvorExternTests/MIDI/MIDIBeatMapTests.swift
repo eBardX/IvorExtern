@@ -26,20 +26,6 @@ extension MIDIBeatMapTests {
     }
 
     @Test
-    func append_zeroClockRate_throws() throws {
-        var beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
-
-        #expect(throws: (any Error).self) {
-            try beatMap.append(eventTime: SMFEventTime(480), clockRate: 0)
-        }
-    }
-
-    @Test
-    func init_metrical() {
-        _ = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
-    }
-
-    @Test
     func append_tempo_metrical_hasNoEffect() throws {
         var beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
 
@@ -77,6 +63,15 @@ extension MIDIBeatMapTests {
     }
 
     @Test
+    func append_zeroClockRate_throws() throws {
+        var beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
+
+        #expect(throws: (any Error).self) {
+            try beatMap.append(eventTime: SMFEventTime(480), clockRate: 0)
+        }
+    }
+
+    @Test
     func append_zeroTempo_timeCode_throws() throws {
         let timeCode = try #require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))
         var beatMap = MIDI.BeatMap(division: .timeCode(timeCode))
@@ -84,6 +79,11 @@ extension MIDIBeatMapTests {
         #expect(throws: (any Error).self) {
             try beatMap.append(eventTime: SMFEventTime(480), tempo: 0)
         }
+    }
+
+    @Test
+    func init_metrical() {
+        _ = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
     }
 
     @Test

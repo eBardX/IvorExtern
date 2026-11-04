@@ -7,12 +7,70 @@ import IvorTuning
 import Testing
 import XestiNumbers
 
+// swiftlint:disable file_length
+
 struct MusicXMLImporterWalkerTests {
 }
 
 // MARK: -
 
 extension MusicXMLImporterWalkerTests {
+    @Test
+    func walk_articulationOnMiddleLegOfThreeNoteTie_survivesToFinalEntry() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                    <voice>1</voice>
+                    <tie type="start"/>
+                  </note>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                    <voice>1</voice>
+                    <tie type="stop"/>
+                    <tie type="start"/>
+                    <notations>
+                      <articulations><accent/></articulations>
+                    </notations>
+                  </note>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                    <tie type="stop"/>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        var notes: [(duration: BeatDuration, accent: Bool)] = []
+
+        for note in voice.noteTable {
+            notes.append((note.duration, hasFlag(note.extras, .accent)))
+        }
+
+        // The whole tie chain collapses into one `NoteTable` entry summing
+        // all three legs' durations — the middle leg's own `<accent/>`,
+        // written on neither the first nor the last leg, still reaches it.
+        #expect(notes.count == 1)
+        #expect(notes[0].duration == BeatDuration(4))
+        #expect(notes[0].accent)
+    }
+
     @Test
     func walk_backup_rewindsCursorForSecondVoice() throws {
         let musicXML = """
@@ -93,6 +151,49 @@ extension MusicXMLImporterWalkerTests {
 
         #expect(notes.count == 2)
         #expect(notes.allSatisfy { $0.attack == .zero && $0.duration == BeatDuration(2) })
+    }
+
+    @Test
+    func walk_cueNote_isDroppedButStillAdvancesCursor() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <cue/>
+                    <pitch><step>D</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                  </note>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        var notes: [(attack: BeatTime, pitch: Pitch)] = []
+
+        for note in voice.noteTable {
+            notes.append((note.attack, note.startPitch))
+        }
+
+        // D4 never appears, but its 2-division duration still shifted C4.
+        #expect(notes.count == 1)
+        #expect(notes.first?.attack == BeatTime(2))
+        #expect(notes.first?.pitch == "C4")
     }
 
     @Test
@@ -213,6 +314,85 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_graceNote_isDroppedFromNoteTable() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <grace/>
+                    <pitch><step>D</step><octave>4</octave></pitch>
+                    <voice>1</voice>
+                  </note>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <voice>1</voice>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        var notes: [(attack: BeatTime, pitch: Pitch)] = []
+
+        for note in voice.noteTable {
+            notes.append((note.attack, note.startPitch))
+        }
+
+        // D4 never appears, and — carrying no duration — doesn't shift C4.
+        #expect(notes.count == 1)
+        #expect(notes.first?.attack == .zero)
+        #expect(notes.first?.pitch == "C4")
+    }
+
+    @Test
+    func walk_metronomeMark_recordsTempoEvent() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <direction>
+                    <direction-type>
+                      <metronome>
+                        <beat-unit>quarter</beat-unit>
+                        <per-minute>96</per-minute>
+                      </metronome>
+                    </direction-type>
+                  </direction>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+
+        #expect(results.first?.tempoEvents.count == 1)
+        #expect(results.first?.tempoEvents.first?.beatTime == .zero)
+        #expect(results.first?.tempoEvents.first?.tempo == Tempo(uintValue: 96))
+    }
+
+    @Test
     func walk_noteDynamics_recordsNoteDynamicEventOnItsVoice() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -240,6 +420,86 @@ extension MusicXMLImporterWalkerTests {
         #expect(voice.noteDynamicEvents.count == 1)
         #expect(voice.noteDynamicEvents.first?.beatTime == .zero)
         #expect(voice.noteDynamicEvents.first?.dynamic == Dynamic(numberValue: Number(numerator: 81, denominator: 254)))
+    }
+
+    @Test
+    func walk_noteWithArticulationsAndSlur_attachesExtras() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                    <notations>
+                      <articulations><accent/></articulations>
+                      <slur type="start" number="1"/>
+                    </notations>
+                  </note>
+                  <note>
+                    <pitch><step>D</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                    <notations>
+                      <slur type="stop" number="1"/>
+                    </notations>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        var flags: [(accent: Bool, slurStart: String?, slurEnd: String?)] = []
+
+        for note in voice.noteTable {
+            flags.append((hasFlag(note.extras, .accent), stringValue(note.extras, .slurStart), stringValue(note.extras, .slurEnd)))
+        }
+
+        #expect(flags.count == 2)
+        #expect(flags[0].accent)
+        #expect(flags[0].slurStart == "1")
+        #expect(flags[1].slurEnd == "1")
+    }
+
+    @Test
+    func walk_noteWithDynamicsAttribute_recordsVelocityExtra() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note dynamics="71.1">
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>2</duration>
+                    <voice>1</voice>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+        let voice = try #require(results.first?.part.voices.first)
+
+        // 71.1% of 90 = 63.99, rounds to 64 (a note's own `dynamics`
+        // attribute converts identically to MIDI's own velocity scale,
+        // per the shared-scale design note in `MusicXMLFunctions.swift`).
+        #expect(intValue(voice.noteTable.first?.extras, .velocity) == 64)
     }
 
     @Test
@@ -272,6 +532,72 @@ extension MusicXMLImporterWalkerTests {
         #expect(results.first?.panEvents.count == 1)
         #expect(results.first?.panEvents.first?.beatTime == .zero)
         #expect(results.first?.panEvents.first?.pan == Pan(horizontal: -45))
+    }
+
+    @Test
+    func walk_soundTempo_recordsTempoEvent() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <sound tempo="120"/>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+
+        #expect(results.first?.tempoEvents.count == 1)
+        #expect(results.first?.tempoEvents.first?.beatTime == .zero)
+    }
+
+    @Test
+    func walk_soundTempo_takesPrecedenceOverMetronomeMark() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <direction>
+                    <direction-type>
+                      <metronome>
+                        <beat-unit>quarter</beat-unit>
+                        <per-minute>96</per-minute>
+                      </metronome>
+                    </direction-type>
+                    <sound tempo="144"/>
+                  </direction>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0])
+
+        #expect(results.first?.tempoEvents.count == 1)
+        #expect(results.first?.tempoEvents.first?.tempo == Tempo(uintValue: 144))
     }
 
     @Test
@@ -455,3 +781,5 @@ extension MusicXMLImporterWalkerTests {
         #expect(events.last?.dynamic == .mf)
     }
 }
+
+// swiftlint:enable file_length

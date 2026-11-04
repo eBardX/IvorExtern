@@ -5,6 +5,8 @@ internal import IvorTiming
 
 extension MusicXML.Importer.Context {
 
+    // MARK: Internal Nested Types
+
     // A single point the walk recorded toward the part's shared, notated
     // `DynamicMap` fallback — from a `<sound>`'s own `dynamics`, a
     // `<direction>`'s notated `<dynamics>` mark, or one endpoint of a
@@ -18,13 +20,11 @@ extension MusicXML.Importer.Context {
         internal init(beatTime: BeatTime,
                       dynamic: Dynamic,
                       kind: Kind,
-                      mark: String? = nil,
-                      velocity: Int? = nil) {
+                      mark: String? = nil) {
             self.beatTime = beatTime
             self.dynamic = dynamic
             self.kind = kind
             self.mark = mark
-            self.velocity = velocity
         }
 
         // MARK: Internal Instance Properties
@@ -33,7 +33,6 @@ extension MusicXML.Importer.Context {
         internal let dynamic: Dynamic
         internal let kind: Kind
         internal let mark: String?
-        internal let velocity: Int?
     }
 }
 

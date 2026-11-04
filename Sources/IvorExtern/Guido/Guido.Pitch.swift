@@ -4,6 +4,8 @@ internal import IvorGMN
 
 extension Guido {
 
+    // MARK: Internal Nested Types
+
     // A fully resolved pitch: octave inheritance and accidental resolution
     // already applied. Unlike a written `GMNPitch`, whose accidental may be
     // `.omitted` and whose octave may be `nil`, this type always carries an

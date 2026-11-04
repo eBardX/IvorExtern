@@ -8,6 +8,7 @@ import IvorTiming
 import IvorTuning
 import Testing
 import XestiNumbers
+import XestiTools
 
 struct ABCImporterWalkerTests {
     private let walker = ABC.Importer.Walker()
@@ -56,6 +57,24 @@ extension ABCImporterWalkerTests {
     }
 
     @Test
+    func walk_defaultShorthands_resolveToStandardDecorations() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            TC ~D HE uF vG LA|
+            """)
+
+        #expect(notes.count == 6)
+        #expect(hasFlag(notes[0], .trill))
+        #expect(stringValue(notes[1], .articulation) == "roll")
+        #expect(hasFlag(notes[2], .fermata))
+        #expect(hasFlag(notes[3], .upBow))
+        #expect(hasFlag(notes[4], .downBow))
+        #expect(hasFlag(notes[5], .accent))
+    }
+
+    @Test
     func walk_dynamicsDecoration_recordsStepDynamicEvent() throws {
         let abc = """
             X:1
@@ -73,6 +92,37 @@ extension ABCImporterWalkerTests {
         #expect(events.first?.beatTime == .zero)
         #expect(events.first?.dynamic == .mf)
         #expect(events.first?.kind == .step)
+    }
+
+    @Test
+    func walk_fileHeaderShorthand_appliesToEveryTuneUnlessRedefined() throws {
+        let abc = """
+            U: W = !tenuto!
+
+            X:1
+            L:1/4
+            K:C
+            U: W = !accent!
+            WC|
+
+            X:2
+            L:1/4
+            K:C
+            WC|
+            """
+        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+
+        #expect(tunebook.tunes.count == 2)
+
+        let first = try walker.walk(tunebook.tunes[0], fileHeader: tunebook.fileHeader)
+        let second = try walker.walk(tunebook.tunes[1], fileHeader: tunebook.fileHeader)
+        let firstNote = try #require(first[0].context.noteTable.first)
+        let secondNote = try #require(second[0].context.noteTable.first)
+
+        #expect(hasFlag(firstNote.extras, .accent))
+        #expect(!hasFlag(firstNote.extras, .tenuto))
+        #expect(hasFlag(secondNote.extras, .tenuto))
+        #expect(!hasFlag(secondNote.extras, .accent))
     }
 
     @Test
@@ -95,6 +145,21 @@ extension ABCImporterWalkerTests {
         #expect(events.first?.dynamic == .mp)
         #expect(events.last?.beatTime == BeatTime(2))
         #expect(events.last?.dynamic == .mf)
+    }
+
+    @Test
+    func walk_inlineUserDefinedShorthand_takesEffectMidLine() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            TC [U:T=!accent!] TD|
+            """)
+
+        #expect(notes.count == 2)
+        #expect(hasFlag(notes[0], .trill))
+        #expect(hasFlag(notes[1], .accent))
+        #expect(!hasFlag(notes[1], .trill))
     }
 
     @Test
@@ -153,6 +218,41 @@ extension ABCImporterWalkerTests {
 
         #expect(voice1Pitches == ["C4", "D4"])
         #expect(voice2Pitches == ["E4", "F4"])
+    }
+
+    @Test
+    func walk_shorthandMappedToAnnotation_isDropped() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            U: W = "^hello"
+            WC|
+            """)
+
+        #expect(notes.count == 1)
+        #expect(notes[0] == nil)
+    }
+
+    @Test
+    func walk_shorthandMappedToDynamic_recordsStepDynamicEvent() throws {
+        let abc = """
+            X:1
+            L:1/4
+            K:C
+            U: W = !ff!
+            C WD|
+            """
+        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+        let tune = try #require(tunebook.tunes.first)
+
+        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
+        let events = results[0].context.dynamicEvents
+
+        #expect(events.count == 1)
+        #expect(events.first?.beatTime == BeatTime(1))
+        #expect(events.first?.dynamic == .ff)
+        #expect(events.first?.kind == .step)
     }
 
     @Test
@@ -248,6 +348,19 @@ extension ABCImporterWalkerTests {
     }
 
     @Test
+    func walk_unassignedShorthand_isDropped() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            WC|
+            """)
+
+        #expect(notes.count == 1)
+        #expect(notes[0] == nil)
+    }
+
+    @Test
     func walk_unrecognizedDecoration_recordsMarkedStepAtPreviousLevel() throws {
         let abc = """
             X:1
@@ -266,5 +379,34 @@ extension ABCImporterWalkerTests {
         #expect(events.first?.dynamic == .mp)
         #expect(events.first?.kind == .step)
         #expect(events.first?.mark == "sfz")
+    }
+
+    @Test
+    func walk_userDefinedShorthand_overridesDefault() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            U: T = !staccato!
+            TC|
+            """)
+
+        #expect(notes.count == 1)
+        #expect(hasFlag(notes[0], .staccato))
+        #expect(!hasFlag(notes[0], .trill))
+    }
+
+    @Test
+    func walk_userDefinedShorthandNil_deassignsSymbol() throws {
+        let notes = try abcNoteExtras("""
+            X:1
+            L:1/4
+            K:C
+            U: T = !nil!
+            TC|
+            """)
+
+        #expect(notes.count == 1)
+        #expect(notes[0] == nil)
     }
 }

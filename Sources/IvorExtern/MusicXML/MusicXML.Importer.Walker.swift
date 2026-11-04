@@ -20,6 +20,8 @@ internal import XestiTools
 // this is deliberate and preserved exactly from the current importer.
 extension MusicXML.Importer {
 
+    // MARK: Internal Nested Types
+
     internal struct Walker {
 
         // MARK: Internal Initializers
@@ -213,10 +215,12 @@ extension MusicXML.Importer.Walker {
     // finding — is left unattached rather than guessed at; only the
     // `other…` free-text escape-hatch cases fall through to the
     // `articulation` catch-all, matching how ABC's open decoration names do.
-    private static func _noteExtras(_ notations: [MXLNotations]) -> Extras? {
+    // The note's own `dynamics` attribute, if any, is kept too, as its exact
+    // `velocity`.
+    private static func _noteExtras(_ note: MXLNote) -> Extras? {
         var elements: [Extra] = []
 
-        for notation in notations {
+        for notation in note.notations {
             for item in notation.items {
                 switch item {
                 case let .articulations(articulations):
@@ -242,6 +246,10 @@ extension MusicXML.Importer.Walker {
                     break
                 }
             }
+        }
+
+        if let velocity = convertToVelocity(note) {
+            elements.append(Extra(name: Extra.velocity.name, values: [.int(velocity)]))
         }
 
         return elements.isEmpty ? nil : Extras(elements: elements)
@@ -273,13 +281,11 @@ extension MusicXML.Importer.Walker {
     private static func _recordDirectionDynamic(_ dynamic: Dynamic,
                                                 at beatTime: BeatTime,
                                                 mark: String? = nil,
-                                                velocity: Int? = nil,
                                                 _ context: inout MusicXML.Importer.Context) {
         context.directionDynamicEvents.append(MusicXML.Importer.Context.DynamicEvent(beatTime: beatTime,
                                                                                      dynamic: dynamic,
                                                                                      kind: .step,
-                                                                                     mark: mark,
-                                                                                     velocity: velocity))
+                                                                                     mark: mark))
 
         context.lastDirectionDynamic = dynamic
     }
@@ -295,8 +301,7 @@ extension MusicXML.Importer.Walker {
         else { return }
 
         context.noteDynamicEvents[voiceID, default: []].append((beatTime: attack,
-                                                                dynamic: dynamic,
-                                                                velocity: convertToVelocity(note)))
+                                                                dynamic: dynamic))
     }
 
     private static func _scorePartsByID(_ score: MusicXML.Score) -> [String: MXLScorePart] {
@@ -408,7 +413,10 @@ extension MusicXML.Importer.Walker {
         if hasStop,
            var pending = context.pendingTies[voiceID]?[pitch] {
             pending.duration += duration
-            pending.extras = Self._mergedExtras(pending.extras, extras)
+            // A tied note is attacked once, so only the first note's
+            // `velocity` counts; a continuation's would otherwise replace it.
+            pending.extras = Self._mergedExtras(pending.extras,
+                                                extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.velocity.name }) })
 
             if hasStart {
                 context.pendingTies[voiceID, default: [:]][pitch] = pending
@@ -493,10 +501,7 @@ extension MusicXML.Importer.Walker {
             // elsewhere — takes priority over this same direction's
             // visual-only `<dynamics>` mark.
             if let dynamic = direction.sound.flatMap(convertToDynamic) ?? convertToDynamic(direction) {
-                Self._recordDirectionDynamic(dynamic,
-                                             at: beatTime,
-                                             velocity: direction.sound.flatMap(convertToVelocity),
-                                             &context)
+                Self._recordDirectionDynamic(dynamic, at: beatTime, &context)
             } else if let mark = dynamicMarkText(direction) {
                 Self._recordDirectionDynamic(context.lastDirectionDynamic, at: beatTime, mark: mark, &context)
             }
@@ -528,7 +533,7 @@ extension MusicXML.Importer.Walker {
             }
 
             if let dynamic = convertToDynamic(sound) {
-                Self._recordDirectionDynamic(dynamic, at: beatTime, velocity: convertToVelocity(sound), &context)
+                Self._recordDirectionDynamic(dynamic, at: beatTime, &context)
             }
         }
     }
@@ -610,7 +615,7 @@ extension MusicXML.Importer.Walker {
                         duration: convertToBeatDuration(context.lastDuration),
                         tie: tie,
                         voiceID: voiceID,
-                        extras: Self._noteExtras(note.notations),
+                        extras: Self._noteExtras(note),
                         &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)
@@ -628,7 +633,7 @@ extension MusicXML.Importer.Walker {
                         duration: convertToBeatDuration(duration),
                         tie: tie,
                         voiceID: voiceID,
-                        extras: Self._noteExtras(note.notations),
+                        extras: Self._noteExtras(note),
                         &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)

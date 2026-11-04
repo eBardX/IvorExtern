@@ -12,6 +12,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     // Not a namespace: `ExporterProtocol`'s instance members live in the
     // following extension, invisible to this check from here.
     // swiftformat:disable:next enumNamespaces
@@ -579,8 +582,13 @@ extension MusicXML.Exporter {
         // declares no elevation.
         let vertical = _firstPan(part.panMap)?.vertical
         let elevation = vertical.flatMap { $0.numberValue.isZero ? nil : $0.doubleValue }
+        // The channel belongs to the part as a whole (its `midiChannel`
+        // extra), but MusicXML declares it inside `<midi-instrument>` too,
+        // so like elevation it needs a `<score-instrument>` even when the
+        // part has no instrument assignment.
+        let midiChannel = intValue(part.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
 
-        if first != nil || elevation != nil {
+        if first != nil || elevation != nil || midiChannel != nil {
             let instrument = first?.instrument ?? .vanilla
             let instrumentID = id + "-I1"
 
@@ -591,7 +599,6 @@ extension MusicXML.Exporter {
             let exactProgram = intValue(first?.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: instrument.stringValue).map { Int($0.program.uintValue) }
             let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
-            let midiChannel = intValue(first?.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
             // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from 0.
             let midiBank = intValue(first?.extras, .midiBank).flatMap { $0 >= 0 ? MXLMidi16384(uintValue: UInt($0 + 1)) : nil }
             let exactUnpitched = intValue(first?.extras, .midiUnpitched)
@@ -600,9 +607,9 @@ extension MusicXML.Exporter {
             let volume = doubleValue(first?.extras, .midiVolume)
 
             // `<midi-program>` is optional per the MusicXML schema, so a
-            // `.vanilla` instrument imported from a channel/bank/volume/
-            // unpitched-only `<midi-instrument>` (see
-            // `MusicXML.Importer._makeInstrumentMap`) still round-trips
+            // part with only a channel, or a `.vanilla` instrument imported
+            // from a bank/volume/unpitched-only `<midi-instrument>` (see
+            // `MusicXML.Importer._makeInstrumentMap`), still round-trips
             // its data even though no program can be derived for it —
             // emitting the element on any one field being present, not
             // gating the whole thing on `midiProgram` alone.

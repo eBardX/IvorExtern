@@ -48,6 +48,8 @@ internal import XestiTools
 // matching `.stop`.
 extension MusicXML.Importer {
 
+    // MARK: Internal Nested Types
+
     internal struct Context {
 
         // MARK: Internal Instance Properties
@@ -59,7 +61,7 @@ extension MusicXML.Importer {
         internal var lastDuration: MusicXML.Duration = .zero
         internal var measureAdvance: MusicXML.Duration = .zero
         internal var measureStart: MusicXML.Duration = .zero
-        internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]] = [:]
+        internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic)]] = [:]
         internal var noteTables: [String?: NoteTable<BeatTime, IvorTuning.Pitch>] = [:]
         internal var panEvents: [(beatTime: BeatTime, pan: Pan)] = []
         internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration, extras: Extras?)]] = [:]

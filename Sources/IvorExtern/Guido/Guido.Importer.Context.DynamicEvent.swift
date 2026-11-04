@@ -5,6 +5,8 @@ internal import IvorTiming
 
 extension Guido.Importer.Context {
 
+    // MARK: Internal Nested Types
+
     // A single point the walk recorded toward the voice's `DynamicMap`, from
     // either an `\intensity` mark or one endpoint of a `\crescendo`/
     // `\diminuendo` ramp. `mark` carries an `\intensity` tag's literal type

@@ -34,6 +34,13 @@ internal import XestiTools
 // and level until its matching close — ABC decorations carry no identifier
 // to pair by, so (unlike Guido's `\crescBegin`/`\crescEnd`) at most one
 // hairpin of each direction can be open at a time.
+//
+// `shorthands` is the redefinable-symbol table (ABC 2.1 §4.16): it starts
+// with the standard's default assignments, and every `U:` field (file
+// header, tune header, body, or inline) assigns or — via `!nil!` —
+// de-assigns one entry. File-header fields are replayed into each voice's
+// fresh `Context` ahead of the tune's own, so file-wide definitions carry
+// into every tune while a tune's own redefinitions die with it.
 extension ABC.Importer {
 
     // MARK: Internal Nested Types
@@ -64,6 +71,7 @@ extension ABC.Importer {
         internal var pendingEvent: (attack: BeatTime, event: ABC.Event, extras: [Extra])?
         internal var pendingNoteExtras: [Extra] = []
         internal var pendingTuplet: (beatCount: UInt, noteCount: UInt, remainingCount: UInt)?
+        internal var shorthands: [ABCShorthand: ABCUserSymbol.Definition] = Self.defaultShorthands
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false
         internal var unitNoteLength: (numerator: UInt, denominator: UInt)
@@ -78,6 +86,25 @@ extension ABC.Importer.Context {
 
     internal mutating func advance(_ duration: BeatDuration) {
         currentBeatTime += duration
+    }
+
+    // MARK: Private Type Properties
+
+    private static let defaultShorthands: [ABCShorthand: ABCUserSymbol.Definition] = [.hUpper: _decoration("fermata"),
+                                                                                      .lUpper: _decoration("accent"),
+                                                                                      .mUpper: _decoration("lowermordent"),
+                                                                                      .oUpper: _decoration("coda"),
+                                                                                      .pUpper: _decoration("uppermordent"),
+                                                                                      .sUpper: _decoration("segno"),
+                                                                                      .tilde: _decoration("roll"),
+                                                                                      .tUpper: _decoration("trill"),
+                                                                                      .uLower: _decoration("upbow"),
+                                                                                      .vLower: _decoration("downbow")]
+
+    // MARK: Private Type Methods
+
+    private static func _decoration(_ name: String) -> ABCUserSymbol.Definition {
+        .decoration(ABCDecoration(name: ABCDecoration.Name(stringValue: name).require()).require())
     }
 }
 

@@ -4,6 +4,9 @@ private import IvorTiming
 private import IvorTuning
 
 extension FileFormat {
+
+    // MARK: Internal Type Properties
+
     internal static let midi = Self(displayName: "Standard MIDI File",
                                     filenameExtensions: ["midi",        // preferred goes 1st
                                                          "mid",

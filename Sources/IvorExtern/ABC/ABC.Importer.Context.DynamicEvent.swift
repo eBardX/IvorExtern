@@ -5,6 +5,8 @@ internal import IvorTiming
 
 extension ABC.Importer.Context {
 
+    // MARK: Internal Nested Types
+
     // A single point the walk recorded toward the voice's `DynamicMap`, from
     // either a dynamics decoration (`!mf!`, `!ff!`, …) or one endpoint of a
     // `!<(!`/`!<)!` (crescendo) or `!>(!`/`!>)!` (diminuendo) hairpin. `mark`

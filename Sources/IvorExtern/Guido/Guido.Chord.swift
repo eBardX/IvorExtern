@@ -2,6 +2,8 @@
 
 extension Guido {
 
+    // MARK: Internal Nested Types
+
     // A fully resolved chord: the resolved note in each music-bearing
     // segment, gathered in segment order. Unlike `GMNChord`, whose segments
     // may each carry their own independently written or inherited

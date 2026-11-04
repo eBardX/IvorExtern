@@ -2,9 +2,12 @@
 
 import Foundation
 @testable import IvorExtern
+import IvorGMN
 import IvorModel
 import IvorTiming
+import IvorTuning
 import Testing
+import XestiNumbers
 import XestiTools
 
 struct GuidoImporterTests {
@@ -13,6 +16,18 @@ struct GuidoImporterTests {
 // MARK: -
 
 extension GuidoImporterTests {
+    @Test
+    func convert_instrumentTag_namesPart() throws {
+        let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Piano"])
+    }
+
     @Test
     func convert_instrumentTag_populatesInstrumentMap() throws {
         let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
@@ -26,15 +41,40 @@ extension GuidoImporterTests {
     }
 
     @Test
-    func convert_instrumentTag_namesPart() throws {
-        let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
+    func convert_instrumentTagAfterLeadingRest_startsAtZero() throws {
+        //
+        // No note comes before the tag, so its instrument starts at zero, rather than leaving
+        // the default instrument in effect for the rest.
+        //
+        let data = Data("[ _/4 \\instr<\"Piano\"> c ]".utf8)
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(parts.map(\.name) == ["Piano"])
+        #expect(parts.first?.instrumentMap.map(\.time) == [.zero])
+        #expect(parts.first?.instrumentMap.instruments == [Instrument("Piano")])
+    }
+
+    @Test
+    func convert_instrumentTagAfterNote_leavesEarlierNoteOnDefault() throws {
+        //
+        // The note before the tag has no instrument, so the default instrument is in effect
+        // for it.
+        //
+        let data = Data("[ c/4 \\instr<\"Piano\"> d ]".utf8)
+        let score = try Guido.Parser().parse(data)
+        let work = try Guido.Importer().convert(score)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        let instrumentMap = try #require(parts.first?.instrumentMap)
+
+        #expect(instrumentMap.map(\.time) == [BeatTime(1)])
+        #expect(instrumentMap[.zero] == instrumentMap.defaultInstrument)
+        #expect(instrumentMap[BeatTime(1)] == Instrument("Piano"))
     }
 
     @Test
@@ -93,6 +133,40 @@ extension GuidoImporterTests {
         #expect(throws: (any Error).self) {
             try Guido.Importer().read(from: wrapper, as: .gmn)
         }
+    }
+
+    @Test
+    func read_footer_isRightsNoticeOrRemark() throws {
+        let work = try readGuido(#"[ \footer<"© 1998 Acme"> \footer<"Engraved by hand"> c ]"#)
+
+        #expect(work.info.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
+        #expect(work.info.remarks == [Remark(text: "Engraved by hand", label: "footer")].compactMap(\.self))
+    }
+
+    @Test
+    func read_instrument_isInstrumentNameExtra() throws {
+        let work = try readGuido(#"[ \instr<"Flauto 1"> c ]"#)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        let entry = try #require(part.instrumentMap.first)
+
+        #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
+    }
+
+    @Test
+    func read_label_onlyLeadingBodilessLabelIsRemark() throws {
+        let work = try readGuido(#"[ \label<"Theme"> c \label<"Later"> d ]"#)
+
+        #expect(work.info.remarks == [Remark(text: "Theme", label: "label")].compactMap(\.self))
+    }
+
+    @Test
+    func read_titleAndComposer_populateInfo() throws {
+        let work = try readGuido(#"{ [ \title<"Sonata"> \title<"No. 1"> \composer<"J. Smith"> c ], [ \title<"Ignored"> e ] }"#)
+
+        #expect(work.name == "Sonata: No. 1")
+        #expect(work.info.title == "Sonata")
+        #expect(work.info.subtitles == ["No. 1"])
+        #expect(work.info.composers == ["J. Smith"])
     }
 
     @Test

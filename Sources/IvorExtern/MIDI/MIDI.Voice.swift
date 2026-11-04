@@ -4,6 +4,8 @@ internal import IvorSMF
 
 extension MIDI {
 
+    // MARK: Internal Nested Types
+
     // One (track, channel) pair's paired notes — see
     // `Importer._makeVoices(_:)` for why that, not just the channel, is the
     // grouping key. `panEvents` holds only that channel's `.panMSB` control

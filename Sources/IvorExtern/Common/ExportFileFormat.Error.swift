@@ -4,11 +4,12 @@ public import XestiTools
 
 extension ExportFileFormat {
 
+    // MARK: Public Nested Types
+
     /// An error that occurs when writing works to a file in an export
     /// format.
     public enum Error {
-        /// The works failed to be written, with an optional underlying
-        /// error.
+        /// A failure to write the works, with an optional underlying error.
         case writeFailure((any EnhancedError)?)
     }
 }
@@ -16,6 +17,9 @@ extension ExportFileFormat {
 // MARK: - EnhancedError
 
 extension ExportFileFormat.Error: EnhancedError {
+
+    // MARK: Public Instance Properties
+
     /// The error category identifying the source module.
     public var category: Category? {
         Category("IvorExtern")

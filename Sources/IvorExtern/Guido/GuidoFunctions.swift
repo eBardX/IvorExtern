@@ -424,6 +424,16 @@ private func _convertToGuidoPitchName(_ letter: Pitch.Letter) -> GMNPitch.Name {
     }
 }
 
+private func _convertToPizzicatoType(_ extra: Extra) -> String? {
+    guard case let .string(text)? = extra.values.first,
+          text.hasSuffix(pizzicatoSuffix)
+    else { return nil }
+
+    let type = String(text.dropLast(pizzicatoSuffix.count))
+
+    return pizzicatoTypes.contains(type) ? type : nil
+}
+
 private func _convertToStandardPitchClass(_ gpName: Guido.Pitch.Name,
                                           _ gpAccidental: Guido.Pitch.Accidental) throws(Guido.Error) -> PitchClass {
     let letter: Pitch.Letter = switch gpName {
@@ -485,16 +495,6 @@ private func _convertToStandardPitchOctave(_ gpOctave: Int) throws(Guido.Error) 
 // and part names — metadata the walk never surfaces on its own (it builds a
 // note table, not a tag stream), so it is read from the validated,
 // pre-walk AST instead.
-private func _convertToPizzicatoType(_ extra: Extra) -> String? {
-    guard case let .string(text)? = extra.values.first,
-          text.hasSuffix(pizzicatoSuffix)
-    else { return nil }
-
-    let type = String(text.dropLast(pizzicatoSuffix.count))
-
-    return pizzicatoTypes.contains(type) ? type : nil
-}
-
 private func _findTags(_ symbols: [Guido.Symbol]) -> [Guido.Tag] {
     var tags: [Guido.Tag] = []
 

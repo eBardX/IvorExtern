@@ -12,6 +12,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension MIDI {
+
+    // MARK: Internal Nested Types
+
     internal struct Importer {
     }
 }
@@ -70,39 +73,6 @@ extension MIDI.Importer {
         }
     }
 
-    // A wall-time work has no tempo map to carry the file's timecode
-    // division (see `_makeStartElements`), so it's recorded on each part's
-    // instrument map entry at time zero instead, where `determineTimeCode`
-    // looks for it. When a part has no such entry, one holding the default
-    // instrument is inserted for it, carrying the part's `midiChannel`
-    // extra too, since the exporter reads the channel from a part's first
-    // entry.
-    private static func _addStartElements(_ startElements: [Extra],
-                                          channel: MIDI.Channel,
-                                          to instrumentMap: inout InstrumentMap<some TimeProtocol>) {
-        guard !startElements.isEmpty
-        else { return }
-
-        var startEntry: (entryID: EntryID, instrument: Instrument, extras: Extras?)?
-
-        for entry in instrumentMap {
-            if startEntry == nil, entry.time == .zero {
-                startEntry = (entry.entryID, entry.instrument, entry.extras)
-            }
-        }
-
-        if let startEntry {
-            instrumentMap.update(entryID: startEntry.entryID,
-                                 instrument: startEntry.instrument,
-                                 extras: Extras(elements: (startEntry.extras?.elements ?? []) + startElements))
-        } else {
-            instrumentMap.insert(time: .zero,
-                                 instrument: instrumentMap.defaultInstrument,
-                                 extras: Extras(elements: [Extra(name: Extra.midiChannel.name,
-                                                                 values: [.int(Int(channel.uintValue))])] + startElements))
-        }
-    }
-
     private static func _convert(_ sequence: MIDI.Sequence) throws -> Work {
         let (normalized, _) = MIDI.Normalizer().normalize(sequence)
         let (validated, issues) = try MIDI.Validator().validate(normalized)
@@ -119,46 +89,14 @@ extension MIDI.Importer {
                                           validated.division),
                         smpteStartTime: _makeStartTime(timeline,
                                                        validated.division),
-                        info: _makeInfo(validated))
+                        info: _makeInfo(validated),
+                        extras: _makeExtras(validated.division))
     }
 
-    // A file with a timecode division and no tempo events has no beats to
-    // speak of — its ticks measure wall time alone — so it's imported as
-    // wall time, with its timecode division recorded on each part instead
-    // of on a tempo map (see `_addStartElements`). Every other file is
-    // imported as beat time. Either way, the work's SMPTE start time comes
-    // from the file's SMPTE Offset (see `_makeStartTime`).
-    private static func _convert(_ voices: [TrackVoice],
-                                 _ timeline: [MIDI.Event],
-                                 _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
-        if case let .timeCode(timeCode) = division,
-           !timeline.contains(where: { if case .meta(_, .tempo) = $0 { true } else { false } }) {
-            return .keyboardWall(_convert(voices,
-                                          MIDI.WallMap(timeCode: timeCode),
-                                          startElements: _makeStartElements(division)))
-        }
-
-        let beatMap = try _makeBeatMap(division,
-                                       timeline)
-
-        return .keyboardBeat(_convert(voices,
-                                      beatMap,
-                                      startElements: []),
-                             _convert(timeline,
-                                      division,
-                                      beatMap))
-    }
-
-    // The file's timecode division, if any, is recorded as an extra on the
-    // tempo map entry at beat zero, so that `MIDI.Exporter` can write it
-    // back. When there's no tempo event at tick zero to carry it, an entry
-    // at beat zero holding the default tempo is inserted for it.
     private static func _convert(_ timeline: [MIDI.Event],
-                                 _ division: MIDI.Division,
                                  _ beatMap: MIDI.BeatMap) -> TempoMap {
         var tempoMap = TempoMap()
         var prevTempo: Tempo = .default
-        var startElements = _makeStartElements(division)
 
         for event in timeline {
             guard case let .meta(eventTime, .tempo(tempo)) = event
@@ -168,14 +106,6 @@ extension MIDI.Importer {
             let currTempo = convertToTempo(tempo, factor)
 
             if beatTime != .zero {
-                if !startElements.isEmpty {
-                    tempoMap.insert(beatTime: .zero,
-                                    tempo: prevTempo,
-                                    extras: Extras(elements: startElements))
-
-                    startElements = []
-                }
-
                 tempoMap.insert(beatTime: beatTime,
                                 tempo: prevTempo)
             }
@@ -183,16 +113,9 @@ extension MIDI.Importer {
             tempoMap.insert(beatTime: beatTime,
                             tempo: currTempo,
                             extras: Extras(elements: [Extra(name: Extra.midiTempo.name,
-                                                            values: [.int(Int(tempo.uintValue))])] + startElements))
+                                                            values: [.int(Int(tempo.uintValue))])]))
 
-            startElements = []
             prevTempo = currTempo
-        }
-
-        if !startElements.isEmpty {
-            tempoMap.insert(beatTime: .zero,
-                            tempo: prevTempo,
-                            extras: Extras(elements: startElements))
         }
 
         return tempoMap
@@ -200,8 +123,7 @@ extension MIDI.Importer {
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voice: MIDI.Voice,
                                                               _ instrumentNameEvents: [SMFEvent],
-                                                              _ timeMap: TimeMap,
-                                                              startElements: [Extra]) -> Part<TimeMap.TimeType, NoteNumber> {
+                                                              _ timeMap: TimeMap) -> Part<TimeMap.TimeType, NoteNumber> {
         var context = Self.Context(timeMap: timeMap)
 
         for note in voice.notes {
@@ -243,31 +165,54 @@ extension MIDI.Importer {
             }
         }
 
-        var instrumentMap = _makeInstrumentMap(voice.programChangeEvents,
+        let instrumentMap = _makeInstrumentMap(voice.programChangeEvents,
                                                voice.bankSelectEvents,
                                                voice.volumeEvents,
                                                instrumentNameEvents,
-                                               channel: voice.channel,
                                                timeMap)
         let name = voice.name.nilIfEmpty ?? _makeUnnamedPartName(instrumentMap,
                                                                  hasInstrumentName: !instrumentNameEvents.isEmpty,
                                                                  channel: voice.channel)
 
-        _addStartElements(startElements,
-                          channel: voice.channel,
-                          to: &instrumentMap)
-
+        // A voice is split from its track by channel, so the channel
+        // belongs to the part as a whole, where `MIDI.Exporter` finds it
+        // whether or not the part has any instrument map entries.
         return Part(name: name,
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
                     instrumentMap: instrumentMap,
-                    panMap: context.panMap)
+                    panMap: context.panMap,
+                    extras: Extras(elements: [Extra(name: Extra.midiChannel.name,
+                                                    values: [.int(Int(voice.channel.uintValue))])]))
+    }
+
+    // A file with a timecode division and no tempo events has no beats to
+    // speak of — its ticks measure wall time alone — so it's imported as
+    // wall time. Every other file is imported as beat time. Either way, the
+    // work's SMPTE start time comes from the file's SMPTE Offset (see
+    // `_makeStartTime`), and its timecode division, if any, is recorded on
+    // the work itself (see `_makeExtras`).
+    private static func _convert(_ voices: [TrackVoice],
+                                 _ timeline: [MIDI.Event],
+                                 _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
+        if case let .timeCode(timeCode) = division,
+           !timeline.contains(where: { if case .meta(_, .tempo) = $0 { true } else { false } }) {
+            return .keyboardWall(_convert(voices,
+                                          MIDI.WallMap(timeCode: timeCode)))
+        }
+
+        let beatMap = try _makeBeatMap(division,
+                                       timeline)
+
+        return .keyboardBeat(_convert(voices,
+                                      beatMap),
+                             _convert(timeline,
+                                      beatMap))
     }
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
-                                                              _ timeMap: TimeMap,
-                                                              startElements: [Extra]) -> [Part<TimeMap.TimeType, NoteNumber>] {
-        voices.map { _convert($0.voice, $0.instrumentNameEvents, timeMap, startElements: startElements) }
+                                                              _ timeMap: TimeMap) -> [Part<TimeMap.TimeType, NoteNumber>] {
+        voices.map { _convert($0.voice, $0.instrumentNameEvents, timeMap) }
     }
 
     private static func _makeBeatMap(_ division: MIDI.Division,
@@ -305,6 +250,18 @@ extension MIDI.Importer {
     // one place an SMF names a composer, lyricist, or artist, and can carry
     // a title too: one that differs from the first track's name is kept as
     // a subtitle (RP-026 has it hold "Song Title / Sub Title etc.").
+    // The file's timecode division, if any, describes the whole file, so
+    // it's recorded in a `midiTimeCode` extra on the work itself, where
+    // `MIDI.Exporter` finds it to write it back (see `determineTimeCode`).
+    private static func _makeExtras(_ division: MIDI.Division) -> Extras? {
+        guard case let .timeCode(timeCode) = division
+        else { return nil }
+
+        return Extras(elements: [Extra(name: Extra.midiTimeCode.name,
+                                       values: [.string(timeCode.frameRate.description),
+                                                .int(Int(timeCode.ticksPerFrame))])])
+    }
+
     private static func _makeInfo(_ sequence: MIDI.Sequence) -> Work.Info {
         var info = Work.Info(title: determineWorkName(sequence))
 
@@ -342,7 +299,7 @@ extension MIDI.Importer {
     // and Channel Volume events are stateful, not tied to any one entry, so
     // they're merged in tick order alongside the program changes and the
     // most recently seen MSB/LSB pair (if any) is combined into a 14-bit
-    // `midiBank` extra at each entry — see `Extra+InstrumentMap.swift`.
+    // `midiBank` extra at each entry — see `Extra+Ivor.swift`.
     // Instrument Name (`FF 04`) meta events are merged the same stateful
     // way: the most recently seen name, if any, wins over the generic
     // General MIDI name `convertToInstrument(program)` would otherwise
@@ -356,7 +313,6 @@ extension MIDI.Importer {
                                                                         _ bankSelectEvents: [SMFEvent],
                                                                         _ volumeEvents: [SMFEvent],
                                                                         _ instrumentNameEvents: [SMFEvent],
-                                                                        channel: MIDI.Channel,
                                                                         _ timeMap: TimeMap) -> InstrumentMap<TimeMap.TimeType> {
         var instrumentMap = InstrumentMap<TimeMap.TimeType>()
         var bankMSB: MIDIData1Value?
@@ -383,8 +339,7 @@ extension MIDI.Importer {
 
             case let .midi(eventTime, .programChange(_, program)):
                 let time = timeMap.time(at: eventTime)
-                var elements = [Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]),
-                                Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))])]
+                var elements = [Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))])]
 
                 if let volume {
                     elements.append(Extra(name: Extra.midiVolume.name,
@@ -415,15 +370,6 @@ extension MIDI.Importer {
         return instrumentMap
     }
 
-    private static func _makeStartElements(_ division: MIDI.Division) -> [Extra] {
-        guard case let .timeCode(timeCode) = division
-        else { return [] }
-
-        return [Extra(name: Extra.midiTimeCode.name,
-                      values: [.string(timeCode.frameRate.description),
-                               .int(Int(timeCode.ticksPerFrame))])]
-    }
-
     // The work's SMPTE start time is the file's SMPTE Offset, if it has
     // one, or else the one its division implies.
     private static func _makeStartTime(_ timeline: [MIDI.Event],
@@ -434,11 +380,10 @@ extension MIDI.Importer {
     // A voice from an unnamed track is named after its first instrument —
     // an Instrument Name meta event's text, else the General MIDI program
     // name, or "Percussion" on channel 10, where the program number doesn't
-    // pick a melodic instrument — but only when it has one: that entry's
-    // `midiChannel` extra is what `MIDI.Exporter` reads first to recover
-    // the channel on export. With no Program Change there's no such extra,
-    // so the voice falls back to "Channel N" alone, the exact form
-    // `MIDI.Exporter._parseChannelName` reads back instead.
+    // pick a melodic instrument — but only when it has one. With no
+    // Program Change, the voice falls back to "Channel N" alone. Either way
+    // the channel itself is kept in the part's `midiChannel` extra (see
+    // `_convert(_:_:_:)`), so the name is for display only.
     private static func _makeUnnamedPartName(_ instrumentMap: InstrumentMap<some TimeProtocol>,
                                              hasInstrumentName: Bool,
                                              channel: MIDI.Channel) -> String {

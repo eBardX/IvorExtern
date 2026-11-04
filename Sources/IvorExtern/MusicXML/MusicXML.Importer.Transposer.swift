@@ -12,6 +12,8 @@ internal import IvorMXL
 // sharp spelling is chosen.
 extension MusicXML.Importer {
 
+    // MARK: Internal Nested Types
+
     internal struct Transposer {
     }
 }

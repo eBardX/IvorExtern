@@ -13,22 +13,24 @@ struct PartFunctionsTests {
 
 extension PartFunctionsTests {
     @Test
-    func fillEmptyPartNames_multiplePartsAllUnnamed_namesEachByPosition() {
-        let parts = [makePart(""), makePart(""), makePart("")]
+    func fillEmptyPartNames_duplicateRealNames_leavesThemAlone() {
+        let parts = [emptyPart("Violin"), emptyPart("Violin")]
 
-        #expect(fillEmptyPartNames(parts).map(\.name) == ["Voice 1", "Voice 2", "Voice 3"])
+        #expect(fillEmptyPartNames(parts).map(\.name) == ["Violin", "Violin"])
     }
 
     @Test
     func fillEmptyPartNames_mixedNamedAndUnnamed_fillsOnlyUnnamed() {
-        let parts = [makePart("Flute"), makePart(""), makePart("Oboe"), makePart("")]
+        let parts = [emptyPart("Flute"), emptyPart(""), emptyPart("Oboe"), emptyPart("")]
 
         #expect(fillEmptyPartNames(parts).map(\.name) == ["Flute", "Voice 2", "Oboe", "Voice 4"])
     }
 
     @Test
-    func fillEmptyPartNames_singleUnnamedPart_leavesItUnnamed() {
-        #expect(fillEmptyPartNames([makePart("")]).map(\.name) == [""])
+    func fillEmptyPartNames_multiplePartsAllUnnamed_namesEachByPosition() {
+        let parts = [emptyPart(""), emptyPart(""), emptyPart("")]
+
+        #expect(fillEmptyPartNames(parts).map(\.name) == ["Voice 1", "Voice 2", "Voice 3"])
     }
 
     @Test
@@ -37,10 +39,13 @@ extension PartFunctionsTests {
     }
 
     @Test
-    func fillEmptyPartNames_duplicateRealNames_leavesThemAlone() {
-        let parts = [makePart("Violin"), makePart("Violin")]
+    func fillEmptyPartNames_singleUnnamedPart_leavesItUnnamed() {
+        #expect(fillEmptyPartNames([emptyPart("")]).map(\.name) == [""])
+    }
 
-        #expect(fillEmptyPartNames(parts).map(\.name) == ["Violin", "Violin"])
+    @Test
+    func isFallbackPartName_lonePart_isFalse() {
+        #expect(!isFallbackPartName("Voice 1", index: 0, count: 1))
     }
 
     @Test
@@ -54,11 +59,6 @@ extension PartFunctionsTests {
     }
 
     @Test
-    func isFallbackPartName_lonePart_isFalse() {
-        #expect(!isFallbackPartName("Voice 1", index: 0, count: 1))
-    }
-
-    @Test
     func normalizeName_collapsesWhitespaceAndControlCharacters() {
         #expect(normalizeName("  Violin\n I\t\u{0}\u{0}") == "Violin I")
     }
@@ -66,12 +66,5 @@ extension PartFunctionsTests {
     @Test
     func normalizeName_whitespaceOnly_returnsEmpty() {
         #expect(normalizeName(" \n\t ").isEmpty)
-    }
-
-    private func makePart(_ name: String) -> Part<BeatTime, Pitch> {
-        Part(name: name,
-             noteTable: NoteTable(),
-             dynamicMap: DynamicMap(),
-             instrumentMap: InstrumentMap())
     }
 }

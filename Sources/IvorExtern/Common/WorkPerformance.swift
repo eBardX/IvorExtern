@@ -29,7 +29,7 @@ private import IvorTuning
 ///
 /// Each note sounds at the velocity of the part’s dynamic level at its
 /// attack, so a crescendo rises note by note — or, where an importer kept
-/// the exact velocity on a dynamic-map entry at that time, at that.
+/// the note’s exact velocity (its `velocity` extra), at that.
 ///
 /// Pan is per channel, so each channel takes the pan of the first part that
 /// plays on it, and a later part that shares the channel sends none. A part
@@ -185,12 +185,10 @@ extension WorkPerformance {
             patches[channel] = patch
         }
 
-        let exactVelocities = exactKeyVelocities(in: part.dynamicMap)
-
         for note in part.noteTable {
             let (channel, _) = resolve(part.instrumentMap[note.attack])
             let key = MIDIData1Value(clamping: note.startPitch.uintValue)
-            let velocity = exactVelocities[note.attack]
+            let velocity = exactKeyVelocity(note.extras)
                 ?? convertToMIDIKeyVelocity(part.dynamicMap[note.attack])
                 ?? defaultVelocity
 

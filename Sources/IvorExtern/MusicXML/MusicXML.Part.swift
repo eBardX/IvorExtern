@@ -6,6 +6,9 @@ private import IvorMXL
 // resolved from its measures, sorted by voice ID (see
 // `Importer.Walker._voices(from:)`).
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     internal struct Part {
 
         // MARK: Internal Initializers

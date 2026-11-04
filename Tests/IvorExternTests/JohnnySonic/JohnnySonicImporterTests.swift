@@ -71,14 +71,16 @@ extension JohnnySonicImporterTests {
 
         // Every `/Pitches` line has its own instrument, read off at its own
         // start beat — this reads it per note rather than assuming the
-        // first note's instrument speaks for the whole part.
+        // first note's instrument speaks for the whole part. The first
+        // note's entry starts at zero, so the default instrument isn't in
+        // effect for the leading rest.
         var entries: [(beatTime: BeatTime, instrument: Instrument)] = []
 
         for entry in parts.first?.instrumentMap ?? InstrumentMap() {
             entries.append((entry.time, entry.instrument))
         }
 
-        #expect(entries.map(\.beatTime) == [convertToBeatTime(2), convertToBeatTime(5)])
+        #expect(entries.map(\.beatTime) == [.zero, convertToBeatTime(5)])
         #expect(entries.allSatisfy { $0.instrument == Instrument("Piano") })
     }
 
@@ -157,6 +159,36 @@ extension JohnnySonicImporterTests {
         #expect(tempoMap[BeatTime(6)] == Tempo(uintValue: 105))
         #expect(tempoMap[BeatTime(8)] == Tempo(uintValue: 200))
         #expect(tempoMap[BeatTime(9)] == Tempo(uintValue: 200))
+    }
+
+    @Test
+    func convert_noteVolume_keptOnNoteAsVelocity() throws {
+        let note = DKMPitchesNote(startBeat: 0,
+                                  duration: 1,
+                                  volume: 5,
+                                  location: 0,
+                                  startPitch: 60,
+                                  endPitch: 60,
+                                  instrument: "Piano")
+        let work = try JohnnySonic.Importer().convert(JohnnySonic.Score(commands: [.pitchesNote(note)]))
+
+        guard case let .keyboardBeat(parts, _) = work.content
+        else { Issue.record("Expected keyboardBeat content"); return }
+
+        var noteVelocities: [Int?] = []
+        var dynamicVelocities: [Int?] = []
+
+        for note in parts[0].noteTable {
+            noteVelocities.append(intValue(note.extras, .velocity))
+        }
+
+        for entry in parts[0].dynamicMap {
+            dynamicVelocities.append(intValue(entry.extras, .velocity))
+        }
+
+        // 5 × 12.7 = 63.5, which rounds to 64.
+        #expect(noteVelocities == [64])
+        #expect(dynamicVelocities.allSatisfy { $0 == nil })
     }
 
     @Test

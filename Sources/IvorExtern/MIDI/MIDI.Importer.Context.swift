@@ -54,15 +54,18 @@ extension MIDI.Importer.Context {
                           extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(value)])]))
     }
 
-    // A note-off velocity of 0 (often a zero-velocity note-on standing in
-    // for the note-off) or 64 (what MIDI prescribes for a device that
-    // doesn't sense release velocity) says nothing about the note, so only
-    // another value is kept, as `midiReleaseVelocity`.
+    // The note-on velocity is kept exactly on the note itself, as
+    // `velocity`, so it travels with the note through every transform; the
+    // dynamic map gets the level it implies, for everything that reads
+    // dynamics. A note-off velocity of 0 (often a zero-velocity note-on
+    // standing in for the note-off) or 64 (what MIDI prescribes for a
+    // device that doesn't sense release velocity) says nothing about the
+    // note, so only another value is kept, as `midiReleaseVelocity`.
     internal mutating func handleNote(_ note: MIDI.Note) {
         let (attack, duration) = timeMap.timeSpan(at: note.startTime,
                                                   ticks: note.duration)
 
-        var elements: [Extra] = []
+        var elements = [Extra(name: Extra.velocity.name, values: [.int(Int(note.onVelocity.uintValue))])]
 
         if let pressure = note.peakKeyPressure {
             elements.append(Extra(name: Extra.midiKeyPressure.name, values: [.int(Int(pressure.uintValue))]))
@@ -75,13 +78,11 @@ extension MIDI.Importer.Context {
         noteTable.insert(attack: attack,
                          duration: duration,
                          pitch: convertToNoteNumber(note.key),
-                         extras: elements.isEmpty ? nil : Extras(elements: elements))
+                         extras: Extras(elements: elements))
 
         if let dynamic = convertToDynamic(note.onVelocity) {
             dynamicMap.insert(time: attack,
-                              dynamic: dynamic,
-                              extras: Extras(elements: [Extra(name: Extra.velocity.name,
-                                                              values: [.int(Int(note.onVelocity.uintValue))])]))
+                              dynamic: dynamic)
         }
     }
 

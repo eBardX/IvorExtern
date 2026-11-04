@@ -2,6 +2,8 @@
 
 extension Guido.Pitch {
 
+    // MARK: Internal Nested Types
+
     // The resolved name of a pitch — every German chromatic spelling,
     // German `h`, and solfège syllable already collapsed onto its
     // underlying letter name. The German sharp inflection carried by a

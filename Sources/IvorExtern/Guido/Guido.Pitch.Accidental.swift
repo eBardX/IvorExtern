@@ -2,6 +2,8 @@
 
 extension Guido.Pitch {
 
+    // MARK: Internal Nested Types
+
     // The resolved accidental of a pitch — an omitted accidental already
     // resolved to `.natural`, and an implied sharp (carried by a German
     // chromatic pitch name, e.g. `cis`) already resolved to `.sharp`.

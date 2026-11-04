@@ -2,6 +2,8 @@
 
 extension MusicXML.Importer.Context.DynamicEvent {
 
+    // MARK: Internal Nested Types
+
     // Which way a `DynamicEvent` should be rendered into a `DynamicMap`: a
     // `<sound>`'s `dynamics` or a notated `<dynamics>` mark is an instant
     // change, so it needs the reassert-then-insert step every other

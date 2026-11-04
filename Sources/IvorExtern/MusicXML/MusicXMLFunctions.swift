@@ -1,7 +1,5 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
-// swiftlint:disable file_length
-
 internal import IvorModel
 internal import IvorMXL
 internal import IvorTiming
@@ -368,18 +366,11 @@ internal func convertToTempo(_ sound: MXLSound) -> Tempo? {
     return Tempo(uintValue: uintValue)
 }
 
-// The pre-quantization velocity (MIDI-style 0-127 scale) a note's own
-// `dynamics` percent converts to, before `_convertToDynamic(percent:)`
-// compresses it down to one of `Dynamic`'s ten named levels. See `velocity`
-// in `Extra+DynamicMap.swift`.
+// The exact key velocity (MIDI-style 1-127 scale) a note's own `dynamics`
+// percent converts to, kept on the note as its `velocity` extra (see
+// `Extra+Ivor.swift`).
 internal func convertToVelocity(_ note: MXLNote) -> Int? {
     _convertToVelocity(percent: note.dynamics)
-}
-
-// The `<sound>` analog of `convertToVelocity(_ note:)` — see that function
-// and `convertToDynamic(_ sound:)`.
-internal func convertToVelocity(_ sound: MXLSound) -> Int? {
-    _convertToVelocity(percent: sound.dynamics)
 }
 
 // Some notation software (MuseScore, at least) writes the literal string

@@ -6,6 +6,9 @@ internal import IvorSMF
 private import XestiTools
 
 extension MIDI {
+
+    // MARK: Internal Nested Types
+
     internal struct Formatter {
     }
 }

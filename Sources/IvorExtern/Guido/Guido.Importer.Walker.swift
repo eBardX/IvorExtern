@@ -67,252 +67,6 @@ extension Guido.Importer.Walker {
         return context
     }
 
-    // MARK: Private Instance Methods
-
-    private func _expandedSymbols(_ name: GMNVariable.Name) -> [GMNSymbol] {
-        guard case let .string(text)? = variables[name]?.value,
-              let (score, _) = try? Guido.BaseParser().parse(Data("\(declarationsText) [ \(text) ]".utf8)),
-              let voice = score.voices.first
-        else { return [] }
-
-        return voice.symbols
-    }
-
-    private func _expandVariable(_ name: GMNVariable.Name,
-                                 _ context: inout Guido.Importer.Context,
-                                 _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
-        guard !inProgressVariableNames.contains(name)
-        else { throw Guido.Error.circularVariableReference(name) }
-
-        inProgressVariableNames.insert(name)
-
-        defer { inProgressVariableNames.remove(name) }
-
-        try _walk(_expandedSymbols(name), &context, &inProgressVariableNames)
-    }
-
-    // A ramp's own two endpoints, since `GMNDynamicRamp` carries only a
-    // direction and no target level, are the level in effect when the ramp
-    // opens and one step further along `dynamicScale` in that direction —
-    // the same "just get louder/softer from here" reading a performer gives
-    // a bare hairpin with no `f`/`p` written at its point. An explicit
-    // `\intensity` mark inside the ramp's own span (nested in its `.whole`
-    // body, or written between a `.begin`/`.end` pair) still lands its own,
-    // separate event at its own beat, and `DynamicMap`'s linear
-    // interpolation threads straight through it.
-    private func _handleDynamicRamp(_ ramp: GMNDynamicRamp,
-                                    _ context: inout Guido.Importer.Context,
-                                    _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
-        switch ramp.span {
-        case .whole:
-            let startBeatTime = context.currentBeatTime
-            let startDynamic = context.lastDynamic
-
-            try _walk(ramp.body, &context, &inProgressVariableNames)
-
-            Self._closeDynamicRamp(direction: ramp.direction,
-                                   startBeatTime: startBeatTime,
-                                   startDynamic: startDynamic,
-                                   endBeatTime: context.currentBeatTime,
-                                   &context)
-
-        case .begin:
-            context.pendingDynamicRamps[ramp.ident] = (beatTime: context.currentBeatTime,
-                                                       dynamic: context.lastDynamic,
-                                                       direction: ramp.direction)
-
-        case .end:
-            guard let pending = context.pendingDynamicRamps.removeValue(forKey: ramp.ident)
-            else { return }
-
-            Self._closeDynamicRamp(direction: pending.direction,
-                                   startBeatTime: pending.beatTime,
-                                   startDynamic: pending.dynamic,
-                                   endBeatTime: context.currentBeatTime,
-                                   &context)
-        }
-    }
-
-    // Not `static`, unlike its neighbors: a `\crescendo`/`\diminuendo` in
-    // `.whole` span form owns its covered notes as its own tag body, which
-    // has to be walked through the very same `_walk` (for `$variable`
-    // splicing and cycle detection) that called this method in the first
-    // place.
-    private func _handleTag(_ tag: GMNTag,
-                            _ context: inout Guido.Importer.Context,
-                            _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
-        switch tag {
-        case let .dynamicRamp(ramp):
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-            try _handleDynamicRamp(ramp, &context, &inProgressVariableNames)
-
-        case let .instrument(instrument):
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-            context.instrumentEvents.append((beatTime: context.currentBeatTime,
-                                             instrument: convertToInstrument(instrument),
-                                             tag: instrument))
-
-            if context.instrumentName == nil {
-                context.instrumentName = instrument.instrumentName
-            }
-
-        case let .intensity(intensity):
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-            Self._handleIntensity(intensity, &context)
-
-        case let .tempo(tempo):
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-            if let metronome = tempo.metronome,
-               let tempoValue = convertToTempo(metronome) {
-                context.tempoEvents.append((beatTime: context.currentBeatTime,
-                                            tempo: tempoValue,
-                                            text: tempo.tempo.nilIfEmpty))
-            }
-
-        case let .tie(tie) where tie.span == .end:
-            context.tieArmed = true
-
-        // `\accent<...>{C}`-style tags scope their mark over a `body:` of
-        // note symbols (guidolib's own template shape for every kind but
-        // `\stacc` — see `convertToGuidoTag(_:body:)` on the export side),
-        // so the tag's own body has to be walked right here rather than
-        // just staging the flag and falling through to `default:`'s flush
-        // — a real gap fixed after the export side first exposed it via a
-        // round-trip crash: without this, a body-wrapped note was never
-        // reached at all.
-        case let .articulation(articulation):
-            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
-
-            try _walk(articulation.body, &context, &inProgressVariableNames)
-
-        case let .ornament(ornament):
-            context.pendingNoteExtras.append(Self._ornamentExtra(ornament))
-
-            try _walk(ornament.body, &context, &inProgressVariableNames)
-
-        case let .fingering(fingering):
-            context.pendingNoteExtras.append(Extra(name: Extra.fingering.name, values: [.string(fingering.text)]))
-
-            try _walk(fingering.body, &context, &inProgressVariableNames)
-
-        case let .breathMark(breathMark):
-            context.pendingNoteExtras.append(.breathMark)
-
-            try _walk(breathMark.body, &context, &inProgressVariableNames)
-
-        // The whole-tag `\slur<...>{...}` bracket form — as opposed to the
-        // open-span `Begin`/`End` pair the two cases below handle — needs
-        // no id: `body` alone unambiguously delimits the span, so the
-        // first note walked from it is marked as the start and whichever
-        // note is left pending once the whole body has been walked (the
-        // last one) is marked as the end, the same "mutate the current
-        // pending note" pattern the `.end`-span case below uses. Only
-        // wired on import — `Guido.Exporter` always writes the open-span
-        // ident form instead, so this direction is read-only, matching
-        // how `dynamicMark`'s own MusicXML `otherDynamics`-vs-fixed-case
-        // split reads a wider vocabulary than it writes.
-        case let .slur(slur) where slur.span == .whole:
-            context.pendingNoteExtras.append(.slurStart)
-
-            try _walk(slur.body, &context, &inProgressVariableNames)
-
-            if let pending = context.pendingNote {
-                context.pendingNote = (attackTime: pending.attackTime,
-                                       notes: pending.notes,
-                                       extras: pending.extras + [.slurEnd])
-            }
-
-        case let .slur(slur) where slur.span == .begin:
-            context.pendingNoteExtras.append(Self._slurExtra(.slurStart, ident: slur.ident))
-
-        case let .slur(slur) where slur.span == .end:
-            // The note this closes is still `pendingNote` (mirrors ABC's own
-            // slur-end handling) — appended directly rather than staged for
-            // the next note.
-            if let pending = context.pendingNote {
-                context.pendingNote = (attackTime: pending.attackTime,
-                                       notes: pending.notes,
-                                       extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
-            }
-
-        // A grace note's body would advance `currentBeatTime` like any other
-        // note if walked here, which is wrong for a grace note (it borrows
-        // time rather than taking its own), and a cue note's body is an
-        // alternate, non-sounding passage — so both stay inert, same as
-        // before this stage.
-        case .cue,
-             .grace:
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-        // Every other bodied tag (`\beam`, `\tuplet`, `\lyrics`, `\harmony`,
-        // and the rest) is a transparent wrapper around the notes it covers
-        // — those notes are its whole reason for having a body — so its body
-        // is walked exactly as if the wrapping tag were not there. A gap
-        // fixed after a real score (Fauré's "Après un rêve", almost entirely
-        // `\lyrics`- and `\beam`-wrapped) round-tripped through an import
-        // with two of its three voices silently empty.
-        default:
-            if !tag.body.isEmpty {
-                try _walk(tag.body, &context, &inProgressVariableNames)
-            } else {
-                try Self._flushPendingNote(&context)
-
-                context.tieArmed = false
-            }
-        }
-    }
-
-    // A `.whole`-span `\slur`/`\articulation`/etc. (its own `body:` bracket
-    // rather than the `Begin`/`End` open-span form) isn't specially handled
-    // here — it falls to the `default:` no-op above, same as before this
-    // stage. Only the open-span `Begin`/`End` form (the common case for a
-    // multi-note slur) and articulation/ornament/fingering/breathMark's own
-    // single-note-preceding convention are wired.
-    private func _walk(_ symbols: [GMNSymbol],
-                       _ context: inout Guido.Importer.Context,
-                       _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
-        for symbol in symbols {
-            switch symbol {
-            case let .chord(chord):
-                try Self._handleChord(chord, &context)
-
-            case let .note(note):
-                try Self._handleNote(note, &context)
-
-            case let .rest(rest):
-                try Self._handleRest(rest, &context)
-
-            case .tablature:
-                throw Guido.Error.unsupportedEvent(symbol)
-
-            case let .tag(tag):
-                try _handleTag(tag, &context, &inProgressVariableNames)
-
-            case let .variable(name):
-                try _expandVariable(name, &context, &inProgressVariableNames)
-            }
-        }
-    }
-}
-
-// MARK: -
-
-extension Guido.Importer.Walker {
-
     // MARK: Private Type Properties
 
     // The ten standard dynamic levels `convertToDynamic(_:)` recognizes, in
@@ -710,5 +464,246 @@ extension Guido.Importer.Walker {
         else { return extra }
 
         return Extra(name: extra.name, values: [.string("\(ident.uintValue)")])
+    }
+
+    // MARK: Private Instance Methods
+
+    private func _expandedSymbols(_ name: GMNVariable.Name) -> [GMNSymbol] {
+        guard case let .string(text)? = variables[name]?.value,
+              let (score, _) = try? Guido.BaseParser().parse(Data("\(declarationsText) [ \(text) ]".utf8)),
+              let voice = score.voices.first
+        else { return [] }
+
+        return voice.symbols
+    }
+
+    private func _expandVariable(_ name: GMNVariable.Name,
+                                 _ context: inout Guido.Importer.Context,
+                                 _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
+        guard !inProgressVariableNames.contains(name)
+        else { throw Guido.Error.circularVariableReference(name) }
+
+        inProgressVariableNames.insert(name)
+
+        defer { inProgressVariableNames.remove(name) }
+
+        try _walk(_expandedSymbols(name), &context, &inProgressVariableNames)
+    }
+
+    // A ramp's own two endpoints, since `GMNDynamicRamp` carries only a
+    // direction and no target level, are the level in effect when the ramp
+    // opens and one step further along `dynamicScale` in that direction —
+    // the same "just get louder/softer from here" reading a performer gives
+    // a bare hairpin with no `f`/`p` written at its point. An explicit
+    // `\intensity` mark inside the ramp's own span (nested in its `.whole`
+    // body, or written between a `.begin`/`.end` pair) still lands its own,
+    // separate event at its own beat, and `DynamicMap`'s linear
+    // interpolation threads straight through it.
+    private func _handleDynamicRamp(_ ramp: GMNDynamicRamp,
+                                    _ context: inout Guido.Importer.Context,
+                                    _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
+        switch ramp.span {
+        case .whole:
+            let startBeatTime = context.currentBeatTime
+            let startDynamic = context.lastDynamic
+
+            try _walk(ramp.body, &context, &inProgressVariableNames)
+
+            Self._closeDynamicRamp(direction: ramp.direction,
+                                   startBeatTime: startBeatTime,
+                                   startDynamic: startDynamic,
+                                   endBeatTime: context.currentBeatTime,
+                                   &context)
+
+        case .begin:
+            context.pendingDynamicRamps[ramp.ident] = (beatTime: context.currentBeatTime,
+                                                       dynamic: context.lastDynamic,
+                                                       direction: ramp.direction)
+
+        case .end:
+            guard let pending = context.pendingDynamicRamps.removeValue(forKey: ramp.ident)
+            else { return }
+
+            Self._closeDynamicRamp(direction: pending.direction,
+                                   startBeatTime: pending.beatTime,
+                                   startDynamic: pending.dynamic,
+                                   endBeatTime: context.currentBeatTime,
+                                   &context)
+        }
+    }
+
+    // Not `static`, unlike its neighbors: a `\crescendo`/`\diminuendo` in
+    // `.whole` span form owns its covered notes as its own tag body, which
+    // has to be walked through the very same `_walk` (for `$variable`
+    // splicing and cycle detection) that called this method in the first
+    // place.
+    private func _handleTag(_ tag: GMNTag,
+                            _ context: inout Guido.Importer.Context,
+                            _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
+        switch tag {
+        case let .dynamicRamp(ramp):
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
+            try _handleDynamicRamp(ramp, &context, &inProgressVariableNames)
+
+        case let .instrument(instrument):
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
+            context.instrumentEvents.append((beatTime: context.currentBeatTime,
+                                             instrument: convertToInstrument(instrument),
+                                             tag: instrument))
+
+            if context.instrumentName == nil {
+                context.instrumentName = instrument.instrumentName
+            }
+
+        case let .intensity(intensity):
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
+            Self._handleIntensity(intensity, &context)
+
+        case let .tempo(tempo):
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
+            if let metronome = tempo.metronome,
+               let tempoValue = convertToTempo(metronome) {
+                context.tempoEvents.append((beatTime: context.currentBeatTime,
+                                            tempo: tempoValue,
+                                            text: tempo.tempo.nilIfEmpty))
+            }
+
+        case let .tie(tie) where tie.span == .end:
+            context.tieArmed = true
+
+        // `\accent<...>{C}`-style tags scope their mark over a `body:` of
+        // note symbols (guidolib's own template shape for every kind but
+        // `\stacc` — see `convertToGuidoTag(_:body:)` on the export side),
+        // so the tag's own body has to be walked right here rather than
+        // just staging the flag and falling through to `default:`'s flush
+        // — a real gap fixed after the export side first exposed it via a
+        // round-trip crash: without this, a body-wrapped note was never
+        // reached at all.
+        case let .articulation(articulation):
+            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
+
+            try _walk(articulation.body, &context, &inProgressVariableNames)
+
+        case let .ornament(ornament):
+            context.pendingNoteExtras.append(Self._ornamentExtra(ornament))
+
+            try _walk(ornament.body, &context, &inProgressVariableNames)
+
+        case let .fingering(fingering):
+            context.pendingNoteExtras.append(Extra(name: Extra.fingering.name, values: [.string(fingering.text)]))
+
+            try _walk(fingering.body, &context, &inProgressVariableNames)
+
+        case let .breathMark(breathMark):
+            context.pendingNoteExtras.append(.breathMark)
+
+            try _walk(breathMark.body, &context, &inProgressVariableNames)
+
+        // The whole-tag `\slur<...>{...}` bracket form — as opposed to the
+        // open-span `Begin`/`End` pair the two cases below handle — needs
+        // no id: `body` alone unambiguously delimits the span, so the
+        // first note walked from it is marked as the start and whichever
+        // note is left pending once the whole body has been walked (the
+        // last one) is marked as the end, the same "mutate the current
+        // pending note" pattern the `.end`-span case below uses. Only
+        // wired on import — `Guido.Exporter` always writes the open-span
+        // ident form instead, so this direction is read-only, matching
+        // how `dynamicMark`'s own MusicXML `otherDynamics`-vs-fixed-case
+        // split reads a wider vocabulary than it writes.
+        case let .slur(slur) where slur.span == .whole:
+            context.pendingNoteExtras.append(.slurStart)
+
+            try _walk(slur.body, &context, &inProgressVariableNames)
+
+            if let pending = context.pendingNote {
+                context.pendingNote = (attackTime: pending.attackTime,
+                                       notes: pending.notes,
+                                       extras: pending.extras + [.slurEnd])
+            }
+
+        case let .slur(slur) where slur.span == .begin:
+            context.pendingNoteExtras.append(Self._slurExtra(.slurStart, ident: slur.ident))
+
+        case let .slur(slur) where slur.span == .end:
+            // The note this closes is still `pendingNote` (mirrors ABC's own
+            // slur-end handling) — appended directly rather than staged for
+            // the next note.
+            if let pending = context.pendingNote {
+                context.pendingNote = (attackTime: pending.attackTime,
+                                       notes: pending.notes,
+                                       extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
+            }
+
+        // A grace note's body would advance `currentBeatTime` like any other
+        // note if walked here, which is wrong for a grace note (it borrows
+        // time rather than taking its own), and a cue note's body is an
+        // alternate, non-sounding passage — so both stay inert, same as
+        // before this stage.
+        case .cue,
+             .grace:
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
+        // Every other bodied tag (`\beam`, `\tuplet`, `\lyrics`, `\harmony`,
+        // and the rest) is a transparent wrapper around the notes it covers
+        // — those notes are its whole reason for having a body — so its body
+        // is walked exactly as if the wrapping tag were not there. A gap
+        // fixed after a real score (Fauré's "Après un rêve", almost entirely
+        // `\lyrics`- and `\beam`-wrapped) round-tripped through an import
+        // with two of its three voices silently empty.
+        default:
+            if !tag.body.isEmpty {
+                try _walk(tag.body, &context, &inProgressVariableNames)
+            } else {
+                try Self._flushPendingNote(&context)
+
+                context.tieArmed = false
+            }
+        }
+    }
+
+    // A `.whole`-span `\slur`/`\articulation`/etc. (its own `body:` bracket
+    // rather than the `Begin`/`End` open-span form) isn't specially handled
+    // here — it falls to the `default:` no-op above, same as before this
+    // stage. Only the open-span `Begin`/`End` form (the common case for a
+    // multi-note slur) and articulation/ornament/fingering/breathMark's own
+    // single-note-preceding convention are wired.
+    private func _walk(_ symbols: [GMNSymbol],
+                       _ context: inout Guido.Importer.Context,
+                       _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
+        for symbol in symbols {
+            switch symbol {
+            case let .chord(chord):
+                try Self._handleChord(chord, &context)
+
+            case let .note(note):
+                try Self._handleNote(note, &context)
+
+            case let .rest(rest):
+                try Self._handleRest(rest, &context)
+
+            case .tablature:
+                throw Guido.Error.unsupportedEvent(symbol)
+
+            case let .tag(tag):
+                try _handleTag(tag, &context, &inProgressVariableNames)
+
+            case let .variable(name):
+                try _expandVariable(name, &context, &inProgressVariableNames)
+            }
+        }
     }
 }

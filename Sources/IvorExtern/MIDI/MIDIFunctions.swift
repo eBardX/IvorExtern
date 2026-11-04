@@ -4,13 +4,13 @@ internal import IvorModel
 internal import IvorSMPTE
 internal import IvorTiming
 internal import IvorTuning
+internal import XestiTools
 
 private import Foundation
 private import IvorGeneralMIDI
 private import IvorMIDI
 private import IvorSMF
 private import XestiNumbers
-private import XestiTools
 
 // MARK: Internal Functions
 
@@ -89,6 +89,24 @@ internal func convertToTempo(_ tempo: MIDI.Tempo,
                                 denominator: tempo.uintValue)).exact.uintValue)
 }
 
+// The timecode division `MIDI.Importer` recorded on a work it read from a
+// file with one (see `MIDI.Importer._makeExtras`), so that `MIDI.Exporter`
+// can write it back: in a `midiTimeCode` extra on the work itself, whatever
+// its time basis. A frame rate SMF can't encode, or a number of ticks per
+// frame outside 1–255, counts as none.
+internal func determineTimeCode(_ work: Work) -> MIDI.TimeCode? {
+    guard let values = work.extras?.elements.first(where: { $0.name == Extra.midiTimeCode.name })?.values,
+          values.count == 2,
+          case let .string(frameRateString) = values[0],
+          case let .int(ticksPerFrameValue) = values[1],
+          let frameRate = SMPTEFrameRate(string: frameRateString),
+          let ticksPerFrame = UInt(exactly: ticksPerFrameValue)
+    else { return nil }
+
+    return MIDI.TimeCode(frameRate: frameRate,
+                         ticksPerFrame: ticksPerFrame)
+}
+
 // Scans one track's own events for its `sequenceTrackName` meta event
 // text, or `nil` if it never declared one. `determineWorkName` reads
 // track 0's name as the work's name; `MIDI.Importer` reads every other
@@ -111,46 +129,11 @@ internal func determineWorkName(_ sequence: MIDI.Sequence) -> String {
     return determineTrackName(track0) ?? ""
 }
 
-// The timecode division `MIDI.Importer` recorded on a work it read from a
-// file with one (see `MIDI.Importer._makeStartElements`), so that
-// `MIDI.Exporter` can write it back: in a `midiTimeCode` extra on the tempo
-// map entry at beat zero of a beat-time work, or on each part's instrument
-// map entry at time zero of a wall-time work. The first one SMF can encode
-// wins; a frame rate it can't, or a number of ticks per frame outside
-// 1–255, is skipped.
-internal func determineTimeCode(_ content: Work.Content) -> MIDI.TimeCode? {
-    switch content {
-    case let .absoluteBeat(_, tempoMap),
-         let .keyboardBeat(_, tempoMap),
-         let .standardBeat(_, tempoMap):
-        _determineTimeCode(_startExtras(tempoMap))
-
-    case let .absoluteWall(parts):
-        _determineTimeCode(_startExtras(parts))
-
-    case let .keyboardWall(parts):
-        _determineTimeCode(_startExtras(parts))
-
-    case let .standardWall(parts):
-        _determineTimeCode(_startExtras(parts))
-    }
-}
-
-// The exact key velocity an importer kept on a dynamic-map entry (the
-// `velocity` extra), keyed by the entry's time. A note attacked at one of
-// these times sounds at that velocity rather than one converted from the
-// dynamic level.
-internal func exactKeyVelocities<TimeType: TimeProtocol>(in dynamicMap: DynamicMap<TimeType>) -> [TimeType: MIDI.KeyVelocity] {
-    var result: [TimeType: MIDI.KeyVelocity] = [:]
-
-    for entry in dynamicMap {
-        if let velocity = intValue(entry.extras, .velocity),
-           let value = MIDI.KeyVelocity(uintValue: UInt(clamping: velocity)) {
-            result[entry.time] = value
-        }
-    }
-
-    return result
+// The exact key velocity an importer kept on a note (its `velocity`
+// extra), if any. A note with one sounds at that velocity rather than one
+// converted from the dynamic level at its attack.
+internal func exactKeyVelocity(_ extras: Extras?) -> MIDI.KeyVelocity? {
+    intValue(extras, .velocity).flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
 }
 
 // The start time a file with this division implies when it has no SMPTE
@@ -194,36 +177,6 @@ internal func parseSongInformation(_ text: String) -> [(name: String, value: Str
 
 // MARK: Private Functions
 
-private func _determineTimeCode(_ startExtras: [Extras]) -> MIDI.TimeCode? {
-    for extras in startExtras {
-        guard let values = extras.elements.first(where: { $0.name == Extra.midiTimeCode.name })?.values,
-              values.count == 2,
-              case let .string(frameRateString) = values[0],
-              case let .int(ticksPerFrameValue) = values[1],
-              let frameRate = SMPTEFrameRate(string: frameRateString),
-              let ticksPerFrame = UInt(exactly: ticksPerFrameValue),
-              let timeCode = MIDI.TimeCode(frameRate: frameRate,
-                                           ticksPerFrame: ticksPerFrame)
-        else { continue }
-
-        return timeCode
-    }
-
-    return nil
-}
-
 private func _isLatin1(_ text: String) -> Bool {
     text.unicodeScalars.allSatisfy { $0.value <= 0xff }
-}
-
-// The extras of every instrument map entry at time zero, in part order.
-private func _startExtras(_ parts: [Part<WallTime, some PitchProtocol>]) -> [Extras] {
-    parts.flatMap { part in
-        part.instrumentMap.compactMap { $0.time == .zero ? $0.extras : nil }
-    }
-}
-
-// The extras of every tempo map entry at beat zero.
-private func _startExtras(_ tempoMap: TempoMap) -> [Extras] {
-    tempoMap.compactMap { $0.beatTime == .zero ? $0.extras : nil }
 }

@@ -12,6 +12,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension ABC {
+
+    // MARK: Internal Nested Types
+
     // Not a namespace: `ExporterProtocol`'s instance members live in the
     // following extension, invisible to this check from here.
     // swiftformat:disable:next enumNamespaces
@@ -273,10 +276,10 @@ extension ABC.Exporter {
     // in the voice's own body, where abc2midi applies it to that voice. `n`
     // is the `midiProgram` extra's 1–128 General MIDI number, so the header
     // says `%%MIDI programbase 1` (see `_makeHeader`); abc2midi otherwise
-    // counts from 0. A `midiChannel` extra with no resolvable program (an
-    // `.vanilla` instrument left over from a channel-only import — see
-    // `ABC.Importer._makeInstrumentMap`) falls back to a standalone
-    // `%%MIDI channel n` instead of dropping the channel entirely.
+    // counts from 0. The part's own `midiChannel` extra, if any, goes in
+    // each `program` directive's channel token; a part with no resolvable
+    // program writes it as a standalone `%%MIDI channel n` at the start
+    // instead of dropping the channel entirely.
     //
     // `program` has no room for a bank, so an entry with a `midiBank` extra
     // also writes ABC 2.1's `%%MIDI voice instrument=n bank=m`, `m`
@@ -284,13 +287,13 @@ extension ABC.Exporter {
     // ignores it, which is why `program` is still written; the importer
     // prefers it. It names no voice, so it applies to the voice whose body
     // it's written in.
-    private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, ABCDirective)] {
+    private static func _instrumentDirectives(_ part: Part<BeatTime, Pitch>) -> [(BeatTime, ABCDirective)] {
         var directives: [(BeatTime, ABCDirective)] = []
+        let channel = intValue(part.extras, .midiChannel)
 
-        for entry in instrumentMap {
+        for entry in part.instrumentMap {
             let exactProgram = intValue(entry.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
-            let channel = intValue(entry.extras, .midiChannel)
 
             if let program = exactProgram ?? derivedProgram {
                 let value = if let channel {
@@ -305,9 +308,11 @@ extension ABC.Exporter {
                     directives.append((entry.time, ABCDirective(name: midiDirectiveName,
                                                                 value: "voice instrument=\(program) bank=\(bank + 1)")))
                 }
-            } else if let channel {
-                directives.append((entry.time, ABCDirective(name: midiDirectiveName, value: "channel \(channel)")))
             }
+        }
+
+        if directives.isEmpty, let channel {
+            directives.append((.zero, ABCDirective(name: midiDirectiveName, value: "channel \(channel)")))
         }
 
         return directives
@@ -445,7 +450,7 @@ extension ABC.Exporter {
         }
 
         let writesProgram = parts.contains { part in
-            _instrumentDirectives(part.instrumentMap).contains { $0.1.value.hasPrefix(programKeyword + " ") }
+            _instrumentDirectives(part).contains { $0.1.value.hasPrefix(programKeyword + " ") }
         }
 
         if writesProgram {
@@ -467,7 +472,7 @@ extension ABC.Exporter {
                                       measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
-        let directives = _instrumentDirectives(part.instrumentMap)
+        let directives = _instrumentDirectives(part)
         let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
         let barTimes = _barTimes(measureCount: measureCount)
         let sortedBoundaries = _boundaries(events: events, barTimes: barTimes, endTime: endTime)

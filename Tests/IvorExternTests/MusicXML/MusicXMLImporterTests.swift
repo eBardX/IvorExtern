@@ -3,11 +3,14 @@
 import Foundation
 @testable import IvorExtern
 import IvorModel
+import IvorMXL
 import IvorTiming
 import IvorTuning
 import Testing
 import XestiNumbers
 import XestiTools
+
+// swiftlint:disable file_length
 
 struct MusicXMLImporterTests {
 }
@@ -15,6 +18,24 @@ struct MusicXMLImporterTests {
 // MARK: -
 
 extension MusicXMLImporterTests {
+    @Test
+    func read_creditsOnly_fillWhatIdentificationLacks() throws {
+        let work = try readMusicXML(header: """
+              <credit page="1"><credit-type>title</credit-type><credit-words>Aubade</credit-words></credit>
+              <credit page="1"><credit-type>subtitle</credit-type><credit-words>Dawn Song</credit-words></credit>
+              <credit page="1"><credit-type>Dedication</credit-type><credit-words>For Anna</credit-words></credit>
+              <credit page="1"><credit-type>composer</credit-type><credit-words>J. Smith</credit-words></credit>
+              <credit page="1"><credit-type>rights</credit-type><credit-words>© 1998 Acme</credit-words></credit>
+              <credit page="1"><credit-words>Untyped</credit-words></credit>
+            """)
+
+        #expect(work.info.title == "Aubade")
+        #expect(work.info.subtitles == ["Dawn Song"])
+        #expect(work.info.dedication == "For Anna")
+        #expect(work.info.credits == [Credit(name: "J. Smith", role: .composer)].compactMap(\.self))
+        #expect(work.info.rights == [RightsNotice(text: "© 1998 Acme")].compactMap(\.self))
+    }
+
     @Test
     func read_directionDynamics_populatesDynamicMap_whenNoNoteHasDynamics() throws {
         let musicXML = """
@@ -47,89 +68,51 @@ extension MusicXMLImporterTests {
     }
 
     @Test
-    func read_multiplePartsWithEmptyPartNames_fallsBackToVoiceN() throws {
-        let musicXML = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <score-partwise version="4.0">
-              <part-list>
-                <score-part id="P1"><part-name></part-name></score-part>
-                <score-part id="P2"><part-name>Cello</part-name></score-part>
-                <score-part id="P3"><part-name></part-name></score-part>
-              </part-list>
-              <part id="P1">
-                <measure number="1">
-                  <attributes><divisions>1</divisions></attributes>
-                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
-                </measure>
-              </part>
-              <part id="P2">
-                <measure number="1">
-                  <attributes><divisions>1</divisions></attributes>
-                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration></note>
-                </measure>
-              </part>
-              <part id="P3">
-                <measure number="1">
-                  <attributes><divisions>1</divisions></attributes>
-                  <note><pitch><step>C</step><octave>2</octave></pitch><duration>1</duration></note>
-                </measure>
-              </part>
-            </score-partwise>
-            """
-        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
-        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
-        let work = try #require(works.first)
-
-        guard case let .standardBeat(parts, _) = work.content
-        else { Issue.record("Expected standardBeat content"); return }
-
-        #expect(parts.map(\.name) == ["Voice 1", "Cello", "Voice 3"])
-    }
-
-    @Test
-    func read_unnamedMultiVoicePartAfterUnnamedPart_numbersVoicesByWorkPosition() throws {
-        let musicXML = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <score-partwise version="4.0">
-              <part-list>
-                <score-part id="P1"><part-name></part-name></score-part>
-                <score-part id="P2"><part-name></part-name></score-part>
-              </part-list>
-              <part id="P1">
-                <measure number="1">
-                  <attributes><divisions>1</divisions></attributes>
-                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
-                </measure>
-              </part>
-              <part id="P2">
-                <measure number="1">
-                  <attributes><divisions>1</divisions></attributes>
-                  <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
-                  <backup><duration>1</duration></backup>
-                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration><voice>5</voice></note>
-                </measure>
-              </part>
-            </score-partwise>
-            """
-        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
-        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
-        let work = try #require(works.first)
-        let parts = try #require(standardBeatParts(of: work))
-
-        // P2's voices are labeled by their position in the work, not by
-        // their `<voice>` ids (1 and 5), so neither can collide with P1's
-        // own positional "Voice 1".
-        #expect(parts.map(\.name) == ["Voice 1", "Voice 2", "Voice 3"])
-        #expect(notes(in: parts[2]).map(\.pitch) == ["C3"])
-    }
-
-    @Test
     func read_emptyData_throws() {
         let wrapper = FileWrapper(regularFileWithContents: Data())
 
         #expect(throws: (any Error).self) {
             try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         }
+    }
+
+    @Test
+    func read_identification_preferredOverCredits() throws {
+        let work = try readMusicXML(header: """
+              <work><work-number>Op. 2</work-number><work-title>Suite</work-title></work>
+              <movement-number>3</movement-number>
+              <movement-title>Aubade</movement-title>
+              <identification>
+                <creator type="composer">J. Smith</creator>
+                <creator>Anon.</creator>
+                <rights type="words">© 1998 Acme</rights>
+                <encoding>
+                  <encoder>T. Scribe</encoder>
+                  <encoding-description>Proofread twice</encoding-description>
+                </encoding>
+                <source>Manuscript</source>
+                <miscellaneous>
+                  <miscellaneous-field name="mood">Wistful</miscellaneous-field>
+                  <miscellaneous-field name="alternate title">Morning Piece</miscellaneous-field>
+                </miscellaneous>
+              </identification>
+              <credit page="1"><credit-type>title</credit-type><credit-words>Printed Title</credit-words></credit>
+              <credit page="1"><credit-type>composer</credit-type><credit-words>Printed Composer</credit-words></credit>
+            """)
+        let info = work.info
+
+        #expect(info.title == "Aubade")
+        #expect(info.parentWorkTitle == "Suite")
+        #expect(info.alternateTitles == ["Morning Piece"])
+        #expect(info.credits == [Credit(name: "J. Smith", role: .composer),
+                                 Credit(name: "Anon."),
+                                 Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self))
+        #expect(info.rights == [RightsNotice(text: "© 1998 Acme", scope: .words)].compactMap(\.self))
+        #expect(info.remarks == [Remark(text: "Op. 2", label: "work number"),
+                                 Remark(text: "3", label: "movement number"),
+                                 Remark(text: "Manuscript", label: "source"),
+                                 Remark(text: "Proofread twice", label: "encoding description"),
+                                 Remark(text: "Wistful", label: "mood")].compactMap(\.self))
     }
 
     @Test
@@ -172,6 +155,115 @@ extension MusicXMLImporterTests {
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(tempoMap[.zero] == Tempo(uintValue: 96))
+    }
+
+    @Test
+    func read_midiInstrumentChannelAndBank_populatesExtras() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1">
+                  <part-name>Violin</part-name>
+                  <score-instrument id="P1-I1"><instrument-name>Violin</instrument-name></score-instrument>
+                  <midi-instrument id="P1-I1"><midi-channel>3</midi-channel><midi-bank>131</midi-bank></midi-instrument>
+                </score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        let foundChannel = intValue(parts.first?.extras, .midiChannel)
+        var foundBank: Int?
+
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            foundBank = intValue(entry.extras, .midiBank)
+        }
+
+        #expect(foundChannel == 3)
+        // `<midi-bank>131</midi-bank>` numbers from 1.
+        #expect(foundBank == 130)
+    }
+
+    @Test
+    func read_midiInstrumentChannelOnlyNoNameOrProgram_putsChannelExtraOnPart() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1">
+                  <part-name>Unnamed</part-name>
+                  <midi-instrument id="P1-I1"><midi-channel>5</midi-channel></midi-instrument>
+                </score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.first?.instrumentMap.isEmpty == true)
+        #expect(intValue(parts.first?.extras, .midiChannel) == 5)
+    }
+
+    @Test
+    func read_multiplePartsWithEmptyPartNames_fallsBackToVoiceN() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name></part-name></score-part>
+                <score-part id="P2"><part-name>Cello</part-name></score-part>
+                <score-part id="P3"><part-name></part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P3">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>2</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.map(\.name) == ["Voice 1", "Cello", "Voice 3"])
     }
 
     @Test
@@ -341,6 +433,60 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_scoreInstrument_populatesInstrumentMap() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1">
+                  <part-name>Violin</part-name>
+                  <score-instrument id="P1-I1">
+                    <instrument-name>Violin</instrument-name>
+                  </score-instrument>
+                </score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes>
+                    <divisions>1</divisions>
+                  </attributes>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+    }
+
+    @Test
+    func read_scorePart_populatesInstrumentExtras() throws {
+        let work = try readMusicXML(header: "",
+                                    scorePart: """
+                                <part-name>Flute</part-name>
+                                <score-instrument id="P1-I1">
+                                  <instrument-name>Flauto 1</instrument-name>
+                                  <instrument-abbreviation>Fl. 1</instrument-abbreviation>
+                                </score-instrument>
+                             """)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        let entry = try #require(part.instrumentMap.first)
+
+        #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
+        #expect(stringValue(entry.extras, .instrumentAbbreviation) == "Fl. 1")
+    }
+
+    @Test
     func read_scorePartMidiInstrumentPan_populatesPanMap_whenNoSoundPanEvent() throws {
         // Regression test: a `<score-part><midi-instrument><pan>0</pan>`
         // (explicit center) must still seed `panMap`, even with no `<sound>`
@@ -381,6 +527,85 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_soundDynamics_setsLevelWithoutVelocityExtra() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>Piano</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <direction>
+                    <direction-type><words>loud</words></direction-type>
+                    <sound dynamics="90"/>
+                  </direction>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let work = try #require(MusicXML.Importer().read(from: wrapper, as: .musicXML).first)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        var dynamicVelocities: [Int?] = []
+
+        for entry in part.dynamicMap {
+            dynamicVelocities.append(intValue(entry.extras, .velocity))
+        }
+
+        //
+        // A `<sound>`'s velocity is exactly the one its level converts back to, so only the level
+        // is kept.
+        //
+        #expect(part.dynamicMap[.zero] == Dynamic(numberValue: Number(numerator: 81, denominator: 127)))
+        #expect(dynamicVelocities.allSatisfy { $0 == nil })
+        #expect(intValue(part.noteTable.first?.extras, .velocity) == nil)
+    }
+
+    @Test
+    func read_soundMidiInstrumentPan_populatesPanMap() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1">
+                  <part-name>Piano</part-name>
+                </score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes>
+                    <divisions>1</divisions>
+                  </attributes>
+                  <sound>
+                    <midi-instrument id="P1-I1"><pan>-45</pan></midi-instrument>
+                  </sound>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+
+        guard case let .standardBeat(parts, _) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(!(parts.first?.panMap.isEmpty ?? true))
+    }
+
+    @Test
     func read_soundTempo_populatesTempoMap() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -413,6 +638,83 @@ extension MusicXMLImporterTests {
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
+    }
+
+    @Test
+    func read_tiedNotesWithDynamics_keepFirstVelocity() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>Piano</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note dynamics="90">
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <tie type="start"/>
+                    <type>quarter</type>
+                  </note>
+                  <note dynamics="50">
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <tie type="stop"/>
+                    <type>quarter</type>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let work = try #require(MusicXML.Importer().read(from: wrapper, as: .musicXML).first)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        var velocities: [Int?] = []
+
+        for note in part.noteTable {
+            velocities.append(intValue(note.extras, .velocity))
+        }
+
+        // One note, attacked once: 90% of 90 is 81; the continuation's 45 doesn't replace it.
+        #expect(velocities == [81])
+    }
+
+    @Test
+    func read_unnamedMultiVoicePartAfterUnnamedPart_numbersVoicesByWorkPosition() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name></part-name></score-part>
+                <score-part id="P2"><part-name></part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+                  <backup><duration>1</duration></backup>
+                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration><voice>5</voice></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        // P2's voices are labeled by their position in the work, not by
+        // their `<voice>` ids (1 and 5), so neither can collide with P1's
+        // own positional "Voice 1".
+        #expect(parts.map(\.name) == ["Voice 1", "Voice 2", "Voice 3"])
+        #expect(notes(in: parts[2]).map(\.pitch) == ["C3"])
     }
 
     @Test
@@ -476,3 +778,5 @@ extension MusicXMLImporterTests {
         #expect(formats.contains(.musicXML))
     }
 }
+
+// swiftlint:enable file_length

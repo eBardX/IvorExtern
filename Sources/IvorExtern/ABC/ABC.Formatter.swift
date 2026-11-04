@@ -6,6 +6,9 @@ internal import IvorABC
 private import XestiTools
 
 extension ABC {
+
+    // MARK: Internal Nested Types
+
     internal struct Formatter {
     }
 }

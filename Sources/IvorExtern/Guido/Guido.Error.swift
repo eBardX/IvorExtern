@@ -6,6 +6,9 @@ internal import IvorTuning
 internal import XestiTools
 
 extension Guido {
+
+    // MARK: Internal Nested Types
+
     internal enum Error {
         case circularVariableReference(GMNVariable.Name)
         case convertFailure((any EnhancedError)?)
@@ -28,6 +31,9 @@ extension Guido {
 // MARK: - EnhancedError
 
 extension Guido.Error: EnhancedError {
+
+    // MARK: Internal Instance Properties
+
     internal var category: Category? {
         Category("IvorExtern")
     }

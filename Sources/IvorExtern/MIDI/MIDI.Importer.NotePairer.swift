@@ -5,6 +5,8 @@ internal import IvorSMF
 
 extension MIDI.Importer {
 
+    // MARK: Internal Nested Types
+
     // Pairs a single channel's note-on/note-off messages into sounding
     // notes (FIFO per key) while collecting that channel's `.panMSB` and
     // Bank Select (`.bankSelectMSB`/`.bankSelectLSB`) control changes,

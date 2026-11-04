@@ -40,18 +40,6 @@ extension MIDITickMapTests {
     }
 
     @Test
-    func subscript_timeCode_tempoChanges() throws {
-        let timeCode = try #require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))
-        let tickMap = MIDI.TickMap(timeCode: timeCode,
-                                   tempoChanges: [(BeatTime.zero, SMFTempo(250_000)),
-                                                  (BeatTime(4), SMFTempo(1_000_000))])
-
-        #expect(tickMap[BeatTime(2)] == SMFEventTime(500))
-        #expect(tickMap[BeatTime(4)] == SMFEventTime(1_000))
-        #expect(tickMap[BeatTime(5)] == SMFEventTime(2_000))
-    }
-
-    @Test
     func subscript_timeCode_invertsBeatMap() throws {
         let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
         var beatMap = MIDI.BeatMap(division: .timeCode(timeCode))
@@ -67,5 +55,17 @@ extension MIDITickMapTests {
         for ticks in stride(from: UInt(0), to: 20_000, by: 37) {
             #expect(tickMap[beatMap[SMFEventTime(ticks)].0] == SMFEventTime(ticks))
         }
+    }
+
+    @Test
+    func subscript_timeCode_tempoChanges() throws {
+        let timeCode = try #require(SMFTimeCode(frameRate: .fps25, ticksPerFrame: 40))
+        let tickMap = MIDI.TickMap(timeCode: timeCode,
+                                   tempoChanges: [(BeatTime.zero, SMFTempo(250_000)),
+                                                  (BeatTime(4), SMFTempo(1_000_000))])
+
+        #expect(tickMap[BeatTime(2)] == SMFEventTime(500))
+        #expect(tickMap[BeatTime(4)] == SMFEventTime(1_000))
+        #expect(tickMap[BeatTime(5)] == SMFEventTime(2_000))
     }
 }

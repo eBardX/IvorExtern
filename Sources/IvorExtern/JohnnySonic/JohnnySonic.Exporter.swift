@@ -11,6 +11,9 @@ private import XestiText
 private import XestiTools
 
 extension JohnnySonic {
+
+    // MARK: Internal Nested Types
+
     internal struct Exporter {
     }
 }
@@ -49,18 +52,12 @@ extension JohnnySonic.Exporter {
         }
 
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
-        var exactVolumeByBeatTime: [BeatTime: Double] = [:]
-
-        for entry in part.dynamicMap {
-            if let velocity = intValue(entry.extras, .velocity) {
-                exactVolumeByBeatTime[entry.time] = Double(velocity) / 12.7
-            }
-        }
 
         for note in part.noteTable {
             let startBeat  = convertToJohnnySonicBeat(note.attack)
             let duration   = convertToJohnnySonicDuration(note.duration)
-            let volume     = exactVolumeByBeatTime[note.attack] ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
+            let volume     = intValue(note.extras, .velocity).map { Double($0) / 12.7 }
+                ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)
             let endPitch   = convertToJohnnySonicPitch(note.endPitch)
@@ -89,18 +86,12 @@ extension JohnnySonic.Exporter {
         }
 
         var commands: [DKMCommand] = try _makeBoxed(comment: comment)
-        var exactVolumeByBeatTime: [BeatTime: Double] = [:]
-
-        for entry in part.dynamicMap {
-            if let velocity = intValue(entry.extras, .velocity) {
-                exactVolumeByBeatTime[entry.time] = Double(velocity) / 12.7
-            }
-        }
 
         for note in part.noteTable {
             let startBeat  = convertToJohnnySonicBeat(note.attack)
             let duration   = convertToJohnnySonicDuration(note.duration)
-            let volume     = exactVolumeByBeatTime[note.attack] ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
+            let volume     = intValue(note.extras, .velocity).map { Double($0) / 12.7 }
+                ?? convertToJohnnySonicVolume(part.dynamicMap[note.attack])
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)
             let endPitch   = convertToJohnnySonicPitch(note.endPitch)

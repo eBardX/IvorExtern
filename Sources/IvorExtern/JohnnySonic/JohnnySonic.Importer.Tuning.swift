@@ -5,6 +5,8 @@ internal import IvorDKM
 
 extension JohnnySonic.Importer {
 
+    // MARK: Internal Nested Types
+
     // Transcribes `ProcessTuning`/`ConvertPitchToFreq` from DKM's main.c. A
     // `/Tuning` command replaces only the fields the reference accepts as
     // in-range, leaving the rest at their previous value.

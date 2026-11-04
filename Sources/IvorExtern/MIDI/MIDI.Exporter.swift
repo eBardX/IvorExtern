@@ -12,6 +12,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension MIDI {
+
+    // MARK: Internal Nested Types
+
     internal struct Exporter {
     }
 }
@@ -42,26 +45,16 @@ extension MIDI.Exporter {
     // MARK: Private Type Methods
 
     // Assigns each part a distinct MIDI channel in 1...16, preserving the
-    // origin channel a part's own `instrumentMap` (a `midiChannel` extra —
-    // see `Extra+InstrumentMap.swift`) or, failing that, an unrenamed
-    // importer-produced part name (`Part(name: "Channel \(voice.channel.
-    // uintValue)", …)`, `MIDI.Importer.swift`) already names, so that, for
-    // example, a file using channels {1, 5, 9} round-trips back to
-    // {1, 5, 9} rather than collapsing to {1, 2, 3} and corrupting the GM
-    // channel-10-is-percussion convention.
+    // origin channel a part's own `midiChannel` extra names (see
+    // `Extra+Ivor.swift`), so that, for example, a file using channels
+    // {1, 5, 9} round-trips back to {1, 5, 9} rather than collapsing to
+    // {1, 2, 3} and corrupting the GM channel-10-is-percussion convention.
     //
-    // Pass 1: a part whose `instrumentMap`'s first entry carries a
-    // `midiChannel` extra in 1...16, or — failing that — a name matching
-    // `^Channel (\d+)$` with N in 1...16, claims channel N; on a duplicate
-    // claim the first part in array order keeps it, and later claimants
-    // fall through to pass 2. Pass 2: every unclaimed part takes the
-    // lowest unclaimed channel, in array order. More than 16 parts, or an
-    // exhausted pool, throws `tooManyParts`.
-    //
-    // This is inherently fragile: `Part` has no identity field, so
-    // renaming a part (or clearing its `midiChannel` extra) silently
-    // changes its export channel. Worth revisiting if `IvorModel` ever
-    // gains one.
+    // Pass 1: a part whose `midiChannel` extra is in 1...16 claims that
+    // channel; on a duplicate claim the first part in array order keeps it,
+    // and later claimants fall through to pass 2. Pass 2: every unclaimed
+    // part takes the lowest unclaimed channel, in array order. More than 16
+    // parts, or an exhausted pool, throws `tooManyParts`.
     private static func _assignChannels(_ parts: [Part<some TimeProtocol, NoteNumber>]) throws(MIDI.Error) -> [MIDI.Channel] {
         var claimedChannels: [Int: Int] = [:] // part index -> channel number
         var usedChannels: Set<Int> = []
@@ -105,102 +98,6 @@ extension MIDI.Exporter {
         }
 
         return channels
-    }
-
-    private static func _convert(name: String,
-                                 info: Work.Info,
-                                 smpteOffset: SMPTETime?,
-                                 tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
-                                 tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
-        var events = _headerEvents(name: name,
-                                   info: info,
-                                   smpteOffset: smpteOffset)
-
-        // Always 4/4: a model-level limitation, not an exporter shortcut.
-        // `Work` has no field to store a time signature — the importer
-        // already discards whatever the source SMF carried — so there is
-        // nothing here for the exporter to recover.
-        if let timeSig = MIDI.TimeSignature(numerator: 4,
-                                            denominator: 2,
-                                            clockRate: 24,
-                                            beatRate: 8) {
-            events.append(.meta(.zero, .timeSignature(timeSig)))
-        }
-
-        for (beatTime, tempo) in tempoChanges {
-            if let eventTime = tickMap[beatTime] {
-                events.append(.meta(eventTime, .tempo(tempo)))
-            }
-        }
-
-        return MIDI.Track(events: events)
-    }
-
-    private static func _convert<TickMap: MIDI.ExportTimeMap>(part: Part<TickMap.TimeType, NoteNumber>,
-                                                              channel: MIDI.Channel,
-                                                              tickMap: TickMap) throws(MIDI.Error) -> MIDI.Track {
-        var events: [MIDI.Event] = []
-
-        if let trackName = convertToMIDIText(part.name) {
-            events.append(.meta(.zero, .sequenceTrackName(trackName)))
-        }
-
-        events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
-
-        events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)
-
-        let exactVelocityByTime = exactKeyVelocities(in: part.dynamicMap)
-
-        events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
-
-        // Note-off velocity is the note's `midiReleaseVelocity`, if it has
-        // one, or else 64, which MIDI prescribes for a release velocity
-        // nobody measured (see `Context.handleNote`). The dynamic at the
-        // release time isn't a stand-in: that's a loudness, not how fast the
-        // key came up.
-        for note in part.noteTable {
-            let attTime = note.attack
-            let relTime = try tickMap.releaseTime(attack: attTime,
-                                                  duration: note.duration)
-
-            guard let noteNumber = convertToMIDINoteNumber(note.startPitch)
-            else { throw MIDI.Error.invalidNoteNumber(note.startPitch) }
-
-            if let attEventTime = tickMap.eventTime(at: attTime),
-               let relEventTime = tickMap.eventTime(at: relTime) {
-                let attKeyVelocity = exactVelocityByTime[attTime]
-                    ?? convertToMIDIKeyVelocity(part.dynamicMap[attTime])
-                    ?? defaultKeyVelocity
-                let relKeyVelocity = intValue(note.extras, .midiReleaseVelocity)
-                    .flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
-                    ?? defaultKeyVelocity
-
-                events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
-
-                if let pressure = intValue(note.extras, .midiKeyPressure),
-                   let value = MIDIData1Value(uintValue: UInt(pressure)) {
-                    events.append(.midi(attEventTime, .polyphonicPressure(channel, noteNumber, value)))
-                }
-
-                events.append(.midi(relEventTime, .noteOff(channel, noteNumber, relKeyVelocity)))
-            }
-        }
-
-        return MIDI.Track(events: events)
-    }
-
-    private static func _convert<TickMap: MIDI.ExportTimeMap>(parts: [Part<TickMap.TimeType, NoteNumber>],
-                                                              tickMap: TickMap) throws(MIDI.Error) -> [MIDI.Track] {
-        let channels = try _assignChannels(parts)
-        var tracks: [MIDI.Track] = []
-
-        for (part, channel) in zip(parts, channels) {
-            try tracks.append(_convert(part: part,
-                                       channel: channel,
-                                       tickMap: tickMap))
-        }
-
-        return tracks
     }
 
     // A beat-time work imported from a file with a timecode division (see
@@ -260,8 +157,102 @@ extension MIDI.Exporter {
                              tracks: tracks)
     }
 
+    private static func _convert(name: String,
+                                 info: Work.Info,
+                                 smpteOffset: SMPTETime?,
+                                 tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
+                                 tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
+        var events = _headerEvents(name: name,
+                                   info: info,
+                                   smpteOffset: smpteOffset)
+
+        // Always 4/4: a model-level limitation, not an exporter shortcut.
+        // `Work` has no field to store a time signature — the importer
+        // already discards whatever the source SMF carried — so there is
+        // nothing here for the exporter to recover.
+        if let timeSig = MIDI.TimeSignature(numerator: 4,
+                                            denominator: 2,
+                                            clockRate: 24,
+                                            beatRate: 8) {
+            events.append(.meta(.zero, .timeSignature(timeSig)))
+        }
+
+        for (beatTime, tempo) in tempoChanges {
+            if let eventTime = tickMap[beatTime] {
+                events.append(.meta(eventTime, .tempo(tempo)))
+            }
+        }
+
+        return MIDI.Track(events: events)
+    }
+
+    private static func _convert<TickMap: MIDI.ExportTimeMap>(part: Part<TickMap.TimeType, NoteNumber>,
+                                                              channel: MIDI.Channel,
+                                                              tickMap: TickMap) throws(MIDI.Error) -> MIDI.Track {
+        var events: [MIDI.Event] = []
+
+        if let trackName = convertToMIDIText(part.name) {
+            events.append(.meta(.zero, .sequenceTrackName(trackName)))
+        }
+
+        events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
+
+        events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)
+
+        events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
+
+        // Note-off velocity is the note's `midiReleaseVelocity`, if it has
+        // one, or else 64, which MIDI prescribes for a release velocity
+        // nobody measured (see `Context.handleNote`). The dynamic at the
+        // release time isn't a stand-in: that's a loudness, not how fast the
+        // key came up.
+        for note in part.noteTable {
+            let attTime = note.attack
+            let relTime = try tickMap.releaseTime(attack: attTime,
+                                                  duration: note.duration)
+
+            guard let noteNumber = convertToMIDINoteNumber(note.startPitch)
+            else { throw MIDI.Error.invalidNoteNumber(note.startPitch) }
+
+            if let attEventTime = tickMap.eventTime(at: attTime),
+               let relEventTime = tickMap.eventTime(at: relTime) {
+                let attKeyVelocity = exactKeyVelocity(note.extras)
+                    ?? convertToMIDIKeyVelocity(part.dynamicMap[attTime])
+                    ?? defaultKeyVelocity
+                let relKeyVelocity = intValue(note.extras, .midiReleaseVelocity)
+                    .flatMap { MIDI.KeyVelocity(uintValue: UInt(clamping: $0)) }
+                    ?? defaultKeyVelocity
+
+                events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
+
+                if let pressure = intValue(note.extras, .midiKeyPressure),
+                   let value = MIDIData1Value(uintValue: UInt(pressure)) {
+                    events.append(.midi(attEventTime, .polyphonicPressure(channel, noteNumber, value)))
+                }
+
+                events.append(.midi(relEventTime, .noteOff(channel, noteNumber, relKeyVelocity)))
+            }
+        }
+
+        return MIDI.Track(events: events)
+    }
+
+    private static func _convert<TickMap: MIDI.ExportTimeMap>(parts: [Part<TickMap.TimeType, NoteNumber>],
+                                                              tickMap: TickMap) throws(MIDI.Error) -> [MIDI.Track] {
+        let channels = try _assignChannels(parts)
+        var tracks: [MIDI.Track] = []
+
+        for (part, channel) in zip(parts, channels) {
+            try tracks.append(_convert(part: part,
+                                       channel: channel,
+                                       tickMap: tickMap))
+        }
+
+        return tracks
+    }
+
     private static func _convert(work: Work) throws(MIDI.Error) -> MIDI.Sequence {
-        let timeCode = determineTimeCode(work.content)
+        let timeCode = determineTimeCode(work)
 
         switch work.content {
         case let .keyboardBeat(parts, tempoMap):
@@ -283,11 +274,6 @@ extension MIDI.Exporter {
             throw MIDI.Error.unsupportedPitchNotation(work.pitchNotation)
         }
     }
-
-    // The exact pre-quantization velocity (see `velocity` in
-    // `Extra+DynamicMap.swift`) held at each `DynamicMap` entry that carries
-    // one, keyed by beat time so the note-emission loop can prefer it over
-    // `convertToMIDIKeyVelocity(_:)`'s re-derivation from `Dynamic`.
 
     // `expressionValue` is additive expressive data with no rounding
     // counterpart to fall back to (unlike `velocity`, which always has
@@ -351,7 +337,7 @@ extension MIDI.Exporter {
     // subsequent `instrumentMap` change point. A lookup miss against the
     // General MIDI table omits the directive entirely rather than
     // defaulting to program 0. A `midiProgram` extra overrides the derived
-    // program number when present (see `Extra+InstrumentMap.swift`); a
+    // program number when present (see `Extra+Ivor.swift`); a
     // `midiBank`/`midiVolume` extra on the entry emits a Bank Select MSB/
     // LSB pair / Channel Volume event immediately before the Program
     // Change, MIDI convention order — the reverse of the combine
@@ -429,23 +415,9 @@ extension MIDI.Exporter {
         return events
     }
 
-    // Parses a part name of the exact form "Channel N", returning N, or
-    // `nil` if the name doesn't match (a renamed part, or a part sourced
-    // from another importer).
-    private static func _parseChannelName(_ name: String) -> Int? {
-        let prefix = "Channel "
-
-        guard name.hasPrefix(prefix)
-        else { return nil }
-
-        return Int(name.dropFirst(prefix.count))
-    }
-
-    // A part's preferred export channel: its `instrumentMap`'s first
-    // entry's `midiChannel` extra, if any, otherwise the "Channel N" name
-    // convention `_parseChannelName(_:)` reads.
+    // A part's preferred export channel: its `midiChannel` extra, if any.
     private static func _preferredChannel(_ part: Part<some TimeProtocol, NoteNumber>) -> Int? {
-        intValue(part.instrumentMap.first?.extras, .midiChannel) ?? _parseChannelName(part.name)
+        intValue(part.extras, .midiChannel)
     }
 
     // The work's SMPTE start time is written as an SMPTE Offset unless

@@ -134,6 +134,12 @@ internal func convertToTempo(_ bpm: Double) -> Tempo {
     return Tempo(uintValue: UInt(bpm.rounded())) ?? .default
 }
 
+// A JohnnySonic volume (0–10) as the exact key velocity (0–127) kept on a
+// note as its `velocity` extra.
+internal func convertToVelocity(_ volume: Double) -> Int {
+    min(127, max(0, Int((volume * 12.7).rounded())))
+}
+
 // Reads the info comment lines `convertToJohnnySonicComments(_:)`
 // writes. Every other comment is a remark with no label, the only reading
 // DKM gives one — except the boxed banners `JohnnySonic.Exporter` frames
@@ -206,13 +212,12 @@ private let alternateTitleKey  = "Alternate Title"
 private let continuationPrefix = "  "
 private let creditKey          = "Credit"
 private let dedicationKey      = "Dedication"
+private let infoKeys           = [alternateTitleKey, creditKey, dedicationKey, parentWorkTitleKey, remarkKey, rightsKey, subtitleKey, titleKey]
 private let parentWorkTitleKey = "Parent Work Title"
 private let remarkKey          = "Remark"
 private let rightsKey          = "Rights"
 private let subtitleKey        = "Subtitle"
 private let titleKey           = "Title"
-
-private let infoKeys = [alternateTitleKey, creditKey, dedicationKey, parentWorkTitleKey, remarkKey, rightsKey, subtitleKey, titleKey]
 
 // MARK: Private Functions
 

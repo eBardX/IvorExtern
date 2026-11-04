@@ -6,6 +6,9 @@ private import IvorDKM
 private import XestiTools
 
 extension JohnnySonic {
+
+    // MARK: Internal Nested Types
+
     internal struct Parser {
     }
 }

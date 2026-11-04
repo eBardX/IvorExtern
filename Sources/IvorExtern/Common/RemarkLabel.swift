@@ -7,6 +7,11 @@
 // read and write `source`, so a source note imported from one is exported
 // to the other's own field rather than to a generic fallback.
 internal enum RemarkLabel {
+}
+
+// MARK: -
+
+extension RemarkLabel {
 
     // MARK: Internal Type Properties
 

@@ -4,6 +4,8 @@ internal import IvorMIDI
 
 extension MIDI {
 
+    // MARK: Internal Nested Types
+
     // A sounding note produced by pairing a note-on with its matching
     // note-off. Unlike the upstream playback model's equivalent type, this
     // one has no access restriction on its initializer, so `@testable` unit

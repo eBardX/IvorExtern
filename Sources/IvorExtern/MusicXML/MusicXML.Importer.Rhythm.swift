@@ -11,6 +11,8 @@ private import XestiNumbers
 // helper, needed for a `<multiple-rest>`-covered empty measure).
 extension MusicXML.Importer {
 
+    // MARK: Internal Nested Types
+
     internal struct Rhythm {
     }
 }

@@ -4,10 +4,12 @@ public import XestiTools
 
 extension ImportFileFormat {
 
+    // MARK: Public Nested Types
+
     /// An error that occurs when reading works from a file in an import
     /// format.
     public enum Error {
-        /// The works failed to be read, with an optional underlying error.
+        /// A failure to read the works, with an optional underlying error.
         case readFailure((any EnhancedError)?)
     }
 }
@@ -15,6 +17,9 @@ extension ImportFileFormat {
 // MARK: - EnhancedError
 
 extension ImportFileFormat.Error: EnhancedError {
+
+    // MARK: Public Instance Properties
+
     /// The error category identifying the source module.
     public var category: Category? {
         Category("IvorExtern")

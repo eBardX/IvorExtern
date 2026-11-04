@@ -12,6 +12,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension Guido {
+
+    // MARK: Internal Nested Types
+
     // Not a namespace: `ExporterProtocol`'s instance members live in the
     // following extension, invisible to this check from here.
     // swiftformat:disable:next enumNamespaces

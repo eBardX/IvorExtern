@@ -9,6 +9,9 @@ internal import XestiNumbers
 // represents an absolute onset measured from the start of the score, so a
 // numerator of zero (the score start) is valid.
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     internal struct Duration {
 
         // MARK: Internal Initializers
@@ -57,6 +60,9 @@ extension MusicXML.Duration {
 // MARK: - Comparable
 
 extension MusicXML.Duration: Comparable {
+
+    // MARK: Internal Type Methods
+
     internal static func < (lhs: Self,
                             rhs: Self) -> Bool {
         lhs.numberValue < rhs.numberValue

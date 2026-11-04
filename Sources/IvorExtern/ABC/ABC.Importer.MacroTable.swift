@@ -18,10 +18,8 @@ private import XestiTools
 // re-lexing through the public `ABC.BaseParser`, the same re-lex-through-the-
 // public-parser trick Guido's `$variable` expansion uses.
 //
-// `U:` shorthand-to-decoration/annotation mappings are intentionally not
-// modeled at all: a shorthand can only ever resolve to a decoration or
-// annotation (`ABCUserSymbol.Definition`), both dropped entirely, so they
-// can never affect a note table or tempo map.
+// `U:` shorthand redefinitions are not macros and are not handled here —
+// see `ABC.Importer.Context.shorthands`.
 extension ABC.Importer {
 
     // MARK: Internal Nested Types

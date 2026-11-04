@@ -9,6 +9,9 @@ private import IvorTuning
 private import XestiTools
 
 extension JohnnySonic {
+
+    // MARK: Internal Nested Types
+
     internal struct Importer {
     }
 }
@@ -142,13 +145,13 @@ extension JohnnySonic.Importer {
             noteTable.insert(attack: attackTime,
                              duration: bdur,
                              startPitch: sfreq,
-                             endPitch: efreq)
+                             endPitch: efreq,
+                             extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                                                             values: [.int(convertToVelocity(note.volume))])]))
 
             if let dynamic = convertToDynamic(note.volume) {
                 dynamicMap.insert(time: attackTime,
-                                  dynamic: dynamic,
-                                  extras: Extras(elements: [Extra(name: Extra.velocity.name,
-                                                                  values: [.int(min(127, max(0, Int((note.volume * 12.7).rounded()))))])]))
+                                  dynamic: dynamic)
             }
 
             if let pan = convertToPan(note.location) {
@@ -191,13 +194,13 @@ extension JohnnySonic.Importer {
             noteTable.insert(attack: attackTime,
                              duration: bdur,
                              startPitch: snnum,
-                             endPitch: ennum)
+                             endPitch: ennum,
+                             extras: Extras(elements: [Extra(name: Extra.velocity.name,
+                                                             values: [.int(convertToVelocity(note.volume))])]))
 
             if let dynamic = convertToDynamic(note.volume) {
                 dynamicMap.insert(time: attackTime,
-                                  dynamic: dynamic,
-                                  extras: Extras(elements: [Extra(name: Extra.velocity.name,
-                                                                  values: [.int(min(127, max(0, Int((note.volume * 12.7).rounded()))))])]))
+                                  dynamic: dynamic)
             }
 
             if let pan = convertToPan(note.location) {
@@ -220,6 +223,11 @@ extension JohnnySonic.Importer {
     // reaching a given `Part` already shares one instrument, but that's a
     // property of the grouping, not of the format, and this stays correct
     // independent of it.
+    //
+    // Before its first entry, an `InstrumentMap` gives its default
+    // instrument. Nothing sounds before the first note, so its instrument
+    // starts at zero instead, and the default doesn't sound, or show up
+    // among the part's instruments, for a leading rest.
     private static func _makeInstrumentMap(_ notes: [DKMPitchesNote]) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
 
@@ -227,7 +235,7 @@ extension JohnnySonic.Importer {
             guard let instrument = convertToInstrument(note.instrument)
             else { continue }
 
-            instrumentMap.insert(time: convertToBeatTime(note.startBeat),
+            instrumentMap.insert(time: instrumentMap.isEmpty ? .zero : convertToBeatTime(note.startBeat),
                                  instrument: instrument)
         }
 

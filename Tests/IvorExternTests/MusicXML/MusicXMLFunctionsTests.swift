@@ -114,13 +114,6 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
-    func convertToPan_preservesDegreesBeyondHardSides() {
-        let sound = MXLSound(pan: 135)
-
-        #expect(convertToPan(sound) == Pan(horizontal: 135))
-    }
-
-    @Test
     func convertToPan_midiInstrumentPan_takesPriorityOverDeprecatedSoundPan() {
         let midiInstrument = MXLMidiInstrument(id: "P1-I1",
                                                pan: -90)
@@ -133,6 +126,13 @@ extension MusicXMLFunctionsTests {
     @Test
     func convertToPan_noPan_returnsNil() {
         #expect(convertToPan(MXLSound()) == nil)
+    }
+
+    @Test
+    func convertToPan_preservesDegreesBeyondHardSides() {
+        let sound = MXLSound(pan: 135)
+
+        #expect(convertToPan(sound) == Pan(horizontal: 135))
     }
 
     @Test

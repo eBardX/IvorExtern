@@ -5,6 +5,8 @@ internal import IvorTiming
 
 extension MusicXML.Importer.Walker {
 
+    // MARK: Internal Nested Types
+
     // The pan, tempo, and notated-dynamics events a part's `<sound>`/
     // `<direction>` elements produced, gathered alongside the part's
     // resolved voices — one instance per MusicXML part. Each voice's own

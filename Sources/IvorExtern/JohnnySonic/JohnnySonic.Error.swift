@@ -6,6 +6,9 @@ internal import IvorTuning
 internal import XestiTools
 
 extension JohnnySonic {
+
+    // MARK: Internal Nested Types
+
     internal enum Error {
         case convertFailure((any EnhancedError)?)
         case formatFailure((any EnhancedError)?)
@@ -23,6 +26,9 @@ extension JohnnySonic {
 // MARK: - EnhancedError
 
 extension JohnnySonic.Error: EnhancedError {
+
+    // MARK: Internal Instance Properties
+
     internal var category: Category? {
         Category("IvorExtern")
     }

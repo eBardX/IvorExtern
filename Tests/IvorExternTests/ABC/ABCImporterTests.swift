@@ -9,12 +9,66 @@ import Testing
 import XestiNumbers
 import XestiTools
 
+// swiftlint:disable file_length
+
 struct ABCImporterTests {
 }
 
 // MARK: -
 
 extension ABCImporterTests {
+    @Test
+    func read_abc20Area_isLyricist() throws {
+        let work = try readABC("""
+            %abc-2.0
+            X:1
+            T:Song
+            A:Jane Poet
+            K:C
+            C
+            """)
+
+        #expect(work.info.credits == [Credit(name: "Jane Poet", role: .lyricist)].compactMap(\.self))
+        #expect(work.info.remarks.isEmpty)
+    }
+
+    @Test
+    func read_abc21Area_isAreaRemark() throws {
+        let work = try readABC("""
+            %abc-2.1
+            X:1
+            T:Song
+            A:Yorkshire
+            K:C
+            C
+            """)
+
+        #expect(work.info.credits.isEmpty)
+        #expect(work.info.remarks == [Remark(text: "Yorkshire", label: "area")].compactMap(\.self))
+    }
+
+    @Test
+    func read_bareMidiChannelDirective_putsChannelExtraOnPart() throws {
+        let abc = """
+            X:1
+            T:Channel-Only Tune
+            L:1/4
+            K:C
+            %%MIDI channel 3
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.first?.instrumentMap.isEmpty == true)
+
+        let foundChannel = intValue(parts.first?.extras, .midiChannel)
+
+        #expect(foundChannel == 3)
+    }
+
     @Test
     func read_chordProducesSimultaneousNotes() throws {
         let abc = """
@@ -90,12 +144,230 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_dedicationNotes_isDedication() throws {
+        let work = try readABC("""
+            %abc-2.1
+            X:1
+            T:Song
+            N:Dedication: For Anna
+            N:dedication: For Ben
+            K:C
+            C
+            """)
+
+        #expect(work.info.dedication == "For Anna")
+        #expect(work.info.remarks == [Remark(text: "dedication: For Ben", label: "notes")].compactMap(\.self))
+    }
+
+    @Test
     func read_emptyData_throws() {
         let wrapper = FileWrapper(regularFileWithContents: Data())
 
         #expect(throws: (any Error).self) {
             try ABC.Importer().read(from: wrapper, as: .abc)
         }
+    }
+
+    @Test
+    func read_fileHeaderFields_applyToEveryTune() throws {
+        let abc = """
+            %abc-2.1
+            C:Trad.
+            B:The Big Book
+
+            X:1
+            T:First
+            K:C
+            C
+
+            X:2
+            T:Second
+            K:C
+            D
+            """
+        let works = try ABC.Importer().read(from: FileWrapper(regularFileWithContents: Data(abc.utf8)), as: .abc)
+
+        #expect(works.count == 2)
+
+        for work in works {
+            #expect(work.info.composers == ["Trad."])
+            #expect(work.info.remarks == [Remark(text: "The Big Book", label: "book")].compactMap(\.self))
+        }
+    }
+
+    @Test
+    func read_midiProgramAndStandaloneChannelDirectives_programChannelTakesPriority() throws {
+        let abc = """
+            X:1
+            T:Both Directives Tune
+            L:1/4
+            K:C
+            %%MIDI channel 3
+            %%MIDI program 2 40
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        let foundChannel = intValue(parts.first?.extras, .midiChannel)
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(foundChannel == 2)
+    }
+
+    @Test
+    func read_midiProgramBaseOne_countsProgramsFromOne() throws {
+        let abc = """
+            %%MIDI programbase 1
+
+            X:1
+            T:Standard Numbering
+            L:1/4
+            K:C
+            %%MIDI program 41
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(ABC.Importer().read(from: wrapper, as: .abc).first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        var programs: [Int?] = []
+
+        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+            programs.append(intValue(entry.extras, .midiProgram))
+        }
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(programs == [41])
+    }
+
+    @Test
+    func read_midiProgramDirective_populatesInstrumentMap() throws {
+        let abc = """
+            X:1
+            T:Instrument Tune
+            L:1/4
+            K:C
+            %%MIDI program 40
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+    }
+
+    @Test
+    func read_midiProgramDirectivesInVoiceBodies_assignEachVoice() throws {
+        let abc = """
+            X:1
+            T:Duet
+            L:1/4
+            V:1
+            V:2
+            K:C
+            V:1
+            %%MIDI program 73
+            c d e f|
+            V:2
+            %%MIDI program 70
+            C, D, E, F,|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(ABC.Importer().read(from: wrapper, as: .abc).first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.map { $0.instrumentMap[.zero] } == [Instrument("Flute"), Instrument("Bassoon")])
+    }
+
+    @Test
+    func read_midiProgramDirectiveWithChannel_putsChannelExtraOnPart() throws {
+        let abc = """
+            X:1
+            T:Instrument Tune
+            L:1/4
+            K:C
+            %%MIDI program 5 41
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        let foundChannel = intValue(parts.first?.extras, .midiChannel)
+
+        #expect(foundChannel == 5)
+    }
+
+    @Test
+    func read_midiVoiceDirectiveInBody_assignsCurrentVoice() throws {
+        // The example in §11.2 of the ABC 2.1 standard.
+        let abc = """
+            X:1
+            T:Organ Tune
+            L:1/4
+            V:Rueckpos
+            V:Organo
+            K:C
+            V:Rueckpos
+            %%MIDI voice instrument=53 bank=2
+            C D E F|
+            V:Organo
+            %%MIDI voice instrument=73
+            G A B c|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(ABC.Importer().read(from: wrapper, as: .abc).first)
+        let rueckpos = try namedStandardPart(work, "Rueckpos")
+        let organo = try namedStandardPart(work, "Organo")
+
+        #expect(rueckpos.instrumentMap[.zero] == Instrument("Choir Aahs"))
+        #expect(organo.instrumentMap[.zero] == Instrument("Piccolo"))
+
+        var banks: [Int?] = []
+
+        for entry in rueckpos.instrumentMap {
+            banks.append(intValue(entry.extras, .midiBank))
+        }
+
+        for entry in organo.instrumentMap {
+            banks.append(intValue(entry.extras, .midiBank))
+        }
+
+        #expect(banks == [1, nil])
+    }
+
+    @Test
+    func read_midiVoiceDirectivesInHeader_namedVoiceWinsOverFallbackAndProgram() throws {
+        let abc = """
+            X:1
+            T:Header Tune
+            L:1/4
+            %%MIDI program 2 41
+            %%MIDI voice Tb instrument=59
+            %%MIDI voice instrument=43
+            V:Tb
+            V:Vc
+            K:C
+            V:Tb
+            C, D, E, F,|
+            V:Vc
+            C D E F|
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(ABC.Importer().read(from: wrapper, as: .abc).first)
+        let tuba = try namedStandardPart(work, "Tb")
+        let cello = try namedStandardPart(work, "Vc")
+
+        #expect(tuba.instrumentMap[.zero] == Instrument("Tuba"))
+        #expect(cello.instrumentMap[.zero] == Instrument("Cello"))
+
+        #expect(intValue(tuba.extras, .midiChannel) == 2)
     }
 
     @Test
@@ -140,24 +412,6 @@ extension ABCImporterTests {
 
         #expect(notes(in: melodyPart).map(\.pitch) == ["C4", "D4", "E4", "F4"])
         #expect(notes(in: bassPart).map(\.pitch) == ["C5", "B4", "A4", "G4"])
-    }
-
-    @Test
-    func read_voiceNameWithLineBreak_joinsLinesWithSpace() throws {
-        let abc = #"""
-            X:1
-            T:Line Break
-            L:1/4
-            K:C
-            V:1 nm="Tenor\nSax"
-            C D E F|
-            """#
-        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
-        let works = try ABC.Importer().read(from: wrapper, as: .abc)
-        let work = try #require(works.first)
-        let parts = try #require(standardBeatParts(of: work))
-
-        #expect(parts.map(\.name) == ["Tenor Sax"])
     }
 
     @Test
@@ -248,6 +502,52 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_stringFields_populateInfo() throws {
+        let work = try readABC("""
+            %abc-2.1
+            X:1
+            T:The Main Title
+            T:Also Known As
+            C:J. Smith
+            O:England; Yorkshire
+            R:reel
+            B:Book One
+            D:Some LP
+            F:http://example.com/tune.abc
+            G:fiddle
+            H:Collected in 1904
+            N:Play it fast
+            S:From a fiddler
+            Z:A. Transcriber
+            Z:abc-edited-by E. Ditor
+            Z:abc-copyright © 2001 A. Transcriber
+            r:An aside
+            K:C
+            C
+            """)
+        let info = work.info
+
+        #expect(work.name == "The Main Title")
+        #expect(info.title == "The Main Title")
+        #expect(info.alternateTitles == ["Also Known As"])
+        #expect(info.subtitles.isEmpty)
+        #expect(info.credits == [Credit(name: "J. Smith", role: .composer),
+                                 Credit(name: "A. Transcriber", role: .transcriber),
+                                 Credit(name: "E. Ditor", role: .editor)].compactMap(\.self))
+        #expect(info.rights == [RightsNotice(text: "© 2001 A. Transcriber", scope: .transcription)].compactMap(\.self))
+        #expect(info.remarks == [Remark(text: "England; Yorkshire", label: "origin"),
+                                 Remark(text: "reel", label: "rhythm"),
+                                 Remark(text: "Book One", label: "book"),
+                                 Remark(text: "Some LP", label: "discography"),
+                                 Remark(text: "http://example.com/tune.abc", label: "file URL"),
+                                 Remark(text: "fiddle", label: "group"),
+                                 Remark(text: "Collected in 1904", label: "history"),
+                                 Remark(text: "Play it fast", label: "notes"),
+                                 Remark(text: "From a fiddler", label: "source"),
+                                 Remark(text: "An aside")].compactMap(\.self))
+    }
+
+    @Test
     func read_tempoField_populatesTempoMap() throws {
         let abc = """
             X:1
@@ -295,6 +595,33 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_voiceNameWithLineBreak_joinsLinesWithSpace() throws {
+        let abc = #"""
+            X:1
+            T:Line Break
+            L:1/4
+            K:C
+            V:1 nm="Tenor\nSax"
+            C D E F|
+            """#
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let works = try ABC.Importer().read(from: wrapper, as: .abc)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        #expect(parts.map(\.name) == ["Tenor Sax"])
+    }
+
+    @Test
+    func read_voiceNumberIDsWithoutNames_fallBackToVoiceN() throws {
+        let abc = "X:1\nT:Numbered\nL:1/4\nK:C\nV:1\nC D E F|\nV:3\nG A B c|\n"
+        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
+        let work = try #require(try ABC.Importer().read(from: wrapper, as: .abc).first)
+
+        #expect(try #require(standardBeatParts(of: work)).map(\.name) == ["Voice 1", "Voice 2"])
+    }
+
+    @Test
     func read_voiceWithoutNameOrSubname_usesVoiceID() throws {
         let abc = """
             X:1
@@ -314,16 +641,9 @@ extension ABCImporterTests {
     }
 
     @Test
-    func read_voiceNumberIDsWithoutNames_fallBackToVoiceN() throws {
-        let abc = "X:1\nT:Numbered\nL:1/4\nK:C\nV:1\nC D E F|\nV:3\nG A B c|\n"
-        let wrapper = FileWrapper(regularFileWithContents: Data(abc.utf8))
-        let work = try #require(try ABC.Importer().read(from: wrapper, as: .abc).first)
-
-        #expect(try #require(standardBeatParts(of: work)).map(\.name) == ["Voice 1", "Voice 2"])
-    }
-
-    @Test
     func readableFileFormats_containsABC() {
         #expect(ABC.Importer().readableFileFormats.contains(.abc))
     }
 }
+
+// swiftlint:enable file_length

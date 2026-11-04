@@ -89,7 +89,61 @@ extension ABC.Importer.Walker {
         fileprivate var items: [ABC.Importer.Item] = []
     }
 
+    // Which way a hairpin decoration ramps. Not exposed beyond this file —
+    // ABC has no typed AST payload for a hairpin the way Guido's
+    // `GMNDynamicRamp` does, so this exists solely to drive `_shifted(_:direction:)`.
+    private enum DynamicRampDirection {
+        case crescendo
+        case diminuendo
+    }
+
+    // MARK: Private Type Properties
+
+    // Off-scale-but-still-dynamic accent words MusicXML's own fixed-case
+    // dynamics enumeration also names (`sf`, `sfz`, `fz`, `rf`, `rfz`, and
+    // near-spellings) — these stay on the `dynamicMark` path in
+    // `_handleDecoration(_:_:)` rather than routing to the Tier 1/catch-all
+    // articulation vocabulary, since they genuinely are dynamics markings,
+    // just not one of `Dynamic`'s ten named levels.
+    private static let dynamicMarkWords: Set<String> = ["sf", "sfz", "sfzp", "sffz", "fz", "rf", "rfz", "ffz"]
+
+    // The ten standard dynamic levels `convertToDynamic(_:)` recognizes, in
+    // rising order, so a hairpin's one-step shift can locate its starting
+    // level and move to its neighbor.
+    private static let dynamicScale: [Dynamic] = [.pppp, .ppp, .pp, .p, .mp, .mf, .f, .ff, .fff, .ffff]
+
     // MARK: Private Type Methods
+
+    // A hairpin's own two endpoints, since it carries only a direction and
+    // no target level, are the level in effect when it opens and one step
+    // further along `dynamicScale` in that direction — the same "just get
+    // louder/softer from here" reading a performer gives a bare hairpin
+    // with no `f`/`p` written at its point. An explicit dynamics decoration
+    // written between the pair still lands its own, separate event at its
+    // own beat, and `DynamicMap`'s linear interpolation threads straight
+    // through it. `pending` is `nil` when a close arrives with no matching
+    // open, and the endpoints collapse to nothing when a hairpin opens and
+    // closes at the same beat — both are silently skipped, since there is no
+    // span left to glide across.
+    private static func _closeDynamicRamp(_ pending: (beatTime: BeatTime, dynamic: Dynamic)?,
+                                          direction: DynamicRampDirection,
+                                          endBeatTime: BeatTime,
+                                          _ context: inout ABC.Importer.Context) {
+        guard let pending,
+              endBeatTime != pending.beatTime
+        else { return }
+
+        let endDynamic = _shifted(pending.dynamic, direction: direction)
+
+        context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: pending.beatTime,
+                                                                       dynamic: pending.dynamic,
+                                                                       kind: .rampBoundary))
+        context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: endBeatTime,
+                                                                       dynamic: endDynamic,
+                                                                       kind: .rampBoundary))
+
+        context.lastDynamic = endDynamic
+    }
 
     private static func _merged(_ existing: ABC.Voice?,
                                 _ voice: ABC.Voice) -> ABC.Voice {
@@ -190,22 +244,20 @@ extension ABC.Importer.Walker {
 
         return accumulators
     }
-}
 
-// MARK: -
+    // One step along `dynamicScale` in the given direction, clamped at
+    // either end — a hairpin beyond `!ffff!` stays `!ffff!`, one beyond
+    // `!pppp!` stays `!pppp!`, rather than producing no shift at all.
+    private static func _shifted(_ dynamic: Dynamic,
+                                 direction: DynamicRampDirection) -> Dynamic {
+        guard let index = dynamicScale.firstIndex(of: dynamic)
+        else { return dynamic }
 
-extension ABC.Importer.Walker {
+        let shift = direction == .crescendo ? 1 : -1
+        let clampedIndex = min(max(index + shift, 0), dynamicScale.count - 1)
 
-    // Off-scale-but-still-dynamic accent words MusicXML's own fixed-case
-    // dynamics enumeration also names (`sf`, `sfz`, `fz`, `rf`, `rfz`, and
-    // near-spellings) — these stay on the `dynamicMark` path in
-    // `_handleDecoration(_:_:)` rather than routing to the Tier 1/catch-all
-    // articulation vocabulary, since they genuinely are dynamics markings,
-    // just not one of `Dynamic`'s ten named levels.
-
-    // MARK: Private Type Properties
-
-    private static let dynamicMarkWords: Set<String> = ["sf", "sfz", "sfzp", "sffz", "fz", "rf", "rfz", "ffz"]
+        return dynamicScale[clampedIndex]
+    }
 
     // MARK: Private Instance Methods
 
@@ -242,6 +294,9 @@ extension ABC.Importer.Walker {
         case let .unitNoteLength(length):
             context.unitNoteLength = (length.numerator, length.denominator)
             context.hasExplicitUnitNoteLength = true
+
+        case let .userDefined(userSymbol):
+            context.shorthands[userSymbol.shorthand] = userSymbol.definition
 
         default:
             break
@@ -428,8 +483,11 @@ extension ABC.Importer.Walker {
     }
 
     // Every case here that can never reach the note table (attachments,
-    // grace notes, beam-breaks, voice overlays, typesetting spacers, `U:`
-    // shorthand) is a deliberate no-op. Bar lines and variant endings are
+    // grace notes, beam-breaks, voice overlays, typesetting spacers) is a
+    // deliberate no-op. A redefinable shorthand resolves through
+    // `context.shorthands` to the decoration it stands for, then takes the
+    // same path as that decoration written out longhand; one mapped to an
+    // annotation, or not mapped at all, is dropped like any annotation. Bar lines and variant endings are
     // also no-ops for the note table but do carry state effects — see the
     // type-level comment on why neither flushes `pendingEvent`.
     private func _process(_ symbol: ABCSymbol,
@@ -448,8 +506,10 @@ extension ABC.Importer.Walker {
         case .shorthand(.dot):
             context.pendingNoteExtras.append(.staccato)
 
-        case .shorthand:
-            break
+        case let .shorthand(shorthand):
+            if case let .decoration(decoration) = context.shorthands[shorthand] {
+                try _handleDecoration(decoration, &context)
+            }
 
         case .slur(.startDotted),
              .slur(.startRegular):
@@ -545,74 +605,5 @@ extension ABC.Importer.Walker {
         try _commitPending(&context)
 
         return context
-    }
-}
-
-// MARK: -
-
-extension ABC.Importer.Walker {
-
-    // MARK: Private Nested Types
-
-    // Which way a hairpin decoration ramps. Not exposed beyond this file —
-    // ABC has no typed AST payload for a hairpin the way Guido's
-    // `GMNDynamicRamp` does, so this exists solely to drive `_shifted(_:direction:)`.
-    private enum DynamicRampDirection {
-        case crescendo
-        case diminuendo
-    }
-
-    // MARK: Private Type Properties
-
-    // The ten standard dynamic levels `convertToDynamic(_:)` recognizes, in
-    // rising order, so a hairpin's one-step shift can locate its starting
-    // level and move to its neighbor.
-    private static let dynamicScale: [Dynamic] = [.pppp, .ppp, .pp, .p, .mp, .mf, .f, .ff, .fff, .ffff]
-
-    // MARK: Private Type Methods
-
-    // A hairpin's own two endpoints, since it carries only a direction and
-    // no target level, are the level in effect when it opens and one step
-    // further along `dynamicScale` in that direction — the same "just get
-    // louder/softer from here" reading a performer gives a bare hairpin
-    // with no `f`/`p` written at its point. An explicit dynamics decoration
-    // written between the pair still lands its own, separate event at its
-    // own beat, and `DynamicMap`'s linear interpolation threads straight
-    // through it. `pending` is `nil` when a close arrives with no matching
-    // open, and the endpoints collapse to nothing when a hairpin opens and
-    // closes at the same beat — both are silently skipped, since there is no
-    // span left to glide across.
-    private static func _closeDynamicRamp(_ pending: (beatTime: BeatTime, dynamic: Dynamic)?,
-                                          direction: DynamicRampDirection,
-                                          endBeatTime: BeatTime,
-                                          _ context: inout ABC.Importer.Context) {
-        guard let pending,
-              endBeatTime != pending.beatTime
-        else { return }
-
-        let endDynamic = _shifted(pending.dynamic, direction: direction)
-
-        context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: pending.beatTime,
-                                                                       dynamic: pending.dynamic,
-                                                                       kind: .rampBoundary))
-        context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: endBeatTime,
-                                                                       dynamic: endDynamic,
-                                                                       kind: .rampBoundary))
-
-        context.lastDynamic = endDynamic
-    }
-
-    // One step along `dynamicScale` in the given direction, clamped at
-    // either end — a hairpin beyond `!ffff!` stays `!ffff!`, one beyond
-    // `!pppp!` stays `!pppp!`, rather than producing no shift at all.
-    private static func _shifted(_ dynamic: Dynamic,
-                                 direction: DynamicRampDirection) -> Dynamic {
-        guard let index = dynamicScale.firstIndex(of: dynamic)
-        else { return dynamic }
-
-        let shift = direction == .crescendo ? 1 : -1
-        let clampedIndex = min(max(index + shift, 0), dynamicScale.count - 1)
-
-        return dynamicScale[clampedIndex]
     }
 }

@@ -2,6 +2,8 @@
 
 extension Guido {
 
+    // MARK: Internal Nested Types
+
     // A fully resolved rest. Unlike the upstream playback model's
     // equivalent type, this one has no access restriction on its
     // initializer, so `@testable` unit tests can construct one directly.

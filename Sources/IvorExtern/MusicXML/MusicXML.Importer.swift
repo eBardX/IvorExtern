@@ -10,6 +10,9 @@ private import XestiNumbers
 private import XestiTools
 
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     internal struct Importer {
     }
 }
@@ -69,13 +72,15 @@ extension MusicXML.Importer {
                                  panMap: PanMap<BeatTime>,
                                  directionDynamicMap: DynamicMap<BeatTime>) -> [Part<BeatTime, Pitch>] {
         let instrumentMap = _makeInstrumentMap(part.part)
+        let extras = _makeExtras(part.part)
 
         guard !part.voices.isEmpty
         else { return [Part(name: determinePartName(part.part, groupName: groupName),
                             noteTable: NoteTable(),
                             dynamicMap: directionDynamicMap,
                             instrumentMap: instrumentMap,
-                            panMap: panMap)] }
+                            panMap: panMap,
+                            extras: extras)] }
 
         return part.voices.enumerated().map { index, voice in
             let dynamicMap = voice.noteDynamicEvents.isEmpty ? directionDynamicMap : _makeDynamicMap(voice.noteDynamicEvents)
@@ -87,7 +92,8 @@ extension MusicXML.Importer {
                         noteTable: voice.noteTable,
                         dynamicMap: dynamicMap,
                         instrumentMap: instrumentMap,
-                        panMap: panMap)
+                        panMap: panMap,
+                        extras: extras)
         }
     }
 
@@ -139,6 +145,21 @@ extension MusicXML.Importer {
         return groupNames
     }
 
+    // A part's static `<score-part><midi-instrument><pan>` — the common
+    // case, since most notation software declares pan once per part there
+    // rather than as a repeated inline `<sound>` — seeds the map at `.zero`
+    // the same way `_makeInstrumentMap` seeds bank/volume from the
+    // same element. It's placed first so a stable sort keeps it
+    // ahead of any real `<sound>` pan event also at `.zero`, letting that
+    // more explicit, in-score event take priority when both exist.
+    private static func _makeDefaultPanEvent(_ scorePart: MusicXML.ScorePart) -> (beatTime: BeatTime, pan: Pan)? {
+        guard let degree = scorePart.group2.lazy.compactMap(\.midiInstrument?.pan).first,
+              let pan = convertToPan(horizontal: degree, vertical: nil)
+        else { return nil }
+
+        return (beatTime: .zero, pan: pan)
+    }
+
     // Unlike `_makeDynamicMap` below, this isn't a uniform reassert-then-
     // insert step builder: a `.step` event (a `<sound>`'s `dynamics` or a
     // notated `<dynamics>` mark) still gets that treatment, since it is an
@@ -161,19 +182,11 @@ extension MusicXML.Importer {
                     dynamicMap.insert(time: event.beatTime, dynamic: previousDynamic)
                 }
 
-                var elements: [Extra] = []
-
-                if let mark = event.mark {
-                    elements.append(Extra(name: Extra.dynamicMark.name, values: [.string(mark)]))
-                }
-
-                if let velocity = event.velocity {
-                    elements.append(Extra(name: Extra.velocity.name, values: [.int(velocity)]))
-                }
+                let extras = event.mark.map { Extras(elements: [Extra(name: Extra.dynamicMark.name, values: [.string($0)])]) }
 
                 dynamicMap.insert(time: event.beatTime,
                                   dynamic: event.dynamic,
-                                  extras: elements.isEmpty ? nil : Extras(elements: elements))
+                                  extras: extras)
             }
 
             previousDynamic = event.dynamic
@@ -190,7 +203,7 @@ extension MusicXML.Importer {
     // note's own velocity — is a discrete point, not a ramp, so unlike
     // `_makeDirectionDynamicMap` above this one never needs a second,
     // plain-insert code path.
-    private static func _makeDynamicMap(_ events: [(beatTime: BeatTime, dynamic: Dynamic, velocity: Int?)]) -> DynamicMap<BeatTime> {
+    private static func _makeDynamicMap(_ events: [(beatTime: BeatTime, dynamic: Dynamic)]) -> DynamicMap<BeatTime> {
         var dynamicMap = DynamicMap<BeatTime>()
         var previousDynamic: Dynamic = .mp
 
@@ -199,15 +212,21 @@ extension MusicXML.Importer {
                 dynamicMap.insert(time: event.beatTime, dynamic: previousDynamic)
             }
 
-            let extras = event.velocity.map {
-                Extras(elements: [Extra(name: Extra.velocity.name, values: [.int($0)])])
-            }
-
-            dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic, extras: extras)
+            dynamicMap.insert(time: event.beatTime, dynamic: event.dynamic)
             previousDynamic = event.dynamic
         }
 
         return dynamicMap
+    }
+
+    // A `<midi-instrument>`'s `<midi-channel>` holds for the whole part, so
+    // it's kept in the part's `midiChannel` extra rather than on an
+    // instrument map entry. Every voice split from the part shares it.
+    private static func _makeExtras(_ scorePart: MusicXML.ScorePart) -> Extras? {
+        guard let channel = scorePart.group2.lazy.compactMap(\.midiInstrument).first?.midiChannel
+        else { return nil }
+
+        return Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))])])
     }
 
     // An instrument assignment, like pan, applies to the whole MusicXML part
@@ -216,78 +235,59 @@ extension MusicXML.Importer {
     // no usable instrument data at all (no name, no `<midi-instrument>")
     // gets an empty map, which reads as `Instrument.vanilla` via
     // `InstrumentMap`'s own default. A `<midi-instrument>` that carries
-    // only channel/bank/volume/unpitched data and no `<midi-
-    // program>` — so `convertToInstrument(_:)` can't name an instrument —
-    // still produces an explicit `.vanilla` entry rather than being
-    // dropped, the same way a bare `%%MIDI channel` directive does in ABC
-    // (see `ABC.Importer._makeInstrumentMap`); otherwise that data would
-    // have nowhere to attach and would silently vanish on import.
+    // only bank/volume/unpitched data and no `<midi-program>` — so
+    // `convertToInstrument(_:)` can't name an instrument — still produces
+    // an explicit `.vanilla` entry rather than being dropped; otherwise that
+    // data would have nowhere to attach and would silently vanish on
+    // import. Its channel isn't instrument data: it goes in the part's own
+    // extras instead (see `_makeExtras`).
     private static func _makeInstrumentMap(_ scorePart: MusicXML.ScorePart) -> InstrumentMap<BeatTime> {
         var instrumentMap = InstrumentMap<BeatTime>()
         let midiInstrument = scorePart.group2.lazy.compactMap(\.midiInstrument).first
         let instrument = convertToInstrument(scorePart)
 
-        if instrument != nil || midiInstrument != nil {
-            var elements: [Extra] = []
+        var elements: [Extra] = []
 
-            if let channel = midiInstrument?.midiChannel {
-                elements.append(Extra(name: Extra.midiChannel.name, values: [.int(Int(channel.uintValue))]))
-            }
+        // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from
+        // 0, the value sent.
+        if let bank = midiInstrument?.midiBank {
+            elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue) - 1)]))
+        }
 
-            // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from
-            // 0, the value sent.
-            if let bank = midiInstrument?.midiBank {
-                elements.append(Extra(name: Extra.midiBank.name, values: [.int(Int(bank.uintValue) - 1)]))
-            }
+        // `<midi-program>`/`<midi-unpitched>` are already 1-based, per
+        // MusicXML's own convention — stored as declared, no `- 1`. See
+        // `midiProgram`'s "1-128 convention" decision in
+        // `EXTRAS_CANDIDATES.md`.
+        if let program = midiInstrument?.midiProgram {
+            elements.append(Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))]))
+        }
 
-            // `<midi-program>`/`<midi-unpitched>` are already 1-based, per
-            // MusicXML's own convention — stored as declared, no `- 1`. See
-            // `midiProgram`'s "1-128 convention" decision in
-            // `EXTRAS_CANDIDATES.md`.
-            if let program = midiInstrument?.midiProgram {
-                elements.append(Extra(name: Extra.midiProgram.name, values: [.int(Int(program.uintValue))]))
-            }
+        if let volume = midiInstrument?.volume {
+            elements.append(Extra(name: Extra.midiVolume.name, values: [.double(volume)]))
+        }
 
-            if let volume = midiInstrument?.volume {
-                elements.append(Extra(name: Extra.midiVolume.name, values: [.double(volume)]))
-            }
+        if let unpitched = midiInstrument?.midiUnpitched {
+            elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
+        }
 
-            if let unpitched = midiInstrument?.midiUnpitched {
-                elements.append(Extra(name: Extra.midiUnpitched.name, values: [.int(Int(unpitched.uintValue))]))
-            }
+        // `<instrument-name>` names the instrument for display as well
+        // as for playback (see `convertToInstrument(_:)`), so it's also
+        // kept as an `instrumentName` extra, alongside its abbreviation.
+        if let name = scorePart.instrument.first?.name.normalizingWhitespace().nilIfEmpty {
+            elements.append(Extra(name: Extra.instrumentName.name, values: [.string(name)]))
+        }
 
-            // `<instrument-name>` names the instrument for display as well
-            // as for playback (see `convertToInstrument(_:)`), so it's also
-            // kept as an `instrumentName` extra, alongside its abbreviation.
-            if let name = scorePart.instrument.first?.name.normalizingWhitespace().nilIfEmpty {
-                elements.append(Extra(name: Extra.instrumentName.name, values: [.string(name)]))
-            }
+        if let abbreviation = scorePart.instrument.first?.abbreviation?.normalizingWhitespace().nilIfEmpty {
+            elements.append(Extra(name: Extra.instrumentAbbreviation.name, values: [.string(abbreviation)]))
+        }
 
-            if let abbreviation = scorePart.instrument.first?.abbreviation?.normalizingWhitespace().nilIfEmpty {
-                elements.append(Extra(name: Extra.instrumentAbbreviation.name, values: [.string(abbreviation)]))
-            }
-
+        if instrument != nil || !elements.isEmpty {
             instrumentMap.insert(time: .zero,
                                  instrument: instrument ?? .vanilla,
                                  extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 
         return instrumentMap
-    }
-
-    // A part's static `<score-part><midi-instrument><pan>` — the common
-    // case, since most notation software declares pan once per part there
-    // rather than as a repeated inline `<sound>` — seeds the map at `.zero`
-    // the same way `_makeInstrumentMap` seeds channel/bank/volume from the
-    // same element. It's placed first so a stable sort keeps it
-    // ahead of any real `<sound>` pan event also at `.zero`, letting that
-    // more explicit, in-score event take priority when both exist.
-    private static func _makeDefaultPanEvent(_ scorePart: MusicXML.ScorePart) -> (beatTime: BeatTime, pan: Pan)? {
-        guard let degree = scorePart.group2.lazy.compactMap(\.midiInstrument?.pan).first,
-              let pan = convertToPan(horizontal: degree, vertical: nil)
-        else { return nil }
-
-        return (beatTime: .zero, pan: pan)
     }
 
     // The same prev/curr double-insert step `_makeTempoMap` uses below, for

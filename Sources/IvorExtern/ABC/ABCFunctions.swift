@@ -5,7 +5,6 @@ internal import IvorABC
 internal import IvorModel
 internal import IvorTiming
 internal import IvorTuning
-
 internal import XestiTools
 
 private import IvorGeneralMIDI
@@ -226,6 +225,25 @@ internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) 
     BeatDuration(duration.numberValue * 4)
 }
 
+// A standalone `%%MIDI channel n` directive — no `program` token — sets the
+// MIDI channel without implying any instrument assignment, per
+// `abc2midi.txt`. `n` is 1–16, the same convention `MXLMidi16`/`MIDI.
+// Channel` already use elsewhere.
+internal func convertToChannel(_ directive: ABCDirective) -> Int? {
+    guard directive.name.stringValue.lowercased() == "midi"
+    else { return nil }
+
+    let tokens = directive.value.split(whereSeparator: \.isWhitespace)
+
+    guard tokens.count == 2,
+          tokens[0].lowercased() == "channel",
+          let channel = Int(tokens[1]),
+          (1...16).contains(channel)
+    else { return nil }
+
+    return channel
+}
+
 // A decoration's `name` is open, matched against a rendering program's own
 // symbol table only when the score is played (see `ABCDecoration.Name`'s
 // doc comment), so only the ten standard dynamic names — matched
@@ -278,7 +296,7 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 // value text instead. The optional leading MIDI channel number, when
 // written, is the middle token between `program` and the trailing program
 // number — surfaced as `channel` for a `midiChannel` extra (see
-// `Extra+InstrumentMap.swift`); `nil` when the directive omits it.
+// `Extra+Ivor.swift`); `nil` when the directive omits it.
 //
 // `program-number` counts from `programBase` (see
 // `convertToProgramBase(_:)`). abc2midi has counted from 0 since 2003, the
@@ -323,23 +341,32 @@ internal func convertToProgramBase(_ directive: ABCDirective) -> Int? {
     return base == 0 ? 0 : 1
 }
 
-// A standalone `%%MIDI channel n` directive — no `program` token — sets the
-// MIDI channel without implying any instrument assignment, per
-// `abc2midi.txt`. `n` is 1–16, the same convention `MXLMidi16`/`MIDI.
-// Channel` already use elsewhere.
-internal func convertToChannel(_ directive: ABCDirective) -> Int? {
-    guard directive.name.stringValue.lowercased() == "midi"
+internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {
+    try Pitch(pitchClass: _convertToStandardPitchClass(pitch.letter,
+                                                       pitch.accidental),
+              octave: _convertToStandardPitchOctave(pitch.octave))
+}
+
+// The `Q:` field's rate, resolved to quarter-note beats per minute. Per
+// §3.1.8 of the ABC 2.1 standard, a compound beat (more than one entry in
+// `lengths`, e.g. `Q:1/4 3/8 1/4 3/8=40`) means "play as if the summed
+// length were the beat" — `ABCNormalizer` only resolves the deprecated
+// `Q:Cn=rate`/bare `Q:rate` forms to a single `lengths` entry, not this
+// valid modern compound-beat form, so summing here is still necessary. A
+// `Q:` with no `rate` (text only, e.g. `Q:"Allegro"`) has an empty
+// `lengths` and returns `nil`.
+internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
+    guard let rate = tempo.rate,
+          !tempo.lengths.isEmpty
     else { return nil }
 
-    let tokens = directive.value.split(whereSeparator: \.isWhitespace)
+    let beatFraction = tempo.lengths.reduce(0.0) { $0 + Double($1.numerator) / Double($1.denominator) }
+    let quarterBPM = (Double(rate) * beatFraction * 4).rounded()
 
-    guard tokens.count == 2,
-          tokens[0].lowercased() == "channel",
-          let channel = Int(tokens[1]),
-          (1...16).contains(channel)
+    guard let uintValue = UInt(exactly: quarterBPM)
     else { return nil }
 
-    return channel
+    return Tempo(uintValue: uintValue)
 }
 
 // ABC 2.1's own `%%MIDI voice [ID] [instrument=n [bank=m]] [mute]`
@@ -392,34 +419,6 @@ internal func convertToVoiceInstrument(_ directive: ABCDirective) -> ABC.VoiceIn
                                instrument: instrument,
                                program: program,
                                voiceID: voiceID)
-}
-
-internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pitch {
-    try Pitch(pitchClass: _convertToStandardPitchClass(pitch.letter,
-                                                       pitch.accidental),
-              octave: _convertToStandardPitchOctave(pitch.octave))
-}
-
-// The `Q:` field's rate, resolved to quarter-note beats per minute. Per
-// §3.1.8 of the ABC 2.1 standard, a compound beat (more than one entry in
-// `lengths`, e.g. `Q:1/4 3/8 1/4 3/8=40`) means "play as if the summed
-// length were the beat" — `ABCNormalizer` only resolves the deprecated
-// `Q:Cn=rate`/bare `Q:rate` forms to a single `lengths` entry, not this
-// valid modern compound-beat form, so summing here is still necessary. A
-// `Q:` with no `rate` (text only, e.g. `Q:"Allegro"`) has an empty
-// `lengths` and returns `nil`.
-internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
-    guard let rate = tempo.rate,
-          !tempo.lengths.isEmpty
-    else { return nil }
-
-    let beatFraction = tempo.lengths.reduce(0.0) { $0 + Double($1.numerator) / Double($1.denominator) }
-    let quarterBPM = (Double(rate) * beatFraction * 4).rounded()
-
-    guard let uintValue = UInt(exactly: quarterBPM)
-    else { return nil }
-
-    return Tempo(uintValue: uintValue)
 }
 
 // A voice name's `\n` is abcm2ps's line-break convention for stacking a

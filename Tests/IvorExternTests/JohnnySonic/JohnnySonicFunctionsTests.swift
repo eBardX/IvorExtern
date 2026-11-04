@@ -1,5 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+import Foundation
 import IvorDKM
 @testable import IvorExtern
 import IvorModel
@@ -58,6 +59,25 @@ extension JohnnySonicFunctionsTests {
         let result = IvorExtern.convertToJohnnySonicBeat(BeatTime(2))
 
         #expect(result == 2)
+    }
+
+    @Test
+    func convertToJohnnySonicComments_multiLineText_usesContinuationLines() {
+        let info = Work.Info(title: "Aubade",
+                             dedication: "To my teacher\nwith thanks",
+                             credits: [Credit(name: "J. Smith", role: .composer)].compactMap(\.self),
+                             rights: [RightsNotice(text: "© 1998 Acme\n\nAll rights reserved")].compactMap(\.self),
+                             remarks: [Remark(text: "Wistful", label: "mood")].compactMap(\.self))
+        let comments = convertToJohnnySonicComments(info)
+
+        #expect(comments == ["Title: Aubade",
+                             "Dedication: To my teacher",
+                             "  with thanks",
+                             "Credit (composer): J. Smith",
+                             "Rights: © 1998 Acme",
+                             "  ",
+                             "  All rights reserved",
+                             "Remark (mood): Wistful"])
     }
 
     @Test
@@ -127,6 +147,22 @@ extension JohnnySonicFunctionsTests {
     @Test
     func convertToTempo_validBPM_roundsToNearestInteger() {
         #expect(convertToTempo(120.4) == Tempo(120))
+    }
+
+    @Test
+    func determineWorkInfo_plainComments_areRemarksExceptBanners() {
+        let score = JohnnySonic.Score(commands: [.comment("+------------+"),
+                                                 .comment("| Work: Song |"),
+                                                 .comment("+------------+"),
+                                                 .comment("st dur vol loc sPit ePit Inst"),
+                                                 .comment("second line"),
+                                                 .end,
+                                                 .comment("19-TET"),
+                                                 .comment("")])
+        let info = determineWorkInfo(score)
+
+        #expect(info.remarks == [Remark(text: "st dur vol loc sPit ePit Inst\nsecond line"),
+                                 Remark(text: "19-TET")].compactMap(\.self))
     }
 
     @Test

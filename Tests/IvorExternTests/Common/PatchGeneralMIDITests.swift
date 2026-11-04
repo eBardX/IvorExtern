@@ -26,6 +26,16 @@ extension PatchGeneralMIDITests {
     }
 
     @Test
+    func generalMIDIName_generalMIDI2DrumSet_isDrumSetName() throws {
+        #expect(try #require(Patch(.generalMIDI2DrumSet(program: 1))).generalMIDIName == "Standard Set")
+    }
+
+    @Test
+    func generalMIDIName_generalMIDI2NonstandardDrumSet_isNil() throws {
+        #expect(try #require(Patch(.generalMIDI2DrumSet(program: 2))).generalMIDIName == nil)
+    }
+
+    @Test
     func generalMIDIName_generalMIDI2UnnamedVariation_isInstrumentName() throws {
         #expect(try #require(Patch(.generalMIDI2(program: 20, variation: 127))).generalMIDIName == "Church Organ")
     }
@@ -36,16 +46,6 @@ extension PatchGeneralMIDITests {
 
         #expect(name != nil)
         #expect(name != "Church Organ")
-    }
-
-    @Test
-    func generalMIDIName_generalMIDI2DrumSet_isDrumSetName() throws {
-        #expect(try #require(Patch(.generalMIDI2DrumSet(program: 1))).generalMIDIName == "Standard Set")
-    }
-
-    @Test
-    func generalMIDIName_generalMIDI2NonstandardDrumSet_isNil() throws {
-        #expect(try #require(Patch(.generalMIDI2DrumSet(program: 2))).generalMIDIName == nil)
     }
 
     @Test

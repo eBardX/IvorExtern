@@ -5,6 +5,8 @@ internal import IvorModel
 
 extension ABC {
 
+    // MARK: Internal Nested Types
+
     // The instrument a `%%MIDI voice` directive assigns (see
     // `convertToVoiceInstrument(_:)`). `program` counts from 1, like the
     // `midiProgram` extra, and `bank` from 0, like the `midiBank` extra.

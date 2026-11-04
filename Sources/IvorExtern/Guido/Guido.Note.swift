@@ -2,6 +2,8 @@
 
 extension Guido {
 
+    // MARK: Internal Nested Types
+
     // A fully resolved note: pitch and duration already inherited and
     // dotted. Unlike the upstream playback model's equivalent type, this
     // one has no access restriction on its initializer, so `@testable`

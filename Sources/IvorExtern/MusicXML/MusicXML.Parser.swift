@@ -6,6 +6,9 @@ private import IvorMXL
 private import XestiTools
 
 extension MusicXML {
+
+    // MARK: Internal Nested Types
+
     internal struct Parser {
     }
 }

@@ -22,14 +22,9 @@ internal import IvorMXL
 // upstream.
 extension MusicXML.Importer.Walker {
 
+    // MARK: Internal Nested Types
+
     internal struct Expansion {
-
-        // MARK: Internal Nested Types
-
-        internal enum Plan {
-            case items([MXLMusicItem])
-            case syntheticRest
-        }
 
         // MARK: Private Nested Types
 

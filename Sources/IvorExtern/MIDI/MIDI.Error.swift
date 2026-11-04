@@ -7,6 +7,9 @@ internal import IvorTuning
 internal import XestiTools
 
 extension MIDI {
+
+    // MARK: Internal Nested Types
+
     internal enum Error {
         case convertFailure((any EnhancedError)?)
         case emptyBeatMap
@@ -32,6 +35,9 @@ extension MIDI {
 // MARK: - EnhancedError
 
 extension MIDI.Error: EnhancedError {
+
+    // MARK: Internal Instance Properties
+
     internal var category: Category? {
         Category("IvorExtern")
     }

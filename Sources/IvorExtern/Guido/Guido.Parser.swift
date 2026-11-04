@@ -6,6 +6,9 @@ private import IvorGMN
 private import XestiTools
 
 extension Guido {
+
+    // MARK: Internal Nested Types
+
     internal struct Parser {
     }
 }

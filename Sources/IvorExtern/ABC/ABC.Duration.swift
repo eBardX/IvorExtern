@@ -51,12 +51,6 @@ extension ABC.Duration {
 
     // MARK: Internal Type Methods
 
-    // Returns the sum of two durations. Used for tie coalescing.
-    internal static func + (lhs: Self,
-                            rhs: Self) -> Self {
-        Self(numberValue: lhs.numberValue + rhs.numberValue)
-    }
-
     // Returns this duration scaled by the fraction `numerator / denominator`.
     // Used to scale by a tuplet ratio, a broken-rhythm factor, or a chord's
     // own outer length modifier.
@@ -64,6 +58,12 @@ extension ABC.Duration {
                             rhs: (numerator: UInt, denominator: UInt)) -> Self {
         Self(numberValue: lhs.numberValue * Number(numerator: rhs.numerator,
                                                    denominator: rhs.denominator))
+    }
+
+    // Returns the sum of two durations. Used for tie coalescing.
+    internal static func + (lhs: Self,
+                            rhs: Self) -> Self {
+        Self(numberValue: lhs.numberValue + rhs.numberValue)
     }
 }
 
