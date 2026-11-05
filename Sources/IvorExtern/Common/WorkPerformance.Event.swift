@@ -24,9 +24,13 @@ extension WorkPerformance {
         ///
         /// - Parameter time:       The time in the work.
         /// - Parameter message:    The message to send then.
+        /// - Parameter partIndex:  The index of the part whose note this
+        ///                         is, or `nil` if it isn’t a note.
         public init(time: WallTime,
-                    message: MIDIChannelMessage) {
+                    message: MIDIChannelMessage,
+                    partIndex: Int? = nil) {
             self.message = message
+            self.partIndex = partIndex
             self.time = time
         }
 
@@ -34,6 +38,14 @@ extension WorkPerformance {
 
         /// The message to send.
         public let message: MIDIChannelMessage
+
+        /// The index of the part whose note this is, in the work’s order, or
+        /// `nil` if it isn’t a note.
+        ///
+        /// Parts can share a channel, so a note’s channel doesn’t tell whose
+        /// it is. Everything else on a channel belongs to the channel, not
+        /// to a part.
+        public let partIndex: Int?
 
         /// The time in the work.
         public let time: WallTime

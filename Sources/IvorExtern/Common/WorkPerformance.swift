@@ -47,6 +47,10 @@ private import IvorTuning
 /// expression (the `expressionValue` extra of a dynamic-map entry), that is
 /// sent as it is instead.
 ///
+/// Every note says which part it belongs to, so that a mixer can mute one
+/// part of several sharing a channel. The performance itself sends no channel
+/// volume (CC 7), which it leaves to the mixer.
+///
 /// For now a note that glides plays its start key only. Only a
 /// keyboard-pitch, wall-time work can be made into a performance.
 public struct WorkPerformance {
@@ -69,6 +73,7 @@ public struct WorkPerformance {
         let partChannels = parts.indices.map { Self.channels[$0 % Self.channels.count] }
         var events: [Event] = []
         var ownedChannels: Set<MIDIChannel> = []
+        var ownedChannelSets: [[MIDIChannel]] = []
         var partChannelSets: [[MIDIChannel]] = []
         var partSounds: [[Instrument: (MIDIChannel, MIDIPatch)]] = []
 
@@ -88,7 +93,10 @@ public struct WorkPerformance {
             let expressive = channels.filter { $0 != Self.percussionChannel }
             let expression = Expression(part: part)
 
+            ownedChannelSets.append(channels)
+
             events += Self._noteEvents(for: part,
+                                       at: index,
                                        sounds: partSounds[index],
                                        expression: expression,
                                        on: Set(expressive))
@@ -100,6 +108,7 @@ public struct WorkPerformance {
 
         self.duration = events.map(\.time).max() ?? .zero
         self.events = events.sorted()
+        self.ownedChannelSets = ownedChannelSets
         self.partChannels = partChannels
         self.partChannelSets = partChannelSets
     }
@@ -111,6 +120,14 @@ public struct WorkPerformance {
 
     /// The events, in the order they are sent.
     public let events: [Event]
+
+    /// The channels each part owns, in the work’s order: those of its
+    /// ``partChannelSets`` that no earlier part plays on.
+    ///
+    /// Only a channel’s owner sends it pan and expression, and a mixer that
+    /// sets a part’s volume should likewise set only these, so a part that
+    /// owns none has no volume of its own.
+    public let ownedChannelSets: [[MIDIChannel]]
 
     /// The channel each part plays on unless an assignment says otherwise,
     /// in the work’s order.
@@ -159,6 +176,7 @@ extension WorkPerformance {
 
     // A part's notes. An attack on one of `expressiveChannels` takes account of the expression there.
     private static func _noteEvents(for part: Part<WallTime, NoteNumber>,
+                                    at partIndex: Int,
                                     sounds: [Instrument: (MIDIChannel, MIDIPatch)],
                                     expression: Expression,
                                     on expressiveChannels: Set<MIDIChannel>) -> [Event] {
@@ -175,9 +193,11 @@ extension WorkPerformance {
             let attackVelocity = expressiveChannels.contains(channel) ? expression.velocity(velocity, at: note.attack) : velocity
 
             events.append(Event(time: note.attack,
-                                message: .noteOn(channel, key, attackVelocity)))
+                                message: .noteOn(channel, key, attackVelocity),
+                                partIndex: partIndex))
             events.append(Event(time: note.release,
-                                message: .noteOff(channel, key, MIDIData1Value(clamping: 0))))
+                                message: .noteOff(channel, key, MIDIData1Value(clamping: 0)),
+                                partIndex: partIndex))
         }
 
         return events
