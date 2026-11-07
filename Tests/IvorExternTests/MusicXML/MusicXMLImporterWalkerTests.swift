@@ -6,6 +6,7 @@ import IvorTiming
 import IvorTuning
 import Testing
 import XestiNumbers
+import XestiTools
 
 // swiftlint:disable file_length
 
@@ -72,6 +73,27 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_articulations_becomeTheirExtras() throws {
+        let extras = try walkedExtras(notations: """
+            <articulations>
+              <breath-mark/>
+              <staccato/>
+              <strong-accent/>
+              <tenuto/>
+              <other-articulation>flick</other-articulation>
+              <detached-legato/>
+            </articulations>
+            """)
+
+        #expect(extras?.elements.count == 5)
+        #expect(hasFlag(extras, .breathMark))
+        #expect(hasFlag(extras, .marcato))
+        #expect(hasFlag(extras, .staccato))
+        #expect(hasFlag(extras, .tenuto))
+        #expect(stringValue(extras, .articulation) == "flick")
+    }
+
+    @Test
     func walk_backup_rewindsCursorForSecondVoice() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -112,6 +134,20 @@ extension MusicXMLImporterWalkerTests {
         }
 
         #expect(attacks == [.zero])
+    }
+
+    @Test
+    func walk_barlineAmongNotes_leavesCursorAlone() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            <bookmark id="b"/>
+            <print/>
+            <barline location="middle"/>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            """)
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(1)])
     }
 
     @Test
@@ -292,6 +328,24 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_droppedChordTone_registersItsVoiceWithoutANote() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            <note>
+              <grace/>
+              <chord/>
+              <pitch><step>E</step><octave>4</octave></pitch>
+              <voice>2</voice>
+            </note>
+            """)
+        let voices = try #require(results.first?.part.voices)
+
+        #expect(voices.map(\.id) == ["1", "2"])
+        #expect(voices.first?.noteTable.map(\.attack) == [.zero])
+        #expect(voices.last?.noteTable.isEmpty == true)
+    }
+
+    @Test
     func walk_excludesPartsNotInScorePartList() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -311,6 +365,39 @@ extension MusicXMLImporterWalkerTests {
                                                           order: [0])
 
         #expect(results.isEmpty)
+    }
+
+    @Test
+    func walk_fermata_becomesItsExtra() throws {
+        #expect(try hasFlag(walkedExtras(notations: "<fermata/>"), .fermata))
+    }
+
+    @Test
+    func walk_forward_advancesCursorAndRegistersItsVoice() throws {
+        let results = try walkMusicXMLMeasure("""
+            <forward><duration>2</duration><voice>2</voice></forward>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            """)
+        let voices = try #require(results.first?.part.voices)
+
+        #expect(voices.map(\.id) == ["1", "2"])
+        #expect(voices.first?.noteTable.map(\.attack) == [BeatTime(2)])
+    }
+
+    @Test
+    func walk_graceCueNote_isDroppedAndAdvancesNothing() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note>
+              <grace/>
+              <cue/>
+              <pitch><step>D</step><octave>4</octave></pitch>
+              <voice>1</voice>
+            </note>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            """)
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.attack) == [.zero])
     }
 
     @Test
@@ -356,6 +443,53 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_measureRepeat_attributesInACoveredMeasure_stillApply() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                  </note>
+                </measure>
+                <measure number="2">
+                  <attributes>
+                    <divisions>2</divisions>
+                    <measure-style><measure-repeat type="start">1</measure-repeat></measure-style>
+                  </attributes>
+                </measure>
+                <measure number="3">
+                  <attributes>
+                    <measure-style><measure-repeat type="stop"/></measure-style>
+                  </attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0, 1, 2])
+        let voice = try #require(results.first?.part.voices.first)
+
+        // The repeated note keeps the divisions it was written in; the
+        // change applies from the measure after.
+        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(4), BeatTime(8)])
+        #expect(voice.noteTable.map(\.duration) == [BeatDuration(4),
+                                                    BeatDuration(4),
+                                                    BeatDuration(Number(numerator: 1, denominator: 2))])
+    }
+
+    @Test
     func walk_metronomeMark_recordsTempoEvent() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -390,6 +524,67 @@ extension MusicXMLImporterWalkerTests {
         #expect(results.first?.tempoEvents.count == 1)
         #expect(results.first?.tempoEvents.first?.beatTime == .zero)
         #expect(results.first?.tempoEvents.first?.tempo == Tempo(uintValue: 96))
+    }
+
+    @Test(arguments: ["inverted-mordent", "mordent"])
+    func walk_mordentOrnaments_becomeMordentExtra(element: String) throws {
+        #expect(try hasFlag(walkedExtras(notations: "<ornaments><\(element)/></ornaments>"), .mordent))
+    }
+
+    @Test
+    func walk_multipleRest_attributesInItsOwnMeasure_stillApply() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>P</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes>
+                    <divisions>2</divisions>
+                    <time><beats>4</beats><beat-type>4</beat-type></time>
+                    <measure-style><multiple-rest>2</multiple-rest></measure-style>
+                  </attributes>
+                </measure>
+                <measure number="2"/>
+                <measure number="3">
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>1</duration>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let score = try parseMusicXMLScore(musicXML)
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0, 1, 2])
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.attack) == [BeatTime(8)])
+        #expect(voice.noteTable.map(\.duration) == [BeatDuration(Number(numerator: 1, denominator: 2))])
+    }
+
+    @Test
+    func walk_multipleRest_withoutTime_throws() throws {
+        let score = try parseMusicXMLScore(multipleRestMusicXML(time: ""))
+
+        #expect(throws: MusicXML.Error.self) {
+            _ = try MusicXML.Importer.Walker().walk(score,
+                                                    order: [0, 1, 2, 3])
+        }
+    }
+
+    @Test
+    func walk_multipleRest_withTime_advancesOverItsEmptyMeasures() throws {
+        let time = "<time><beats>4</beats><beat-type>4</beat-type></time>"
+        let score = try parseMusicXMLScore(multipleRestMusicXML(time: time))
+        let results = try MusicXML.Importer.Walker().walk(score,
+                                                          order: [0, 1, 2, 3])
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(12)])
     }
 
     @Test
@@ -534,6 +729,36 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_otherOrnament_becomesArticulationExtra() throws {
+        let extras = try walkedExtras(notations: "<ornaments><other-ornament>flip</other-ornament></ornaments>")
+
+        #expect(stringValue(extras, .articulation) == "flip")
+    }
+
+    @Test
+    func walk_slurContinue_attachesNoExtra() throws {
+        #expect(try walkedExtras(notations: #"<slur type="continue"/>"#) == nil)
+    }
+
+    @Test
+    func walk_snapPizzicato_becomesPizzicatoExtra() throws {
+        #expect(try hasFlag(walkedExtras(notations: "<technical><snap-pizzicato/></technical>"), .pizzicato))
+    }
+
+    @Test
+    func walk_soundDynamicsOutsideADirection_recordsStepAtTheCursor() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            <sound dynamics="80"/>
+            """)
+        let events = try #require(results.first?.directionDynamicEvents)
+
+        #expect(events.count == 1)
+        #expect(events.first?.beatTime == BeatTime(1))
+        #expect(events.first?.kind == .step)
+    }
+
+    @Test
     func walk_soundMidiInstrumentPan_recordsPanEvent() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -632,6 +857,27 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_technical_becomesItsExtras() throws {
+        let extras = try walkedExtras(notations: """
+            <technical>
+              <up-bow/>
+              <down-bow/>
+              <harmonic/>
+              <fingering>3</fingering>
+              <other-technical>tap</other-technical>
+              <stopped/>
+            </technical>
+            """)
+
+        #expect(extras?.elements.count == 5)
+        #expect(hasFlag(extras, .downBow))
+        #expect(hasFlag(extras, .harmonic))
+        #expect(hasFlag(extras, .upBow))
+        #expect(stringValue(extras, .articulation) == "tap")
+        #expect(stringValue(extras, .fingering) == "3")
+    }
+
+    @Test
     func walk_tiedNotes_combineIntoOneNote() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -713,6 +959,20 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_tieNeverStopped_keepsItsNoteAtTheEnd() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note>
+              <pitch><step>C</step><octave>4</octave></pitch>
+              <duration>2</duration>
+              <tie type="start"/>
+            </note>
+            """)
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.duration) == [BeatDuration(2)])
+    }
+
+    @Test
     func walk_transpose_appliesToSoundingPitch() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -752,6 +1012,16 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_trillMark_becomesTrillExtra() throws {
+        #expect(try hasFlag(walkedExtras(notations: "<ornaments><trill-mark/></ornaments>"), .trill))
+    }
+
+    @Test(arguments: ["delayed-inverted-turn", "delayed-turn", "inverted-turn", "turn"])
+    func walk_turnOrnaments_becomeTurnExtra(element: String) throws {
+        #expect(try hasFlag(walkedExtras(notations: "<ornaments><\(element)/></ornaments>"), .turn))
+    }
+
+    @Test
     func walk_unbalancedBackup_throws() {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -778,6 +1048,32 @@ extension MusicXMLImporterWalkerTests {
             _ = try MusicXML.Importer.Walker().walk(score,
                                                     order: [0])
         }
+    }
+
+    @Test
+    func walk_unlistedOrnament_attachesNoExtra() throws {
+        #expect(try walkedExtras(notations: "<ornaments><shake/></ornaments>") == nil)
+    }
+
+    @Test
+    func walk_unpitchedNotes_advanceOnceAndLeaveNoNote() throws {
+        let results = try walkMusicXMLMeasure("""
+            <note>
+              <unpitched><display-step>C</display-step><display-octave>4</display-octave></unpitched>
+              <duration>2</duration>
+              <voice>1</voice>
+            </note>
+            <note>
+              <chord/>
+              <unpitched><display-step>E</display-step><display-octave>4</display-octave></unpitched>
+              <duration>2</duration>
+              <voice>1</voice>
+            </note>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            """)
+        let voice = try #require(results.first?.part.voices.first)
+
+        #expect(voice.noteTable.map(\.attack) == [BeatTime(2)])
     }
 
     @Test
@@ -816,6 +1112,20 @@ extension MusicXMLImporterWalkerTests {
         let part = try #require(results.first?.part)
 
         #expect(part.voices.map(\.id) == ["1", "2"])
+    }
+
+    @Test
+    func walk_wedgeContinue_leavesTheOpenWedgeAlone() throws {
+        let results = try walkMusicXMLMeasure("""
+            <direction><direction-type><wedge type="crescendo" number="1"/></direction-type></direction>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            <direction><direction-type><wedge type="continue" number="1"/></direction-type></direction>
+            <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
+            <direction><direction-type><wedge type="stop" number="1"/></direction-type></direction>
+            """)
+        let events = try #require(results.first?.directionDynamicEvents)
+
+        #expect(events.map(\.beatTime) == [.zero, BeatTime(2)])
     }
 
     @Test

@@ -16,6 +16,130 @@ struct ABCFunctionsTests {
 
 extension ABCFunctionsTests {
     @Test
+    func convertToABCDecorationName_dynamic_namedLevels_roundTrip() throws {
+        let dynamics: [Dynamic] = [.pppp, .ppp, .pp, .p, .mp, .mf, .f, .ff, .fff, .ffff]
+
+        for dynamic in dynamics {
+            let name = try #require(convertToABCDecorationName(dynamic))
+
+            #expect(convertToDynamic(name) == dynamic)
+        }
+    }
+
+    @Test
+    func convertToABCDecorationName_dynamic_unnamedLevel_returnsNil() throws {
+        let dynamic = try #require(Dynamic(numberValue: Number(0.55)))
+
+        #expect(convertToABCDecorationName(dynamic) == nil)
+    }
+
+    @Test
+    func convertToABCDecorationName_extra_pizzicato_writesSnap() {
+        #expect(convertToABCDecorationName(Extra.pizzicato)?.stringValue == "snap")
+    }
+
+    @Test(arguments: [Extra.accent,
+                      .breathMark,
+                      .downBow,
+                      .fermata,
+                      .harmonic,
+                      .marcato,
+                      .mordent,
+                      .pizzicato,
+                      .staccato,
+                      .tenuto,
+                      .trill,
+                      .turn,
+                      .upBow])
+    func convertToABCDecorationName_extra_tier1Flag_roundTrips(extra: Extra) throws {
+        let name = try #require(convertToABCDecorationName(extra))
+
+        #expect(convertToArticulationExtra(name)?.name == extra.name)
+    }
+
+    @Test
+    func convertToABCDecorationName_extra_unlisted_returnsNil() {
+        #expect(convertToABCDecorationName(Extra.slurStart) == nil)
+    }
+
+    @Test
+    func convertToABCPitch_lowestOctave_throws() throws {
+        let octave = try #require(Pitch.Octave(intValue: -1))
+        let pitch = Pitch(pitchClass: PitchClass(letter: .c, accidental: .natural),
+                          octave: octave)
+
+        #expect(throws: ABC.Error.self) {
+            _ = try convertToABCPitch(pitch)
+        }
+    }
+
+    @Test
+    func convertToABCPitch_mapsAccidentals() throws {
+        let octave = try #require(Pitch.Octave(intValue: 4))
+        let accidentals: [(Pitch.Accidental, ABCPitch.Accidental)] = [(.doubleFlat, .doubleFlat),
+                                                                      (.doubleSharp, .doubleSharp),
+                                                                      (.flat, .flat),
+                                                                      (.natural, .natural),
+                                                                      (.sharp, .sharp)]
+
+        for (accidental, expected) in accidentals {
+            let pitch = Pitch(pitchClass: PitchClass(letter: .c, accidental: accidental),
+                              octave: octave)
+
+            #expect(try convertToABCPitch(pitch).accidental == expected)
+        }
+    }
+
+    @Test
+    func convertToABCPitch_mapsLetters() throws {
+        let octave = try #require(Pitch.Octave(intValue: 4))
+        let letters: [(Pitch.Letter, ABCPitch.Letter)] = [(.a, .a),
+                                                          (.b, .b),
+                                                          (.c, .c),
+                                                          (.d, .d),
+                                                          (.e, .e),
+                                                          (.f, .f),
+                                                          (.g, .g)]
+
+        for (letter, expected) in letters {
+            let pitch = Pitch(pitchClass: PitchClass(letter: letter, accidental: .natural),
+                              octave: octave)
+
+            #expect(try convertToABCPitch(pitch).letter == expected)
+        }
+    }
+
+    @Test
+    func convertToArticulationExtra_aliases_readAsTheirFlag() throws {
+        let aliases: [(String, Extra)] = [("emphasis", .accent),
+                                          ("invertedfermata", .fermata),
+                                          ("lowermordent", .mordent),
+                                          ("open", .harmonic),
+                                          ("plus", .pizzicato),
+                                          ("uppermordent", .mordent)]
+
+        for (text, extra) in aliases {
+            let name = try #require(ABCDecoration.Name(stringValue: text))
+
+            #expect(convertToArticulationExtra(name)?.name == extra.name)
+        }
+    }
+
+    @Test
+    func convertToArticulationExtra_ignoresCase() throws {
+        let name = try #require(ABCDecoration.Name(stringValue: "TRILL"))
+
+        #expect(convertToArticulationExtra(name)?.name == Extra.trill.name)
+    }
+
+    @Test
+    func convertToArticulationExtra_unrecognized_returnsNil() throws {
+        let name = try #require(ABCDecoration.Name(stringValue: "sfz"))
+
+        #expect(convertToArticulationExtra(name) == nil)
+    }
+
+    @Test
     func convertToBeatDuration() throws {
         let duration = ABC.Duration(numberValue: Number(numerator: 1, denominator: 4))
 
@@ -51,6 +175,20 @@ extension ABCFunctionsTests {
         let directive = ABCDirective(name: name, value: "program 1 40")
 
         #expect(convertToChannel(directive) == nil)
+    }
+
+    @Test
+    func convertToDynamic_ignoresCase() throws {
+        let name = try #require(ABCDecoration.Name(stringValue: "FF"))
+
+        #expect(convertToDynamic(name) == .ff)
+    }
+
+    @Test
+    func convertToDynamic_unrecognized_returnsNil() throws {
+        let name = try #require(ABCDecoration.Name(stringValue: "sfz"))
+
+        #expect(convertToDynamic(name) == nil)
     }
 
     @Test

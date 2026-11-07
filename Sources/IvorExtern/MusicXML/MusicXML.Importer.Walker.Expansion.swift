@@ -29,6 +29,9 @@ extension MusicXML.Importer.Walker {
         // MARK: Private Nested Types
 
         private struct MeasureRepeat {
+
+            // MARK: Fileprivate Instance Properties
+
             fileprivate var length: Int
             fileprivate var offset: Int
             fileprivate var patternStart: Int
@@ -54,6 +57,10 @@ extension MusicXML.Importer.Walker.Expansion {
 
         for style in Self._measureStyles(in: measure) {
             switch style {
+            case .beatRepeat,
+                 .slash:
+                break
+
             case let .measureRepeat(measureRepeat):
                 switch measureRepeat.kind {
                 case .start:
@@ -69,10 +76,6 @@ extension MusicXML.Importer.Walker.Expansion {
 
             case let .multipleRest(multipleRest):
                 multipleRestRemaining = multipleRest.value
-
-            case .beatRepeat,
-                 .slash:
-                break
             }
         }
 
@@ -82,21 +85,31 @@ extension MusicXML.Importer.Walker.Expansion {
             return hasNotes ? .items(measure.items) : .syntheticRest
         }
 
+        // A written-out measure still takes its place in the pattern.
         if var active = measureRepeat,
-           !hasNotes,
            active.patternStart >= 0 {
             let source = part.measures[active.patternStart + (active.offset % active.length)]
 
             active.offset += 1
             measureRepeat = active
 
-            return .items(source.items)
+            // The measure's own `<attributes>` follow the repeated music,
+            // which keeps the divisions it was written in.
+            if !hasNotes {
+                return .items(source.items + Self._attributes(in: measure))
+            }
         }
 
         return .items(measure.items)
     }
 
     // MARK: Private Type Methods
+
+    private static func _attributes(in measure: MXLScorePartwise.Part.Measure) -> [MXLMusicItem] {
+        measure.items.filter {
+            if case .attributes = $0 { true } else { false }
+        }
+    }
 
     // A Boolean value indicating whether a measure carries any `<note>` at
     // all (a whole-measure `<rest>` counts — it is a `<note>` in MusicXML).

@@ -28,6 +28,20 @@ struct ABCExporterTests {
 
 extension ABCExporterTests {
     @Test
+    func convert_articulationExtra_writesItsTextAsADecoration() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: .zero,
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: Extras(elements: [Extra(name: Extra.articulation.name, values: [.string("flick")])]))
+
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [Part(name: "", noteTable: table)]))
+
+        #expect(decorations(in: tune).contains { $0.name.stringValue == "flick" })
+    }
+
+    @Test
     func convert_chordGrouping_differingDurationsStaySeparate() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -79,28 +93,6 @@ extension ABCExporterTests {
 
         #expect(decorations.contains { $0.name.stringValue == "ff" })
         #expect(!decorations.contains { $0.name.stringValue.hasPrefix("crescendo") })
-    }
-
-    @Test
-    func convert_stepAfterLeadingEntry_emitsMarksAndNoHairpin() throws {
-        var table = NoteTable<BeatTime, Pitch>()
-
-        table.insert(attack: BeatTime(0), duration: BeatDuration(4), pitch: "C4")
-        table.insert(attack: BeatTime(4), duration: BeatDuration(4), pitch: "D4")
-
-        var dynamicMap = DynamicMap<BeatTime>()
-
-        dynamicMap.insert(time: BeatTime(0), dynamic: .p)
-        dynamicMap.insert(time: BeatTime(4), dynamic: .p)
-        dynamicMap.insert(time: BeatTime(4), dynamic: .f)
-
-        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
-        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
-        let names = decorations(in: tune).map(\.name.stringValue)
-
-        #expect(names.contains("p"))
-        #expect(names.contains("f"))
-        #expect(!names.contains { $0.hasPrefix("crescendo") || $0.hasPrefix("diminuendo") })
     }
 
     @Test
@@ -441,6 +433,28 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_stepAfterLeadingEntry_emitsMarksAndNoHairpin() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(4), pitch: "C4")
+        table.insert(attack: BeatTime(4), duration: BeatDuration(4), pitch: "D4")
+
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: BeatTime(0), dynamic: .p)
+        dynamicMap.insert(time: BeatTime(4), dynamic: .p)
+        dynamicMap.insert(time: BeatTime(4), dynamic: .f)
+
+        let part = Part(name: "", noteTable: table, dynamicMap: dynamicMap)
+        let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
+        let names = decorations(in: tune).map(\.name.stringValue)
+
+        #expect(names.contains("p"))
+        #expect(names.contains("f"))
+        #expect(!names.contains { $0.hasPrefix("crescendo") || $0.hasPrefix("diminuendo") })
+    }
+
+    @Test
     func convert_tempoMap_emitsTempoField() throws {
         var tempoMap = TempoMap()
 
@@ -567,6 +581,27 @@ extension ABCExporterTests {
         let recoveredPart = try namedStandardPart(recovered, "Piano")
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_eighthNotes_keepPlainLengths() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+        let half = Number(numerator: 1, denominator: 2)
+
+        table.insert(attack: .zero, duration: BeatDuration(half), pitch: "C4")
+        table.insert(attack: BeatTime(half), duration: BeatDuration(half), pitch: "D4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let tune = try ABC.Exporter().convert(work)
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        #expect(!symbols(in: tune).contains { if case .tuplet = $0 { true } else { false } })
+        #expect(part.noteTable.map(\.attack) == [.zero, BeatTime(half)])
+        #expect(part.noteTable.map(\.duration) == [BeatDuration(half), BeatDuration(half)])
     }
 
     @Test
@@ -850,8 +885,53 @@ extension ABCExporterTests {
     }
 
     @Test
+    func roundTrip_tupletRest_keepsTheNextNoteInPlace() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: .zero, duration: BeatDuration(Number(numerator: 1, denominator: 3)), pitch: "C4")
+        table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: "D4")
+
+        let recovered = try roundTrip(standardBeatWork(parts: [Part(name: "", noteTable: table)]),
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        #expect(part.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+    }
+
+    @Test
+    func roundTrip_tupletWithAnEvenDenominator_preservesDuration() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+        let sixth = Number(numerator: 1, denominator: 6)
+
+        table.insert(attack: .zero, duration: BeatDuration(sixth), pitch: "C4")
+
+        let recovered = try roundTrip(standardBeatWork(parts: [Part(name: "", noteTable: table)]),
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        #expect(part.noteTable.map(\.duration) == [BeatDuration(sixth)])
+    }
+
+    @Test
     func writableFileFormats_containsABC() {
         #expect(ABC.Exporter().writableFileFormats == [.abc])
+    }
+
+    @Test
+    func write_editorCredit_writesEditedByField() throws {
+        var info = Work.Info()
+
+        info.credits = [Credit(name: "J. Editor", role: .editor)].compactMap(\.self)
+
+        let text = try writeABC(Work(name: "Sketch",
+                                     content: .standardBeat([], TempoMap()),
+                                     info: info))
+
+        #expect(text.split(separator: "\n").contains("Z:abc-edited-by J. Editor"))
     }
 
     @Test
@@ -880,6 +960,26 @@ extension ABCExporterTests {
         #expect(lines.contains("N:mood: Wistful"))
         #expect(!text.contains("© 1998 Acme"))
         #expect(!text.contains("Collected Pieces"))
+    }
+
+    @Test(arguments: [(RemarkLabel.area, "A"),
+                      (RemarkLabel.book, "B"),
+                      (RemarkLabel.discography, "D"),
+                      (RemarkLabel.fileURL, "F"),
+                      (RemarkLabel.group, "G"),
+                      (RemarkLabel.notes, "N"),
+                      (RemarkLabel.origin, "O"),
+                      (RemarkLabel.rhythm, "R")])
+    func write_labeledRemark_writesItsOwnField(label: String, field: String) throws {
+        var info = Work.Info()
+
+        info.remarks = [Remark(text: "Some text", label: label)].compactMap(\.self)
+
+        let text = try writeABC(Work(name: "Sketch",
+                                     content: .standardBeat([], TempoMap()),
+                                     info: info))
+
+        #expect(text.split(separator: "\n").contains("\(field):Some text"[...]))
     }
 
     @Test

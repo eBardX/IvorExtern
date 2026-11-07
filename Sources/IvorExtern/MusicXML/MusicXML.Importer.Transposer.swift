@@ -47,7 +47,7 @@ extension MusicXML.Importer.Transposer {
                                       writtenPitch: pitch,
                                       diatonicShift: content.diatonic.map { $0.intValue + octaveShift * 7 + (doubleSemitones / 12) * 7 })
 
-        guard let octave = MXLOctave(uintValue: UInt(spelling.octave))
+        guard let octave = UInt(exactly: spelling.octave).flatMap({ MXLOctave(uintValue: $0) })
         else { throw MusicXML.Error.unrepresentablePitch(context()) }
 
         return MXLPitch(step: spelling.step,

@@ -32,13 +32,13 @@ extension ABC.Importer.PitchFolder {
         case let .clefOnly(clef):
             clef
 
-        case let .standard(standard):
-            standard.clef
-
         case .empty,
              .highlandPipes,
              .highlandPipesPreset:
             nil
+
+        case let .standard(standard):
+            standard.clef
         }
     }
 

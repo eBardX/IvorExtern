@@ -150,11 +150,11 @@ extension MIDI.Importer {
 
         for case let .midi(eventTime, message) in voice.expressionEvents.sorted(by: { $0.eventTime < $1.eventTime }) {
             switch message {
-            case let .controlChange(_, .expressionControllerMSB, value):
-                exprMSB = value.uintValue
-
             case let .controlChange(_, .expressionControllerLSB, value):
                 exprLSB = value.uintValue
+
+            case let .controlChange(_, .expressionControllerMSB, value):
+                exprMSB = value.uintValue
 
             default:
                 continue
@@ -237,6 +237,18 @@ extension MIDI.Importer {
         return beatMap
     }
 
+    // The file's timecode division, if any, describes the whole file, so
+    // it's recorded in a `midiTimeCode` extra on the work itself, where
+    // `MIDI.Exporter` finds it to write it back (see `determineTimeCode`).
+    private static func _makeExtras(_ division: MIDI.Division) -> Extras? {
+        guard case let .timeCode(timeCode) = division
+        else { return nil }
+
+        return Extras(elements: [Extra(name: Extra.midiTimeCode.name,
+                                       values: [.string(timeCode.frameRate.description),
+                                                .int(Int(timeCode.ticksPerFrame))])])
+    }
+
     // An SMF has no meta event for most metadata, so this reads what the
     // conventions give it (RP-001): the first track's name is the title, as
     // `determineWorkName` already reads it; every Copyright event is a
@@ -250,18 +262,6 @@ extension MIDI.Importer {
     // one place an SMF names a composer, lyricist, or artist, and can carry
     // a title too: one that differs from the first track's name is kept as
     // a subtitle (RP-026 has it hold "Song Title / Sub Title etc.").
-    // The file's timecode division, if any, describes the whole file, so
-    // it's recorded in a `midiTimeCode` extra on the work itself, where
-    // `MIDI.Exporter` finds it to write it back (see `determineTimeCode`).
-    private static func _makeExtras(_ division: MIDI.Division) -> Extras? {
-        guard case let .timeCode(timeCode) = division
-        else { return nil }
-
-        return Extras(elements: [Extra(name: Extra.midiTimeCode.name,
-                                       values: [.string(timeCode.frameRate.description),
-                                                .int(Int(timeCode.ticksPerFrame))])])
-    }
-
     private static func _makeInfo(_ sequence: MIDI.Sequence) -> Work.Info {
         var info = Work.Info(title: determineWorkName(sequence))
 
@@ -328,11 +328,11 @@ extension MIDI.Importer {
             case let .meta(_, .instrumentName(text)):
                 instrumentName = text.stringValue.nilIfEmpty
 
-            case let .midi(_, .controlChange(_, .bankSelectMSB, value)):
-                bankMSB = value
-
             case let .midi(_, .controlChange(_, .bankSelectLSB, value)):
                 bankLSB = value
+
+            case let .midi(_, .controlChange(_, .bankSelectMSB, value)):
+                bankMSB = value
 
             case let .midi(_, .controlChange(_, .channelVolumeMSB, value)):
                 volume = value.uintValue

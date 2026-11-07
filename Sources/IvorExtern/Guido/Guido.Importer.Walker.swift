@@ -99,11 +99,11 @@ extension Guido.Importer.Walker {
 
         case .bow:
             switch articulation.type?.lowercased() {
-            case "up":
-                .upBow
-
             case "down":
                 .downBow
+
+            case "up":
+                .upBow
 
             default:
                 Extra(name: Extra.articulation.name,
@@ -503,18 +503,6 @@ extension Guido.Importer.Walker {
                                     _ context: inout Guido.Importer.Context,
                                     _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
         switch ramp.span {
-        case .whole:
-            let startBeatTime = context.currentBeatTime
-            let startDynamic = context.lastDynamic
-
-            try _walk(ramp.body, &context, &inProgressVariableNames)
-
-            Self._closeDynamicRamp(direction: ramp.direction,
-                                   startBeatTime: startBeatTime,
-                                   startDynamic: startDynamic,
-                                   endBeatTime: context.currentBeatTime,
-                                   &context)
-
         case .begin:
             context.pendingDynamicRamps[ramp.ident] = (beatTime: context.currentBeatTime,
                                                        dynamic: context.lastDynamic,
@@ -529,6 +517,18 @@ extension Guido.Importer.Walker {
                                    startDynamic: pending.dynamic,
                                    endBeatTime: context.currentBeatTime,
                                    &context)
+
+        case .whole:
+            let startBeatTime = context.currentBeatTime
+            let startDynamic = context.lastDynamic
+
+            try _walk(ramp.body, &context, &inProgressVariableNames)
+
+            Self._closeDynamicRamp(direction: ramp.direction,
+                                   startBeatTime: startBeatTime,
+                                   startDynamic: startDynamic,
+                                   endBeatTime: context.currentBeatTime,
+                                   &context)
         }
     }
 
@@ -541,12 +541,46 @@ extension Guido.Importer.Walker {
                             _ context: inout Guido.Importer.Context,
                             _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
         switch tag {
+        // `\accent<...>{C}`-style tags scope their mark over a `body:` of
+        // note symbols (guidolib's own template shape for every kind but
+        // `\stacc` — see `convertToGuidoTag(_:body:)` on the export side),
+        // so the tag's own body has to be walked right here rather than
+        // just staging the flag and falling through to `default:`'s flush
+        // — a real gap fixed after the export side first exposed it via a
+        // round-trip crash: without this, a body-wrapped note was never
+        // reached at all.
+        case let .articulation(articulation):
+            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
+
+            try _walk(articulation.body, &context, &inProgressVariableNames)
+
+        case let .breathMark(breathMark):
+            context.pendingNoteExtras.append(.breathMark)
+
+            try _walk(breathMark.body, &context, &inProgressVariableNames)
+
+        // A grace note's body would advance `currentBeatTime` like any other
+        // note if walked here, which is wrong for a grace note (it borrows
+        // time rather than taking its own), and a cue note's body is an
+        // alternate, non-sounding passage — so both stay inert, same as
+        // before this stage.
+        case .cue,
+             .grace:
+            try Self._flushPendingNote(&context)
+
+            context.tieArmed = false
+
         case let .dynamicRamp(ramp):
             try Self._flushPendingNote(&context)
 
             context.tieArmed = false
 
             try _handleDynamicRamp(ramp, &context, &inProgressVariableNames)
+
+        case let .fingering(fingering):
+            context.pendingNoteExtras.append(Extra(name: Extra.fingering.name, values: [.string(fingering.text)]))
+
+            try _walk(fingering.body, &context, &inProgressVariableNames)
 
         case let .instrument(instrument):
             try Self._flushPendingNote(&context)
@@ -568,48 +602,10 @@ extension Guido.Importer.Walker {
 
             Self._handleIntensity(intensity, &context)
 
-        case let .tempo(tempo):
-            try Self._flushPendingNote(&context)
-
-            context.tieArmed = false
-
-            if let metronome = tempo.metronome,
-               let tempoValue = convertToTempo(metronome) {
-                context.tempoEvents.append((beatTime: context.currentBeatTime,
-                                            tempo: tempoValue,
-                                            text: tempo.tempo.nilIfEmpty))
-            }
-
-        case let .tie(tie) where tie.span == .end:
-            context.tieArmed = true
-
-        // `\accent<...>{C}`-style tags scope their mark over a `body:` of
-        // note symbols (guidolib's own template shape for every kind but
-        // `\stacc` — see `convertToGuidoTag(_:body:)` on the export side),
-        // so the tag's own body has to be walked right here rather than
-        // just staging the flag and falling through to `default:`'s flush
-        // — a real gap fixed after the export side first exposed it via a
-        // round-trip crash: without this, a body-wrapped note was never
-        // reached at all.
-        case let .articulation(articulation):
-            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
-
-            try _walk(articulation.body, &context, &inProgressVariableNames)
-
         case let .ornament(ornament):
             context.pendingNoteExtras.append(Self._ornamentExtra(ornament))
 
             try _walk(ornament.body, &context, &inProgressVariableNames)
-
-        case let .fingering(fingering):
-            context.pendingNoteExtras.append(Extra(name: Extra.fingering.name, values: [.string(fingering.text)]))
-
-            try _walk(fingering.body, &context, &inProgressVariableNames)
-
-        case let .breathMark(breathMark):
-            context.pendingNoteExtras.append(.breathMark)
-
-            try _walk(breathMark.body, &context, &inProgressVariableNames)
 
         // The whole-tag `\slur<...>{...}` bracket form — as opposed to the
         // open-span `Begin`/`End` pair the two cases below handle — needs
@@ -646,16 +642,20 @@ extension Guido.Importer.Walker {
                                        extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
             }
 
-        // A grace note's body would advance `currentBeatTime` like any other
-        // note if walked here, which is wrong for a grace note (it borrows
-        // time rather than taking its own), and a cue note's body is an
-        // alternate, non-sounding passage — so both stay inert, same as
-        // before this stage.
-        case .cue,
-             .grace:
+        case let .tempo(tempo):
             try Self._flushPendingNote(&context)
 
             context.tieArmed = false
+
+            if let metronome = tempo.metronome,
+               let tempoValue = convertToTempo(metronome) {
+                context.tempoEvents.append((beatTime: context.currentBeatTime,
+                                            tempo: tempoValue,
+                                            text: tempo.tempo.nilIfEmpty))
+            }
+
+        case let .tie(tie) where tie.span == .end:
+            context.tieArmed = true
 
         // Every other bodied tag (`\beam`, `\tuplet`, `\lyrics`, `\harmony`,
         // and the rest) is a transparent wrapper around the notes it covers
@@ -675,12 +675,10 @@ extension Guido.Importer.Walker {
         }
     }
 
-    // A `.whole`-span `\slur`/`\articulation`/etc. (its own `body:` bracket
-    // rather than the `Begin`/`End` open-span form) isn't specially handled
-    // here — it falls to the `default:` no-op above, same as before this
-    // stage. Only the open-span `Begin`/`End` form (the common case for a
-    // multi-note slur) and articulation/ornament/fingering/breathMark's own
-    // single-note-preceding convention are wired.
+    // Every tag goes through `_handleTag`, which reads a `\slur` in both its
+    // `.whole` bracket form and its open-span `Begin`/`End` form, and an
+    // articulation, ornament, fingering or breath mark whether it wraps its
+    // notes in a body or precedes the note it marks.
     private func _walk(_ symbols: [GMNSymbol],
                        _ context: inout Guido.Importer.Context,
                        _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {

@@ -51,30 +51,6 @@ internal func convertToDynamic(_ direction: MXLDirection) -> Dynamic? {
 // level from) are left unrecognized rather than guessed at.
 internal func convertToDynamic(_ item: MXLDynamics.Item) -> Dynamic? {
     switch item {
-    case .pppp,
-         .ppppp,
-         .pppppp:
-        .pppp
-
-    case .ppp:
-        .ppp
-
-    case .pp,
-         .sfpp:
-        .pp
-
-    case .fp,
-         .p,
-         .sfp,
-         .sfzp:
-        .p
-
-    case .mp:
-        .mp
-
-    case .mf:
-        .mf
-
     case .f,
          .pf:
         .f
@@ -91,8 +67,11 @@ internal func convertToDynamic(_ item: MXLDynamics.Item) -> Dynamic? {
          .ffffff:
         .ffff
 
-    case .n:
-        Dynamic(numberValue: 0)
+    case .fp,
+         .p,
+         .sfp,
+         .sfzp:
+        .p
 
     case .fz,
          .otherDynamics,
@@ -101,6 +80,27 @@ internal func convertToDynamic(_ item: MXLDynamics.Item) -> Dynamic? {
          .sf,
          .sfz:
         nil
+
+    case .mf:
+        .mf
+
+    case .mp:
+        .mp
+
+    case .n:
+        Dynamic(numberValue: 0)
+
+    case .pp,
+         .sfpp:
+        .pp
+
+    case .ppp:
+        .ppp
+
+    case .pppp,
+         .ppppp,
+         .pppppp:
+        .pppp
     }
 }
 
@@ -169,24 +169,6 @@ internal func convertToMusicXMLDivisions(_ duration: BeatDuration,
 // `nil` rather than guessing at the nearest named mark.
 internal func convertToMusicXMLDynamics(_ dynamic: Dynamic) -> MXLDynamics.Item? {
     switch dynamic {
-    case .pppp:
-        .pppp
-
-    case .ppp:
-        .ppp
-
-    case .pp:
-        .pp
-
-    case .p:
-        .p
-
-    case .mp:
-        .mp
-
-    case .mf:
-        .mf
-
     case .f:
         .f
 
@@ -198,6 +180,24 @@ internal func convertToMusicXMLDynamics(_ dynamic: Dynamic) -> MXLDynamics.Item?
 
     case .ffff:
         .ffff
+
+    case .mf:
+        .mf
+
+    case .mp:
+        .mp
+
+    case .p:
+        .p
+
+    case .pp:
+        .pp
+
+    case .ppp:
+        .ppp
+
+    case .pppp:
+        .pppp
 
     default:
         nil
@@ -468,11 +468,11 @@ internal func dynamicMarkText(_ direction: MXLDirection) -> String? {
 // converts to a `Dynamic` level.
 internal func dynamicMarkText(_ item: MXLDynamics.Item) -> String? {
     switch item {
-    case let .otherDynamics(text):
-        text.value
-
     case .fz:
         "fz"
+
+    case let .otherDynamics(text):
+        text.value
 
     case .rf:
         "rf"
@@ -569,41 +569,22 @@ private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.It
     case Extra.accent.name:
         .articulations(MXLArticulations(items: [.accent(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
-    case Extra.marcato.name:
-        .articulations(MXLArticulations(items: [.strongAccent(MXLStrongAccent())]))
-
-    case Extra.tenuto.name:
-        .articulations(MXLArticulations(items: [.tenuto(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
-
-    case Extra.staccato.name:
-        .articulations(MXLArticulations(items: [.staccato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+    case Extra.articulation.name:
+        if case let .string(text)? = element.values.first {
+            .articulations(MXLArticulations(items: [.otherArticulation(MXLOtherPlacementText(value: text,
+                                                                                             printStyle: MXLPrintStyle()))]))
+        } else {
+            nil
+        }
 
     case Extra.breathMark.name:
         .articulations(MXLArticulations(items: [.breathMark(MXLBreathMark(value: .empty))]))
 
-    case Extra.fermata.name:
-        .fermata(MXLFermata(value: .normal))
-
-    case Extra.harmonic.name:
-        .technical(MXLTechnical(items: [.harmonic(MXLHarmonic())]))
-
-    case Extra.pizzicato.name:
-        .technical(MXLTechnical(items: [.snapPizzicato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
-
-    case Extra.upBow.name:
-        .technical(MXLTechnical(items: [.upBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
-
     case Extra.downBow.name:
         .technical(MXLTechnical(items: [.downBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
-    case Extra.trill.name:
-        .ornaments(MXLOrnaments(content: .trillMark(MXLEmptyTrillSound())))
-
-    case Extra.mordent.name:
-        .ornaments(MXLOrnaments(content: .mordent(MXLMordent())))
-
-    case Extra.turn.name:
-        .ornaments(MXLOrnaments(content: .turn(MXLHorizontalTurn())))
+    case Extra.fermata.name:
+        .fermata(MXLFermata(value: .normal))
 
     case Extra.fingering.name:
         if case let .string(text)? = element.values.first {
@@ -612,13 +593,32 @@ private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.It
             nil
         }
 
-    case Extra.articulation.name:
-        if case let .string(text)? = element.values.first {
-            .articulations(MXLArticulations(items: [.otherArticulation(MXLOtherPlacementText(value: text,
-                                                                                             printStyle: MXLPrintStyle()))]))
-        } else {
-            nil
-        }
+    case Extra.harmonic.name:
+        .technical(MXLTechnical(items: [.harmonic(MXLHarmonic())]))
+
+    case Extra.marcato.name:
+        .articulations(MXLArticulations(items: [.strongAccent(MXLStrongAccent())]))
+
+    case Extra.mordent.name:
+        .ornaments(MXLOrnaments(content: .mordent(MXLMordent())))
+
+    case Extra.pizzicato.name:
+        .technical(MXLTechnical(items: [.snapPizzicato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.staccato.name:
+        .articulations(MXLArticulations(items: [.staccato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.tenuto.name:
+        .articulations(MXLArticulations(items: [.tenuto(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
+
+    case Extra.trill.name:
+        .ornaments(MXLOrnaments(content: .trillMark(MXLEmptyTrillSound())))
+
+    case Extra.turn.name:
+        .ornaments(MXLOrnaments(content: .turn(MXLHorizontalTurn())))
+
+    case Extra.upBow.name:
+        .technical(MXLTechnical(items: [.upBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
     default:
         nil
@@ -731,47 +731,47 @@ private func _convertToStandardPitchOctave(_ mpOctave: MusicXML.Octave) throws(M
 // (`2 - 1/2^dots`).
 private func _quarterNoteFactor(_ beatUnit: MXLBeatUnit) -> Double {
     let base: Double = switch beatUnit.beatUnit {
-    case .maxima:
-        32
-
-    case .long:
-        16
-
     case .breve:
         8
-
-    case .whole:
-        4
-
-    case .half:
-        2
-
-    case .quarter:
-        1
 
     case .eighth:
         0.5
 
-    case .n16th:
-        0.25
+    case .half:
+        2
 
-    case .n32nd:
-        0.125
+    case .long:
+        16
 
-    case .n64th:
-        0.0625
+    case .maxima:
+        32
+
+    case .n1024th:
+        0.00390625
 
     case .n128th:
         0.03125
 
+    case .n16th:
+        0.25
+
     case .n256th:
         0.015625
+
+    case .n32nd:
+        0.125
 
     case .n512th:
         0.0078125
 
-    case .n1024th:
-        0.00390625
+    case .n64th:
+        0.0625
+
+    case .quarter:
+        1
+
+    case .whole:
+        4
     }
 
     let dotFactor = 2 - 1 / Double(1 << beatUnit.dot)

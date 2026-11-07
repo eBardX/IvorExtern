@@ -59,6 +59,26 @@ extension MIDI.Importer.NotePairer {
         else { return }
 
         switch message {
+        case .controlChange(_, .bankSelectLSB, _),
+             .controlChange(_, .bankSelectMSB, _):
+            bankSelectEvents.append(event)
+
+        case .controlChange(_, .channelVolumeMSB, _):
+            volumeEvents.append(event)
+
+        case .controlChange(_, .expressionControllerLSB, _),
+             .controlChange(_, .expressionControllerMSB, _):
+            expressionEvents.append(event)
+
+        case .controlChange(_, .panLSB, _),
+             .controlChange(_, .panMSB, _):
+            panEvents.append(event)
+
+        case let .noteOff(_, key, velocity):
+            try _closeNote(key: key,
+                           offTime: time,
+                           offVelocity: velocity)
+
         case let .noteOn(_, key, velocity) where velocity.uintValue == 0:
             try _closeNote(key: key,
                            offTime: time,
@@ -66,11 +86,6 @@ extension MIDI.Importer.NotePairer {
 
         case let .noteOn(_, key, velocity):
             openNotes[key, default: []].append((time, velocity, nil))
-
-        case let .noteOff(_, key, velocity):
-            try _closeNote(key: key,
-                           offTime: time,
-                           offVelocity: velocity)
 
         case let .polyphonicPressure(_, key, pressure):
             if var opens = openNotes[key], !opens.isEmpty {
@@ -80,21 +95,6 @@ extension MIDI.Importer.NotePairer {
                 opens[lastIndex].peakKeyPressure = MIDIData1Value(uintValue: peak)
                 openNotes[key] = opens
             }
-
-        case .controlChange(_, .panLSB, _),
-             .controlChange(_, .panMSB, _):
-            panEvents.append(event)
-
-        case .controlChange(_, .bankSelectLSB, _),
-             .controlChange(_, .bankSelectMSB, _):
-            bankSelectEvents.append(event)
-
-        case .controlChange(_, .expressionControllerLSB, _),
-             .controlChange(_, .expressionControllerMSB, _):
-            expressionEvents.append(event)
-
-        case .controlChange(_, .channelVolumeMSB, _):
-            volumeEvents.append(event)
 
         case .programChange:
             programChangeEvents.append(event)

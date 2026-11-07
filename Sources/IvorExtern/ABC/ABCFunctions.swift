@@ -20,24 +20,6 @@ private import XestiNumbers
 // rounded to the nearest one.
 internal func convertToABCDecorationName(_ dynamic: Dynamic) -> ABCDecoration.Name? {
     let name: String? = switch dynamic {
-    case .pppp:
-        "pppp"
-
-    case .ppp:
-        "ppp"
-
-    case .pp:
-        "pp"
-
-    case .p:
-        "p"
-
-    case .mp:
-        "mp"
-
-    case .mf:
-        "mf"
-
     case .f:
         "f"
 
@@ -49,6 +31,24 @@ internal func convertToABCDecorationName(_ dynamic: Dynamic) -> ABCDecoration.Na
 
     case .ffff:
         "ffff"
+
+    case .mf:
+        "mf"
+
+    case .mp:
+        "mp"
+
+    case .p:
+        "p"
+
+    case .pp:
+        "pp"
+
+    case .ppp:
+        "ppp"
+
+    case .pppp:
+        "pppp"
 
     default:
         nil
@@ -71,14 +71,11 @@ internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? 
     case Extra.accent.name:
         "accent"
 
-    case Extra.marcato.name:
-        "marcato"
+    case Extra.breathMark.name:
+        "breath"
 
-    case Extra.tenuto.name:
-        "tenuto"
-
-    case Extra.staccato.name:
-        "staccato"
+    case Extra.downBow.name:
+        "downbow"
 
     case Extra.fermata.name:
         "fermata"
@@ -86,26 +83,29 @@ internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? 
     case Extra.harmonic.name:
         "harmonic"
 
-    case Extra.pizzicato.name:
-        "snap"
-
-    case Extra.trill.name:
-        "trill"
+    case Extra.marcato.name:
+        "marcato"
 
     case Extra.mordent.name:
         "mordent"
+
+    case Extra.pizzicato.name:
+        "snap"
+
+    case Extra.staccato.name:
+        "staccato"
+
+    case Extra.tenuto.name:
+        "tenuto"
+
+    case Extra.trill.name:
+        "trill"
 
     case Extra.turn.name:
         "turn"
 
     case Extra.upBow.name:
         "upbow"
-
-    case Extra.downBow.name:
-        "downbow"
-
-    case Extra.breathMark.name:
-        "breath"
 
     default:
         nil
@@ -115,26 +115,6 @@ internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? 
     else { return nil }
 
     return ABCDecoration.Name(stringValue: name)
-}
-
-// Converts an absolute duration (in beats, i.e. a multiplier of the unit
-// note length `L:1/4` this exporter always writes) into an `ABCLength`, or
-// `nil` if the reduced fraction's denominator isn't a power of 2 in
-// 1...512 — the caller is responsible for tuplet-scaling a duration first
-// when its plain reduced form doesn't qualify.
-internal func convertToABCLength(_ duration: BeatDuration) -> ABCLength? {
-    let numberValue = duration.numberValue
-
-    guard numberValue.isRational
-    else { return nil }
-
-    let numerator = numberValue.numerator.uintValue
-
-    guard numerator > 0
-    else { return nil }
-
-    return ABCLength(numerator: numerator,
-                     denominator: numberValue.denominator.uintValue)
 }
 
 // The model carries no octave below C0, but `ABCPitch.Octave` only spans
@@ -175,14 +155,11 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
          "emphasis":
         .accent
 
-    case "marcato":
-        .marcato
+    case "breath":
+        .breathMark
 
-    case "tenuto":
-        .tenuto
-
-    case "staccato":
-        .staccato
+    case "downbow":
+        .downBow
 
     case "fermata",
          "invertedfermata":
@@ -192,29 +169,32 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
          "open":
         .harmonic
 
-    case "trill":
-        .trill
-
     case "lowermordent",
          "mordent",
          "uppermordent":
         .mordent
+
+    case "marcato":
+        .marcato
+
+    case "plus",
+         "snap":
+        .pizzicato
+
+    case "staccato":
+        .staccato
+
+    case "tenuto":
+        .tenuto
+
+    case "trill":
+        .trill
 
     case "turn":
         .turn
 
     case "upbow":
         .upBow
-
-    case "downbow":
-        .downBow
-
-    case "breath":
-        .breathMark
-
-    case "plus",
-         "snap":
-        .pizzicato
 
     default:
         nil
@@ -252,24 +232,6 @@ internal func convertToChannel(_ directive: ABCDirective) -> Int? {
 // guessed at.
 internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
     switch name.stringValue.lowercased() {
-    case "pppp":
-        .pppp
-
-    case "ppp":
-        .ppp
-
-    case "pp":
-        .pp
-
-    case "p":
-        .p
-
-    case "mp":
-        .mp
-
-    case "mf":
-        .mf
-
     case "f":
         .f
 
@@ -281,6 +243,24 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
 
     case "ffff":
         .ffff
+
+    case "mf":
+        .mf
+
+    case "mp":
+        .mp
+
+    case "p":
+        .p
+
+    case "pp":
+        .pp
+
+    case "ppp":
+        .ppp
+
+    case "pppp":
+        .pppp
 
     default:
         nil

@@ -345,6 +345,100 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_negativeExpressionValue_writesNoExpression() throws {
+        var dynamicMap = DynamicMap<BeatTime>()
+
+        dynamicMap.insert(time: .zero,
+                          dynamic: .mf,
+                          extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(-1)])]))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        dynamicMap: dynamicMap)
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+
+        #expect(!sequence.tracks[1].events.contains {
+            if case .midi(_, .controlChange(_, .expressionControllerMSB, _)) = $0 { true } else { false }
+        })
+    }
+
+    @Test
+    func convert_negativeMidiKeyPressure_writesNoPressure() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        table.insert(attack: .zero,
+                     duration: BeatDuration(1),
+                     pitch: NoteNumber(60),
+                     extras: Extras(elements: [Extra(name: Extra.midiKeyPressure.name, values: [.int(-1)])]))
+
+        let part = Part(name: "Piano", noteTable: table)
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+
+        #expect(!sequence.tracks[1].events.contains {
+            if case .midi(_, .polyphonicPressure) = $0 { true } else { false }
+        })
+    }
+
+    @Test
+    func convert_negativeMidiPan_fallsBackToThePan() throws {
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: .zero,
+                      pan: .center,
+                      extras: Extras(elements: [Extra(name: Extra.midiPan.name, values: [.int(-1)])]))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        panMap: panMap)
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+        let events = sequence.tracks[1].events
+
+        #expect(events.contains {
+            if case .midi(_, .controlChange(_, .panMSB, _)) = $0 { true } else { false }
+        })
+        #expect(!events.contains {
+            if case .midi(_, .controlChange(_, .panLSB, _)) = $0 { true } else { false }
+        })
+    }
+
+    @Test
+    func convert_negativeMidiTempo_fallsBackToTheTempo() throws {
+        var tempoMap = TempoMap()
+
+        try tempoMap.insert(beatTime: .zero,
+                            tempo: #require(Tempo(uintValue: 120)),
+                            extras: Extras(elements: [Extra(name: Extra.midiTempo.name, values: [.int(-1)])]))
+
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([], tempoMap)))
+        let tempos = sequence.tracks[0].events.compactMap { event -> UInt? in
+            guard case let .meta(_, .tempo(tempo)) = event
+            else { return nil }
+
+            return tempo.uintValue
+        }
+
+        #expect(tempos == [500_000])
+    }
+
+    @Test
+    func convert_negativeMidiVolume_writesNoChannelVolume() throws {
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: .zero,
+                                 instrument: #require(Instrument(stringValue: "Vibraphone")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(-5)])]))
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        instrumentMap: instrumentMap)
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+
+        #expect(!sequence.tracks[1].events.contains {
+            if case .midi(_, .controlChange(_, .channelVolumeMSB, _)) = $0 { true } else { false }
+        })
+    }
+
+    @Test
     func convert_sixteenParts_succeeds() throws {
         let parts = (1...16).map {
             Part(name: "P\($0)", noteTable: NoteTable<BeatTime, NoteNumber>())
@@ -1079,53 +1173,6 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func roundTrip_panStep_writesOneEventAndStaysAStep() throws {
-        var panMap = PanMap<BeatTime>()
-
-        panMap.insert(time: BeatTime(0), pan: .left)
-        panMap.insert(time: BeatTime(4), pan: .left)
-        panMap.insert(time: BeatTime(4), pan: .right)
-
-        let part = Part(name: "Piano",
-                        noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        panMap: panMap)
-        let work = Work(name: "PanStep", content: .keyboardBeat([part], TempoMap()))
-        let recovered = try roundTrip(work,
-                                      exporter: MIDI.Exporter(),
-                                      importer: MIDI.Importer(),
-                                      fileFormat: .midi)
-        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
-
-        expectPanMapsMatch(recoveredPart.panMap, panMap)
-    }
-
-    @Test
-    func roundTrip_velocities_importAsSteps() throws {
-        var table = NoteTable<BeatTime, NoteNumber>()
-
-        for (beat, velocity) in [(Number(0), 100), (Number(4), 50), (Number(8), 50)] {
-            table.insert(attack: BeatTime(beat),
-                         duration: BeatDuration(1),
-                         pitch: NoteNumber(60),
-                         extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(velocity)])]))
-        }
-
-        let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Velocities", content: .keyboardBeat([part], TempoMap()))
-        let recovered = try roundTrip(work,
-                                      exporter: MIDI.Exporter(),
-                                      importer: MIDI.Importer(),
-                                      fileFormat: .midi)
-        let dynamicMap = try #require(keyboardBeatParts(of: recovered)?.first).dynamicMap
-
-        // Beat 4 reasserts the old level; beat 8 changes nothing, so its reassert collapses.
-        #expect(dynamicMap.map(\.time) == [BeatTime(0), BeatTime(4), BeatTime(4), BeatTime(8)])
-        #expect(dynamicMap[BeatTime(3)] == dynamicMap[BeatTime(0)])
-        #expect(dynamicMap[BeatTime(6)] == dynamicMap[BeatTime(4)])
-        #expect(dynamicMap[BeatTime(0)] != dynamicMap[BeatTime(4)])
-    }
-
-    @Test
     func roundtrip_panRamp_survivesExportReimport() throws {
         var panMap = PanMap<BeatTime>()
 
@@ -1145,6 +1192,27 @@ extension MIDIExporterTests {
         else { Issue.record("Expected a recovered part"); return }
 
         #expect(!recoveredPart.panMap.isEmpty)
+    }
+
+    @Test
+    func roundTrip_panStep_writesOneEventAndStaysAStep() throws {
+        var panMap = PanMap<BeatTime>()
+
+        panMap.insert(time: BeatTime(0), pan: .left)
+        panMap.insert(time: BeatTime(4), pan: .left)
+        panMap.insert(time: BeatTime(4), pan: .right)
+
+        let part = Part(name: "Piano",
+                        noteTable: NoteTable<BeatTime, NoteNumber>(),
+                        panMap: panMap)
+        let work = Work(name: "PanStep", content: .keyboardBeat([part], TempoMap()))
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
+
+        expectPanMapsMatch(recoveredPart.panMap, panMap)
     }
 
     @Test(arguments: [nil, 1, 40, 127])
@@ -1273,6 +1341,32 @@ extension MIDIExporterTests {
         let recoveredTempoMap = try #require(recovered.tempoMap)
 
         expectTempoMapsMatch(recoveredTempoMap, tempoMap)
+    }
+
+    @Test
+    func roundTrip_velocities_importAsSteps() throws {
+        var table = NoteTable<BeatTime, NoteNumber>()
+
+        for (beat, velocity) in [(Number(0), 100), (Number(4), 50), (Number(8), 50)] {
+            table.insert(attack: BeatTime(beat),
+                         duration: BeatDuration(1),
+                         pitch: NoteNumber(60),
+                         extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(velocity)])]))
+        }
+
+        let part = Part(name: "Piano", noteTable: table)
+        let work = Work(name: "Velocities", content: .keyboardBeat([part], TempoMap()))
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+        let dynamicMap = try #require(keyboardBeatParts(of: recovered)?.first).dynamicMap
+
+        // Beat 4 reasserts the old level; beat 8 changes nothing, so its reassert collapses.
+        #expect(dynamicMap.map(\.time) == [BeatTime(0), BeatTime(4), BeatTime(4), BeatTime(8)])
+        #expect(dynamicMap[BeatTime(3)] == dynamicMap[BeatTime(0)])
+        #expect(dynamicMap[BeatTime(6)] == dynamicMap[BeatTime(4)])
+        #expect(dynamicMap[BeatTime(0)] != dynamicMap[BeatTime(4)])
     }
 
     @Test

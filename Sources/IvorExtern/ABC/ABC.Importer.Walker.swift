@@ -41,6 +41,24 @@ extension ABC.Importer {
         internal init() {
         }
 
+        // MARK: Private Nested Types
+
+        private struct Accumulator {
+
+            // MARK: Fileprivate Instance Properties
+
+            fileprivate var identity: ABC.Voice?
+            fileprivate var items: [ABC.Importer.Item] = []
+        }
+
+        // Which way a hairpin decoration ramps. Not exposed beyond this file —
+        // ABC has no typed AST payload for a hairpin the way Guido's
+        // `GMNDynamicRamp` does, so this exists solely to drive `_shifted(_:direction:)`.
+        private enum DynamicRampDirection {
+            case crescendo
+            case diminuendo
+        }
+
         // MARK: Private Instance Properties
 
         private let macroTable = MacroTable()
@@ -77,24 +95,6 @@ extension ABC.Importer.Walker {
         }
 
         return results
-    }
-
-    // MARK: Private Nested Types
-
-    private struct Accumulator {
-
-        // MARK: Fileprivate Instance Properties
-
-        fileprivate var identity: ABC.Voice?
-        fileprivate var items: [ABC.Importer.Item] = []
-    }
-
-    // Which way a hairpin decoration ramps. Not exposed beyond this file —
-    // ABC has no typed AST payload for a hairpin the way Guido's
-    // `GMNDynamicRamp` does, so this exists solely to drive `_shifted(_:direction:)`.
-    private enum DynamicRampDirection {
-        case crescendo
-        case diminuendo
     }
 
     // MARK: Private Type Properties
@@ -503,32 +503,6 @@ extension ABC.Importer.Walker {
              .variantEnding:
             break
 
-        case .shorthand(.dot):
-            context.pendingNoteExtras.append(.staccato)
-
-        case let .shorthand(shorthand):
-            if case let .decoration(decoration) = context.shorthands[shorthand] {
-                try _handleDecoration(decoration, &context)
-            }
-
-        case .slur(.startDotted),
-             .slur(.startRegular):
-            context.pendingNoteExtras.append(.slurStart)
-
-        case .slur(.endDotted),
-             .slur(.endRegular):
-            // The note this slur ends is still sitting in `pendingEvent`
-            // (a `)` is written immediately after it, and neither this case
-            // nor its siblings above flush) — appended directly to the
-            // pending note's own extras, unlike `slurStart`/the shorthand/
-            // decoration cases above, which stage onto `pendingNoteExtras`
-            // for the *next* note since their marker precedes it.
-            if let pending = context.pendingEvent {
-                context.pendingEvent = (attack: pending.attack,
-                                        event: pending.event,
-                                        extras: pending.extras + [.slurEnd])
-            }
-
         case .barLine:
             context.barAccidentals = [:]
 
@@ -553,6 +527,32 @@ extension ABC.Importer.Walker {
 
         case let .rest(rest):
             try _handleRest(rest, &context)
+
+        case .shorthand(.dot):
+            context.pendingNoteExtras.append(.staccato)
+
+        case let .shorthand(shorthand):
+            if case let .decoration(decoration) = context.shorthands[shorthand] {
+                try _handleDecoration(decoration, &context)
+            }
+
+        case .slur(.endDotted),
+             .slur(.endRegular):
+            // The note this slur ends is still sitting in `pendingEvent`
+            // (a `)` is written immediately after it, and neither this case
+            // nor its siblings flush) — appended directly to the
+            // pending note's own extras, unlike `slurStart`/the shorthand/
+            // decoration cases, which stage onto `pendingNoteExtras`
+            // for the *next* note since their marker precedes it.
+            if let pending = context.pendingEvent {
+                context.pendingEvent = (attack: pending.attack,
+                                        event: pending.event,
+                                        extras: pending.extras + [.slurEnd])
+            }
+
+        case .slur(.startDotted),
+             .slur(.startRegular):
+            context.pendingNoteExtras.append(.slurStart)
 
         case let .tuplet(tuplet):
             let resolved = rhythm.resolvedTuplet(tuplet, meter: context.meter)

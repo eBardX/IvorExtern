@@ -225,8 +225,7 @@ extension MIDI.Exporter {
 
                 events.append(.midi(attEventTime, .noteOn(channel, noteNumber, attKeyVelocity)))
 
-                if let pressure = intValue(note.extras, .midiKeyPressure),
-                   let value = MIDIData1Value(uintValue: UInt(pressure)) {
+                if let value = intValue(note.extras, .midiKeyPressure).flatMap(UInt.init(exactly:)).flatMap(MIDIData1Value.init(uintValue:)) {
                     events.append(.midi(attEventTime, .polyphonicPressure(channel, noteNumber, value)))
                 }
 
@@ -285,10 +284,8 @@ extension MIDI.Exporter {
         var events: [MIDI.Event] = []
 
         for entry in dynamicMap {
-            if let expression = intValue(entry.extras, .expressionValue),
+            if let raw = intValue(entry.extras, .expressionValue).flatMap(UInt.init(exactly:)),
                let eventTime = tickMap.eventTime(at: entry.time) {
-                let raw = UInt(expression)
-
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
                    let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
                     events.append(.midi(eventTime, .controlChange(channel, .expressionControllerMSB, msb)))
@@ -368,7 +365,7 @@ extension MIDI.Exporter {
                 }
 
                 if let volume = doubleValue(entry.extras, .midiVolume),
-                   let value = MIDIData1Value(uintValue: UInt((volume / 100.0 * 127.0).rounded())) {
+                   let value = UInt(exactly: (volume / 100.0 * 127.0).rounded()).flatMap(MIDIData1Value.init(uintValue:)) {
                     events.append(.midi(eventTime, .controlChange(channel, .channelVolumeMSB, value)))
                 }
 
@@ -410,9 +407,7 @@ extension MIDI.Exporter {
             guard let eventTime = tickMap.eventTime(at: entry.time)
             else { continue }
 
-            if let midiPan = intValue(entry.extras, .midiPan) {
-                let raw = UInt(midiPan)
-
+            if let raw = intValue(entry.extras, .midiPan).flatMap(UInt.init(exactly:)) {
                 if let msb = MIDIData1Value(uintValue: raw >> 7),
                    let lsb = MIDIData1Value(uintValue: raw & 0x7f) {
                     events.append(.midi(eventTime, .controlChange(channel, .panLSB, lsb)))
@@ -509,7 +504,7 @@ extension MIDI.Exporter {
             guard tempo != lastEmittedTempo
             else { continue }
 
-            let exactMidiTempo = exactMicrosecondsByBeatTime[sampleBeatTime].flatMap { MIDI.Tempo(uintValue: UInt($0)) }
+            let exactMidiTempo = exactMicrosecondsByBeatTime[sampleBeatTime].flatMap(UInt.init(exactly:)).flatMap(MIDI.Tempo.init(uintValue:))
 
             if let midiTempo = exactMidiTempo ?? convertToMIDITempo(tempo) {
                 changes.append((sampleBeatTime, midiTempo))

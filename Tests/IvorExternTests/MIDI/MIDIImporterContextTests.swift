@@ -16,6 +16,16 @@ struct MIDIImporterContextTests {
 
 extension MIDIImporterContextTests {
     @Test
+    func handlePan_insertsPanValue() {
+        let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
+        var context = MIDI.Importer.Context(timeMap: beatMap)
+
+        context.handlePan(SMFEventTime(0), MIDI.PanValue(64), nil)
+
+        #expect(!context.panMap.isEmpty)
+    }
+
+    @Test
     func handlePan_laterEvent_isStep() {
         let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
         var context = MIDI.Importer.Context(timeMap: beatMap)
@@ -31,16 +41,6 @@ extension MIDIImporterContextTests {
         #expect(times == [BeatTime(0), BeatTime(2), BeatTime(2)])
         #expect(context.panMap[BeatTime(1)] == early)
         #expect(context.panMap[BeatTime(2)] != early)
-    }
-
-    @Test
-    func handlePan_insertsPanValue() {
-        let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
-        var context = MIDI.Importer.Context(timeMap: beatMap)
-
-        context.handlePan(SMFEventTime(0), MIDI.PanValue(64), nil)
-
-        #expect(!context.panMap.isEmpty)
     }
 
     @Test

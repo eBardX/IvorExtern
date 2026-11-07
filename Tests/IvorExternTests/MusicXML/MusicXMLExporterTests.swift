@@ -313,6 +313,31 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_negativeMidiExtras_writeNoneOfThem() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: .zero, duration: BeatDuration(1), pitch: "C4")
+
+        var instrumentMap = InstrumentMap<BeatTime>()
+
+        try instrumentMap.insert(time: .zero,
+                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(-1)]),
+                                                           Extra(name: Extra.midiUnpitched.name, values: [.int(-1)])]))
+
+        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap, extras: channelExtras(-1))
+        let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+        let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
+            guard case let .scorePart(scorePart) = item
+            else { return nil }
+
+            return scorePart
+        }.first)
+
+        #expect(scorePart.group2.isEmpty)
+    }
+
+    @Test
     func convert_noteCrossingBarline_splitsIntoTiedSegments() throws {
         var table = NoteTable<BeatTime, Pitch>()
 

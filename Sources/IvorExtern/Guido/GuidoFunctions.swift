@@ -23,24 +23,6 @@ internal func convertToBeatDuration(_ duration: Guido.Duration) -> BeatDuration 
 // this vocabulary doesn't cover) is left unrecognized rather than guessed at.
 internal func convertToDynamic(_ type: String) -> Dynamic? {
     switch type.lowercased() {
-    case "pppp":
-        .pppp
-
-    case "ppp":
-        .ppp
-
-    case "pp":
-        .pp
-
-    case "p":
-        .p
-
-    case "mp":
-        .mp
-
-    case "mf":
-        .mf
-
     case "f":
         .f
 
@@ -52,6 +34,24 @@ internal func convertToDynamic(_ type: String) -> Dynamic? {
 
     case "ffff":
         .ffff
+
+    case "mf":
+        .mf
+
+    case "mp":
+        .mp
+
+    case "p":
+        .p
+
+    case "pp":
+        .pp
+
+    case "ppp":
+        .ppp
+
+    case "pppp":
+        .pppp
 
     default:
         nil
@@ -82,24 +82,6 @@ internal func convertToGuidoDuration(_ duration: BeatDuration) -> GMNDuration? {
 // rounded to the nearest one.
 internal func convertToGuidoIntensity(_ dynamic: Dynamic) -> GMNIntensity? {
     let type: String? = switch dynamic {
-    case .pppp:
-        "pppp"
-
-    case .ppp:
-        "ppp"
-
-    case .pp:
-        "pp"
-
-    case .p:
-        "p"
-
-    case .mp:
-        "mp"
-
-    case .mf:
-        "mf"
-
     case .f:
         "f"
 
@@ -111,6 +93,24 @@ internal func convertToGuidoIntensity(_ dynamic: Dynamic) -> GMNIntensity? {
 
     case .ffff:
         "ffff"
+
+    case .mf:
+        "mf"
+
+    case .mp:
+        "mp"
+
+    case .p:
+        "p"
+
+    case .pp:
+        "pp"
+
+    case .ppp:
+        "ppp"
+
+    case .pppp:
+        "pppp"
 
     default:
         nil
@@ -159,46 +159,19 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
     case Extra.accent.name:
         GMNArticulation(kind: .accent, body: body).map { GMNTag.articulation($0) }
 
-    case Extra.marcato.name:
-        GMNArticulation(kind: .marcato, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.tenuto.name:
-        GMNArticulation(kind: .tenuto, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.staccato.name:
-        GMNArticulation(kind: .staccato, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.fermata.name:
-        GMNArticulation(kind: .fermata, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.harmonic.name:
-        GMNArticulation(kind: .harmonic, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.pizzicato.name:
-        GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
-
     case Extra.articulation.name:
         _convertToPizzicatoType(extra).flatMap {
             GMNArticulation(kind: .pizzicato, type: $0, body: body).map { GMNTag.articulation($0) }
         }
 
-    case Extra.upBow.name:
-        GMNArticulation(kind: .bow, type: "up", body: body).map { GMNTag.articulation($0) }
+    case Extra.breathMark.name:
+        .breathMark(GMNBreathMark(body: body))
 
     case Extra.downBow.name:
         GMNArticulation(kind: .bow, type: "down", body: body).map { GMNTag.articulation($0) }
 
-    case Extra.trill.name:
-        GMNOrnament(kind: .trill, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.mordent.name:
-        GMNOrnament(kind: .mordent, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.turn.name:
-        GMNOrnament(kind: .turn, body: body).map { GMNTag.ornament($0) }
-
-    case Extra.breathMark.name:
-        .breathMark(GMNBreathMark(body: body))
+    case Extra.fermata.name:
+        GMNArticulation(kind: .fermata, body: body).map { GMNTag.articulation($0) }
 
     case Extra.fingering.name:
         if case let .string(text)? = extra.values.first {
@@ -206,6 +179,33 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
         } else {
             nil
         }
+
+    case Extra.harmonic.name:
+        GMNArticulation(kind: .harmonic, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.marcato.name:
+        GMNArticulation(kind: .marcato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.mordent.name:
+        GMNOrnament(kind: .mordent, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.pizzicato.name:
+        GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.staccato.name:
+        GMNArticulation(kind: .staccato, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.tenuto.name:
+        GMNArticulation(kind: .tenuto, body: body).map { GMNTag.articulation($0) }
+
+    case Extra.trill.name:
+        GMNOrnament(kind: .trill, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.turn.name:
+        GMNOrnament(kind: .turn, body: body).map { GMNTag.ornament($0) }
+
+    case Extra.upBow.name:
+        GMNArticulation(kind: .bow, type: "up", body: body).map { GMNTag.articulation($0) }
 
     default:
         nil

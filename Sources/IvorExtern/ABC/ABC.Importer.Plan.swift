@@ -133,6 +133,14 @@ extension ABC.Importer.Plan {
 
     // MARK: Private Type Methods
 
+    private static func _endsConstruct(_ barLine: ABCBarLine) -> Bool {
+        barLine.kind == .double || barLine.kind == .end
+    }
+
+    private static func _isOpener(_ barLine: ABCBarLine) -> Bool {
+        barLine.kind == .repeat && barLine.precedingPlayCount.uintValue == 1
+    }
+
     private static func _part(for letter: Character) -> ABCPart? {
         partsByLetter[letter]
     }
@@ -148,6 +156,29 @@ extension ABC.Importer.Plan {
     }
 
     // MARK: Private Instance Methods
+
+    // How many passes the ending chain starting at or after `start` plays:
+    // up to its highest ending number, and at least two, since a lone
+    // `|1 … :|` still repeats, skipping the ending the second time.
+    private func _endingPassCount(from start: Int,
+                                  upTo end: Int) -> UInt {
+        var passCount: UInt = 2
+
+        for item in items[start..<end] {
+            switch item {
+            case let .symbol(.barLine(barLine)) where Self._endsConstruct(barLine) || Self._isOpener(barLine):
+                return passCount
+
+            case let .symbol(.variantEnding(variantEnding)):
+                passCount = max(passCount, variantEnding.endings.map(\.upperBound).max() ?? 0)
+
+            default:
+                break
+            }
+        }
+
+        return passCount
+    }
 
     // A single linear play/skip walk over one segment (no nesting — standard
     // ABC doesn't nest repeats), ported from `RepeatExpander._expandRepeats`.
@@ -195,13 +226,7 @@ extension ABC.Importer.Plan {
 
         while index < range.upperBound {
             switch items[index] {
-            case let .symbol(.variantEnding(variantEnding)):
-                flush(upTo: index)
-                skipping = !variantEnding.endings.contains { $0.contains(pass) }
-                sawVariantEndingThisPass = true
-                index += 1
-
-            case let .symbol(.barLine(barLine)) where barLine.kind == .repeat && barLine.precedingPlayCount.uintValue == 1:
+            case let .symbol(.barLine(barLine)) where Self._isOpener(barLine):
                 // A pure opener (e.g. `|:`) — by `ABCBarLine`'s own init
                 // this never doubles as a closer.
                 if !skipping {
@@ -209,8 +234,8 @@ extension ABC.Importer.Plan {
                 }
 
                 flush(upTo: index + 1)
-                loopStart = index + 1
                 index += 1
+                resetConstruct(to: index)
 
             case let .symbol(.barLine(barLine)) where barLine.kind == .repeat:
                 if skipping {
@@ -225,42 +250,45 @@ extension ABC.Importer.Plan {
                 keep(index)
                 flush(upTo: index + 1)
 
-                let terminal: Bool
+                // A closer's own play count is authoritative only for a
+                // plain repeat with no numbered endings at all; an ending
+                // chain plays as many passes as its endings number.
+                let passCount = sawVariantEndingThisPass
+                    ? _endingPassCount(from: loopStart, upTo: range.upperBound)
+                    : barLine.precedingPlayCount.uintValue
 
-                if sawVariantEndingThisPass {
-                    // An individual closer's play count in an ending chain
-                    // is not authoritative.
+                if pass < passCount {
                     try advancePassOrTerminate()
-                    terminal = false
-                } else if pass < barLine.precedingPlayCount.uintValue {
-                    // The only place a closer's own play count is
-                    // authoritative: a plain repeat with no numbered
-                    // endings at all.
-                    try advancePassOrTerminate()
-                    terminal = false
-                } else {
-                    terminal = true
-                }
 
-                if terminal {
-                    index += 1
-                    resetConstruct(to: index)
-                } else {
                     index = loopStart
                     skipping = false
                     sawVariantEndingThisPass = false
+                } else {
+                    index += 1
+                    resetConstruct(to: index)
                 }
 
-            case .symbol(.barLine):
-                // Any other bar line (plain/double/end/invisible) ends the
-                // construct here, regardless of `skipping` state.
+            case let .symbol(.barLine(barLine)):
+                // A plain or invisible bar line only divides measures,
+                // inside a repeat as much as outside one. A double or end
+                // bar line ends the construct, regardless of `skipping`
+                // state, so a closer after it returns no further back.
                 if !skipping {
                     keep(index)
                 }
 
                 flush(upTo: index + 1)
                 index += 1
-                resetConstruct(to: index)
+
+                if Self._endsConstruct(barLine) {
+                    resetConstruct(to: index)
+                }
+
+            case let .symbol(.variantEnding(variantEnding)):
+                flush(upTo: index)
+                skipping = !variantEnding.endings.contains { $0.contains(pass) }
+                sawVariantEndingThisPass = true
+                index += 1
 
             default:
                 if !skipping {

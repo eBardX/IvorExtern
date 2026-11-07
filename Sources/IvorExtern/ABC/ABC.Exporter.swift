@@ -61,11 +61,6 @@ extension ABC.Exporter {
 
     // MARK: Private Type Methods
 
-    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
-    // crossing a barline splits into tied segments (each independently
-    // tuplet-scaled), gaps become rests, and every measure sums to exactly
-    // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
-    // duration becomes a tuplet-marked segment instead.
     private static func _barTimes(measureCount: UInt) -> [BeatTime] {
         var barTimes: [BeatTime] = []
         var barBeat: UInt = 4
@@ -442,6 +437,11 @@ extension ABC.Exporter {
         return header
     }
 
+    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
+    // crossing a barline splits into tied segments (each independently
+    // tuplet-scaled), gaps become rests, and every measure sums to exactly
+    // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
+    // duration becomes a tuplet-marked segment instead.
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
         let events = _events(part.noteTable)

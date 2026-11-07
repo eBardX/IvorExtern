@@ -90,7 +90,7 @@ instrument sounds as:
 let playable    = try work.convert(timeBasis: .wall, pitchNotation: .keyboard)!
 let performance = WorkPerformance(work: playable)!
 
-performance.duration        // when the last note ends
+performance.duration        // the time of the last event
 performance.events          // bank selects, program changes, pan, expression, notes, …
 ```
 

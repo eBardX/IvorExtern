@@ -46,6 +46,13 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
+    func convertToDynamic_item_namedLevels_convertToThemselves() {
+        #expect(convertToDynamic(MXLDynamics.Item.fff) == .fff)
+        #expect(convertToDynamic(MXLDynamics.Item.mp) == .mp)
+        #expect(convertToDynamic(MXLDynamics.Item.ppp) == .ppp)
+    }
+
+    @Test
     func convertToDynamic_item_niente_returnsSilence() {
         #expect(convertToDynamic(MXLDynamics.Item.n) == Dynamic(numberValue: 0))
     }
@@ -111,6 +118,133 @@ extension MusicXMLFunctionsTests {
                                      instrument: [scoreInstrument])
 
         #expect(convertToInstrument(scorePart) == Instrument("Violin"))
+    }
+
+    @Test
+    func convertToMusicXMLDynamics_dynamic_namedLevels_roundTrip() throws {
+        let dynamics: [Dynamic] = [.pppp, .ppp, .pp, .p, .mp, .mf, .f, .ff, .fff, .ffff]
+
+        for dynamic in dynamics {
+            let item = try #require(convertToMusicXMLDynamics(dynamic))
+
+            #expect(convertToDynamic(item) == dynamic)
+        }
+    }
+
+    @Test
+    func convertToMusicXMLDynamics_dynamic_unnamedLevel_returnsNil() throws {
+        let dynamic = try #require(Dynamic(numberValue: Number(0.55)))
+
+        #expect(convertToMusicXMLDynamics(dynamic) == nil)
+    }
+
+    @Test
+    func convertToMusicXMLDynamics_mark_fixedCases_matchIgnoringCase() {
+        let marks: [(String, MXLDynamics.Item)] = [("FZ", .fz),
+                                                   ("rf", .rf),
+                                                   ("rfz", .rfz),
+                                                   ("sf", .sf),
+                                                   ("SFZ", .sfz)]
+
+        for (mark, item) in marks {
+            #expect(convertToMusicXMLDynamics(mark: mark) == item)
+        }
+    }
+
+    @Test
+    func convertToMusicXMLDynamics_mark_otherText_becomesOtherDynamics() {
+        #expect(convertToMusicXMLDynamics(mark: "subito") == .otherDynamics(MXLOtherText(value: "subito")))
+    }
+
+    @Test
+    func convertToMusicXMLNotationItems_noPayload_dropsPayloadExtras() {
+        #expect(convertToMusicXMLNotationItems([.articulation, .fingering]).isEmpty)
+    }
+
+    @Test
+    func convertToMusicXMLNotationItems_payloadExtras_roundTripThroughImport() throws {
+        let extras = Extras(elements: [Extra(name: Extra.articulation.name, values: [.string("flick")]),
+                                       Extra(name: Extra.fingering.name, values: [.string("3")])])
+        let recovered = try roundTripNoteExtras(extras)
+
+        #expect(stringValue(recovered, .articulation) == "flick")
+        #expect(stringValue(recovered, .fingering) == "3")
+    }
+
+    @Test
+    func convertToMusicXMLNotationItems_pizzicato_writesSnapPizzicato() {
+        let snap = MXLTechnical.Item.snapPizzicato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)
+
+        #expect(convertToMusicXMLNotationItems([.pizzicato]) == [.technical(MXLTechnical(items: [snap]))])
+    }
+
+    @Test(arguments: [Extra.accent,
+                      .breathMark,
+                      .downBow,
+                      .fermata,
+                      .harmonic,
+                      .marcato,
+                      .mordent,
+                      .pizzicato,
+                      .staccato,
+                      .tenuto,
+                      .trill,
+                      .turn,
+                      .upBow])
+    func convertToMusicXMLNotationItems_tier1Flag_roundTripsThroughImport(extra: Extra) throws {
+        #expect(try hasFlag(roundTripNoteExtras(Extras(elements: [extra])), extra))
+    }
+
+    @Test
+    func convertToMusicXMLNotationItems_unlistedExtra_isDropped() {
+        #expect(convertToMusicXMLNotationItems([.slurStart]).isEmpty)
+    }
+
+    @Test
+    func convertToMusicXMLPitch_lowestOctave_throws() throws {
+        let octave = try #require(Pitch.Octave(intValue: -1))
+        let pitch = Pitch(pitchClass: PitchClass(letter: .c, accidental: .natural),
+                          octave: octave)
+
+        #expect(throws: MusicXML.Error.self) {
+            _ = try convertToMusicXMLPitch(pitch)
+        }
+    }
+
+    @Test
+    func convertToMusicXMLPitch_mapsAccidentals() throws {
+        let octave = try #require(Pitch.Octave(intValue: 4))
+        let accidentals: [(Pitch.Accidental, MusicXML.Semitones?)] = [(.doubleFlat, -2),
+                                                                      (.doubleSharp, 2),
+                                                                      (.flat, -1),
+                                                                      (.natural, nil),
+                                                                      (.sharp, 1)]
+
+        for (accidental, alter) in accidentals {
+            let pitch = Pitch(pitchClass: PitchClass(letter: .c, accidental: accidental),
+                              octave: octave)
+
+            #expect(try convertToMusicXMLPitch(pitch).alter == alter)
+        }
+    }
+
+    @Test
+    func convertToMusicXMLPitch_mapsLetters() throws {
+        let octave = try #require(Pitch.Octave(intValue: 4))
+        let letters: [(Pitch.Letter, MusicXML.Step)] = [(.a, .a),
+                                                        (.b, .b),
+                                                        (.c, .c),
+                                                        (.d, .d),
+                                                        (.e, .e),
+                                                        (.f, .f),
+                                                        (.g, .g)]
+
+        for (letter, step) in letters {
+            let pitch = Pitch(pitchClass: PitchClass(letter: letter, accidental: .natural),
+                              octave: octave)
+
+            #expect(try convertToMusicXMLPitch(pitch).step == step)
+        }
     }
 
     @Test
@@ -205,6 +339,30 @@ extension MusicXMLFunctionsTests {
         // converts to 120 quarter notes per minute.
         //
         #expect(convertToTempo(metronome)?.uintValue == 120)
+    }
+
+    @Test
+    func convertToTempo_metronome_everyBeatUnitScalesToQuarters() {
+        let units: [(MXLNoteKindValue, String, UInt)] = [(.breve, "5", 40),
+                                                         (.half, "30", 60),
+                                                         (.long, "5", 80),
+                                                         (.maxima, "5", 160),
+                                                         (.n1024th, "25600", 100),
+                                                         (.n128th, "3200", 100),
+                                                         (.n16th, "400", 100),
+                                                         (.n256th, "6400", 100),
+                                                         (.n32nd, "800", 100),
+                                                         (.n512th, "12800", 100),
+                                                         (.n64th, "1600", 100),
+                                                         (.whole, "5", 20)]
+
+        for (unit, perMinute, quarterBPM) in units {
+            let metronome = MXLMetronome(content: .beatUnit(MXLBeatUnit(beatUnit: unit, dot: 0),
+                                                            tied: [],
+                                                            content: .perMinute(MXLPerMinute(value: perMinute))))
+
+            #expect(convertToTempo(metronome)?.uintValue == quarterBPM)
+        }
     }
 
     @Test
@@ -341,10 +499,26 @@ extension MusicXMLFunctionsTests {
     }
 
     @Test
+    func determineWorkName_movementNumberOnly_returnsMovementNumber() {
+        let score = MXLScorePartwise(movementNumber: "2",
+                                     partList: MXLPartList())
+
+        #expect(determineWorkName(score) == "2")
+    }
+
+    @Test
     func determineWorkName_noWorkOrMovementInfo_returnsEmptyString() {
         let score = MXLScorePartwise(partList: MXLPartList())
 
         #expect(determineWorkName(score).isEmpty)
+    }
+
+    @Test
+    func determineWorkName_workNumberOnly_returnsWorkNumber() {
+        let score = MXLScorePartwise(work: MXLWork(number: "Op. 1"),
+                                     partList: MXLPartList())
+
+        #expect(determineWorkName(score) == "Op. 1")
     }
 
     @Test
@@ -353,5 +527,38 @@ extension MusicXMLFunctionsTests {
                                      partList: MXLPartList())
 
         #expect(determineWorkName(score) == "Symphony")
+    }
+
+    @Test
+    func dynamicMarkText_direction_onlyRecognizedMarks_returnsNil() {
+        let direction = MXLDirection(kind: [MXLDirection.Kind(content: .dynamics([MXLDynamics(items: [.ff])]))])
+
+        #expect(dynamicMarkText(direction) == nil)
+    }
+
+    @Test
+    func dynamicMarkText_direction_returnsFirstUnrecognizedMark() {
+        let direction = MXLDirection(kind: [MXLDirection.Kind(content: .dynamics([MXLDynamics(items: [.ff, .sfz, .rf])]))])
+
+        #expect(dynamicMarkText(direction) == "sfz")
+    }
+
+    @Test
+    func dynamicMarkText_item_namesEveryUnrecognizedItem() {
+        let items: [(MXLDynamics.Item, String)] = [(.fz, "fz"),
+                                                   (.otherDynamics(MXLOtherText(value: "subito")), "subito"),
+                                                   (.rf, "rf"),
+                                                   (.rfz, "rfz"),
+                                                   (.sf, "sf"),
+                                                   (.sfz, "sfz")]
+
+        for (item, text) in items {
+            #expect(dynamicMarkText(item) == text)
+        }
+    }
+
+    @Test
+    func dynamicMarkText_item_recognizedLevel_returnsNil() {
+        #expect(dynamicMarkText(MXLDynamics.Item.mf) == nil)
     }
 }

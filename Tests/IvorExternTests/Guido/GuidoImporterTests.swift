@@ -17,6 +17,24 @@ struct GuidoImporterTests {
 
 extension GuidoImporterTests {
     @Test
+    func convert_failingWalk_wrapsErrorInConvertFailure() {
+        let rest = GMNRest(duration: GMNDuration(milliseconds: 500))
+        let score = Guido.Score(variables: [],
+                                voices: [Guido.Voice(symbols: [.rest(rest)])])
+
+        do {
+            _ = try Guido.Importer().convert(score)
+
+            Issue.record("Expected convert to throw")
+        } catch {
+            guard case let .convertFailure(cause) = error
+            else { Issue.record("Expected convertFailure, got \(error)"); return }
+
+            #expect(cause != nil)
+        }
+    }
+
+    @Test
     func convert_instrumentTag_namesPart() throws {
         let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
         let score = try Guido.Parser().parse(data)
@@ -91,6 +109,24 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_intensityChange_isAStep() throws {
+        let part = try #require(standardBeatParts(of: readGuido(#"[ \intens<"p"> c d \intens<"f"> e ]"#))?.first)
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2), BeatTime(2)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.p, .p, .f])
+    }
+
+    @Test
+    func convert_intensityWithoutACanonicalLevel_keepsItsMark() throws {
+        let part = try #require(standardBeatParts(of: readGuido(#"[ \intens<"p"> c \intens<"sfz"> d ]"#))?.first)
+        let marks = part.dynamicMap.map { stringValue($0.extras, .dynamicMark) }
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(1)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.p, .p])
+        #expect(marks == [nil, "sfz"])
+    }
+
+    @Test
     func convert_multipleVoicesWithoutInstrumentTags_fallsBackToVoiceN() throws {
         let data = Data("{ [ c d ], [ \\instr<\"Bass\"> e f ], [ g a ] }".utf8)
         let score = try Guido.Parser().parse(data)
@@ -103,6 +139,14 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_rampTag_leavesAGlideBetweenItsEndpoints() throws {
+        let part = try #require(standardBeatParts(of: readGuido(#"[ \cresc( c d ) e ]"#))?.first)
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.mp, .mf])
+    }
+
+    @Test
     func convert_singleVoiceWithoutInstrumentTag_leavesPartUnnamed() throws {
         let data = Data("[ c d ]".utf8)
         let score = try Guido.Parser().parse(data)
@@ -112,6 +156,17 @@ extension GuidoImporterTests {
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == [""])
+    }
+
+    @Test
+    func convert_tempoChange_isAStep() throws {
+        let work = try readGuido(#"[ \tempo<"Fast", "1/4=120"> c \tempo<"Slow", "1/4=60"> d ]"#)
+
+        guard case let .standardBeat(_, tempoMap) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(tempoMap.map(\.beatTime) == [.zero, BeatTime(1), BeatTime(1)])
+        #expect(tempoMap.map(\.tempo.uintValue) == [120, 120, 60])
     }
 
     @Test

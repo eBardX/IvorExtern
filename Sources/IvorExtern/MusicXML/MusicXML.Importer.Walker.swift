@@ -104,6 +104,9 @@ extension MusicXML.Importer.Walker {
             case .breathMark:
                 .breathMark
 
+            case let .otherArticulation(text):
+                Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
             case .staccato:
                 .staccato
 
@@ -112,9 +115,6 @@ extension MusicXML.Importer.Walker {
 
             case .tenuto:
                 .tenuto
-
-            case let .otherArticulation(text):
-                Extra(name: Extra.articulation.name, values: [.string(text.value)])
 
             default:
                 nil
@@ -153,6 +153,9 @@ extension MusicXML.Importer.Walker {
                                      at beatTime: BeatTime,
                                      _ context: inout MusicXML.Importer.Context) {
         switch wedge.kind {
+        case .continue:
+            break
+
         case .crescendo,
              .diminuendo:
             context.pendingWedges[wedge.number] = (beatTime: beatTime,
@@ -174,9 +177,6 @@ extension MusicXML.Importer.Walker {
                                                                                          kind: .rampBoundary))
 
             context.lastDirectionDynamic = endDynamic
-
-        case .continue:
-            break
         }
     }
 
@@ -204,9 +204,6 @@ extension MusicXML.Importer.Walker {
         }
     }
 
-    // Folds a chord tone into the pitch table using its lead note's onset and
-    // duration, or inserts (or defers, via `pendingTies`) a standalone note
-    // or the lead note of a new chord.
     // The Tier 1/catch-all articulation/ornament/technical vocabulary (see
     // "Tier 1 — closed, shared-name bare flags" in `EXTRAS_CANDIDATES.md`),
     // plus `fingering` and `slurStart`/`slurEnd`, read from one note's
@@ -226,21 +223,21 @@ extension MusicXML.Importer.Walker {
                 case let .articulations(articulations):
                     elements += Self._articulationExtras(articulations.items)
 
+                case .fermata:
+                    elements.append(.fermata)
+
                 case let .ornaments(ornaments):
                     if let extra = Self._ornamentExtra(ornaments.content) {
                         elements.append(extra)
                     }
 
-                case let .technical(technical):
-                    elements += Self._technicalExtras(technical.items)
-
-                case .fermata:
-                    elements.append(.fermata)
-
                 case let .slur(slur):
                     if let extra = Self._slurExtra(slur) {
                         elements.append(extra)
                     }
+
+                case let .technical(technical):
+                    elements += Self._technicalExtras(technical.items)
 
                 default:
                     break
@@ -261,21 +258,21 @@ extension MusicXML.Importer.Walker {
 
     private static func _ornamentExtra(_ content: MXLOrnaments.Content) -> Extra? {
         switch content {
-        case .invertedMordent,
-             .mordent:
-            .mordent
-
-        case .trillMark:
-            .trill
-
         case .delayedInvertedTurn,
              .delayedTurn,
              .invertedTurn,
              .turn:
             .turn
 
+        case .invertedMordent,
+             .mordent:
+            .mordent
+
         case let .otherOrnament(text):
             Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+        case .trillMark:
+            .trill
 
         default:
             nil
@@ -340,34 +337,37 @@ extension MusicXML.Importer.Walker {
         let id = "\(slur.number.uintValue)"
 
         return switch slur.kind {
+        case .continue:
+            nil
+
         case .start:
             Extra(name: Extra.slurStart.name, values: [.string(id)])
 
         case .stop:
             Extra(name: Extra.slurEnd.name, values: [.string(id)])
-
-        case .continue:
-            nil
         }
     }
 
     private static func _technicalExtras(_ items: [MXLTechnical.Item]) -> [Extra] {
         items.compactMap { item in
             switch item {
-            case .upBow:
-                .upBow
-
             case .downBow:
                 .downBow
-
-            case .harmonic:
-                .harmonic
 
             case let .fingering(fingering):
                 Extra(name: Extra.fingering.name, values: [.string(fingering.value)])
 
+            case .harmonic:
+                .harmonic
+
             case let .otherTechnical(text):
                 Extra(name: Extra.articulation.name, values: [.string(text.value)])
+
+            case .snapPizzicato:
+                .pizzicato
+
+            case .upBow:
+                .upBow
 
             default:
                 nil
@@ -404,6 +404,9 @@ extension MusicXML.Importer.Walker {
 
     // MARK: Private Instance Methods
 
+    // Folds a chord tone into the pitch table using its lead note's onset and
+    // duration, or inserts (or defers, via `pendingTies`) a standalone note
+    // or the lead note of a new chord.
     private func _insert(_ pitch: IvorTuning.Pitch,
                          attack: BeatTime,
                          duration: BeatDuration,
@@ -691,6 +694,13 @@ extension MusicXML.Importer.Walker {
                 }
 
             case .syntheticRest:
+                // A synthesized rest replaces the measure's notes, not what
+                // its `<attributes>` declare, which can include the `<time>`
+                // the rest is measured by.
+                for case let .attributes(attributes) in measure.items {
+                    Self._apply(attributes, to: &context)
+                }
+
                 let time = context.times[nil] ?? context.times.values.first
                 let duration = try rhythm.wholeMeasureDuration(from: time,
                                                                context: "multiple-rest in measure \(measure.number)")

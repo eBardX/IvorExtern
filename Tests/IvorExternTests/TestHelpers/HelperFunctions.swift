@@ -838,4 +838,255 @@ internal func sampleMusicXMLWork() -> Work {
                                           Remark(text: "Op. 2", label: "work number")].compactMap(\.self)))
 }
 
+// A dynamic map holding `entries` as (beat time, dynamic), in order.
+internal func makeDynamicMap(_ entries: [(Number, Dynamic)]) -> DynamicMap<BeatTime> {
+    var dynamicMap = DynamicMap<BeatTime>()
+
+    for (time, dynamic) in entries {
+        dynamicMap.insert(time: BeatTime(time),
+                          dynamic: dynamic)
+    }
+
+    return dynamicMap
+}
+
+// The shapes of `dynamicMap`, each as one line of text, for comparing against
+// a literal: `"mark 0 p"`, `"mark 4 p sfz"`, or `"ramp 4 p 8 f"`.
+internal func dynamicShapeSummary(_ dynamicMap: DynamicMap<BeatTime>) -> [String] {
+    func beat(_ time: BeatTime) -> String {
+        [(BeatTime(0), "0"), (BeatTime(4), "4"), (BeatTime(8), "8")].first { $0.0 == time }?.1 ?? "?"
+    }
+
+    func name(_ dynamic: Dynamic) -> String {
+        [(Dynamic.p, "p"), (.mf, "mf"), (.f, "f"), (.ff, "ff")].first { $0.0 == dynamic }?.1 ?? "?"
+    }
+
+    return DynamicShape.shapes(of: dynamicMap).map {
+        switch $0 {
+        case let .mark(time, dynamic, mark):
+            "mark \(beat(time)) \(name(dynamic))" + (mark.map { " \($0)" } ?? "")
+
+        case let .ramp(start, startDynamic, end, endDynamic):
+            "ramp \(beat(start)) \(name(startDynamic)) \(beat(end)) \(name(endDynamic))"
+        }
+    }
+}
+
+// Walks a one-part, one-measure score holding `items`, after an `<attributes>`
+// setting one division per quarter note.
+internal func walkMusicXMLMeasure(_ items: String) throws -> [MusicXML.Importer.Walker.WalkResult] {
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">
+            <measure number="1">
+              <attributes><divisions>1</divisions></attributes>
+              \(items)
+            </measure>
+          </part>
+        </score-partwise>
+        """
+
+    return try MusicXML.Importer.Walker().walk(parseMusicXMLScore(musicXML),
+                                               order: [0])
+}
+
+// The extras of a lone C4 walked with `notations` as its `<notations>` content.
+internal func walkedExtras(notations: String,
+                           sourceLocation: SourceLocation = #_sourceLocation) throws -> Extras? {
+    let results = try walkMusicXMLMeasure("""
+        <note>
+          <pitch><step>C</step><octave>4</octave></pitch>
+          <duration>1</duration>
+          <notations>\(notations)</notations>
+        </note>
+        """)
+    let voice = try #require(results.first?.part.voices.first,
+                             sourceLocation: sourceLocation)
+
+    return voice.noteTable.map(\.extras).first.flatMap(\.self)
+}
+
+// A score of four measures: a C4 filling the first, under `time` (a `<time>`
+// element, or nothing), then a `<multiple-rest>` of two empty measures, then
+// another C4.
+internal func multipleRestMusicXML(time: String) -> String {
+    """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <score-partwise version="4.0">
+      <part-list>
+        <score-part id="P1"><part-name>P</part-name></score-part>
+      </part-list>
+      <part id="P1">
+        <measure number="1">
+          <attributes>
+            <divisions>1</divisions>
+            \(time)
+          </attributes>
+          <note>
+            <pitch><step>C</step><octave>4</octave></pitch>
+            <duration>4</duration>
+          </note>
+        </measure>
+        <measure number="2">
+          <attributes>
+            <measure-style><multiple-rest>2</multiple-rest></measure-style>
+          </attributes>
+        </measure>
+        <measure number="3"/>
+        <measure number="4">
+          <note>
+            <pitch><step>C</step><octave>4</octave></pitch>
+            <duration>1</duration>
+          </note>
+        </measure>
+      </part>
+    </score-partwise>
+    """
+}
+
+// The extras of a lone C4 carrying `extras` after a trip out through
+// `MusicXML.Exporter` and back in through `MusicXML.Importer`.
+internal func roundTripNoteExtras(_ extras: Extras,
+                                  sourceLocation: SourceLocation = #_sourceLocation) throws -> Extras? {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    noteTable.insert(attack: .zero,
+                     duration: BeatDuration(1),
+                     pitch: "C4",
+                     extras: extras)
+
+    let recovered = try roundTrip(standardBeatWork(parts: [Part(name: "P", noteTable: noteTable)]),
+                                  exporter: MusicXML.Exporter(),
+                                  importer: MusicXML.Importer(),
+                                  fileFormat: .musicXML,
+                                  sourceLocation: sourceLocation)
+    let part = try #require(standardBeatParts(of: recovered)?.first,
+                            sourceLocation: sourceLocation)
+
+    return part.noteTable.map(\.extras).first.flatMap(\.self)
+}
+
+// A note at octave 1 for tests that build `GMNSymbol`s by hand. A `nil`
+// `duration` writes none, so the note inherits the sticky one.
+internal func makeGMNNote(name: GMNPitch.Name = .c,
+                          accidental: GMNPitch.Accidental = .omitted,
+                          duration: GMNDuration? = GMNDuration(numerator: 1, denominator: 4),
+                          sourceLocation: SourceLocation = #_sourceLocation) throws -> GMNNote {
+    let octave = try #require(GMNPitch.Octave(intValue: 1),
+                              sourceLocation: sourceLocation)
+
+    return GMNNote(pitch: GMNPitch(name: name, accidental: accidental, octave: octave),
+                   duration: duration)
+}
+
+// Walks one voice of `symbols`, with no variables declared.
+internal func walkGMN(_ symbols: [GMNSymbol]) throws -> Guido.Importer.Context {
+    try Guido.Importer.Walker(variables: [:]).walk(Guido.Voice(symbols: symbols))
+}
+
+// A match of the transposing macro `Tn = replacement` against a C4.
+internal func makeABCMacroMatch(replacement: String,
+                                sourceLocation: SourceLocation = #_sourceLocation) throws -> ABC.Importer.MacroTable.Match {
+    let macro = try #require(ABCMacro(target: "Tn", replacement: replacement),
+                             sourceLocation: sourceLocation)
+    let octave = try #require(ABCPitch.Octave(uintValue: 4),
+                              sourceLocation: sourceLocation)
+    let length = try #require(ABCLength(numerator: 1),
+                              sourceLocation: sourceLocation)
+    let note = ABCNote(pitch: ABCPitch(letter: .c, accidental: .natural, octave: octave),
+                       length: length,
+                       tie: nil)
+
+    return ABC.Importer.MacroTable.Match(consumedCount: 1,
+                                         macro: macro,
+                                         matchedNote: note)
+}
+
+// The letters of the notes in the ABC tune body `text`, in the order
+// `ABC.Importer.Plan` plays them.
+internal func plannedLetters(_ text: String) throws -> String {
+    let items = try abcSymbols(from: text).map { ABC.Importer.Item.symbol($0) }
+    let ranges = try ABC.Importer.Plan(items: items).ranges()
+
+    return ranges.flatMap { items[$0] }.compactMap { item -> String? in
+        guard case let .symbol(.note(note)) = item
+        else { return nil }
+
+        return String(describing: note.pitch.letter).uppercased()
+    }.joined()
+}
+
+// The play order of a one-part score whose measures hold `measures`.
+internal func plannedOrder(_ measures: [String]) throws -> [Int] {
+    let items = measures.enumerated().map { index, measure in
+        "<measure number=\"\(index + 1)\">\(measure)</measure>"
+    }
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">\(items.joined())</part>
+        </score-partwise>
+        """
+
+    return try MusicXML.Importer.Plan(parseMusicXMLScore(musicXML)).order
+}
+
+// One measure's `<ending>` of `number`, closed by a backward repeat.
+internal func firstEnding(_ number: Int) -> String {
+    """
+    <barline location="left"><ending number="\(number)" type="start"/></barline>\
+    <barline location="right"><ending number="\(number)" type="stop"/><repeat direction="backward"/></barline>
+    """
+}
+
+// One measure's `<ending>` of `number`, with no repeat to close it.
+internal func lastEnding(_ number: Int) -> String {
+    """
+    <barline location="left"><ending number="\(number)" type="start"/></barline>\
+    <barline location="right"><ending number="\(number)" type="discontinue"/></barline>
+    """
+}
+
+// A note of `duration` divisions on `step`, in octave 4, as MusicXML text.
+internal func musicXMLNote(_ step: String,
+                           duration: Int = 4) -> String {
+    "<note><pitch><step>\(step)</step><octave>4</octave></pitch><duration>\(duration)</duration></note>"
+}
+
+// The notes a one-part score whose measures hold `measures` plays, in its
+// `Plan`'s order, each as its step and beat: `"C@4"`.
+internal func playedNotes(_ measures: [String]) throws -> [String] {
+    let items = measures.enumerated().map { index, measure in
+        "<measure number=\"\(index + 1)\">\(measure)</measure>"
+    }
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">\(items.joined())</part>
+        </score-partwise>
+        """
+    let score = try parseMusicXMLScore(musicXML)
+    let results = try MusicXML.Importer.Walker().walk(score,
+                                                      order: MusicXML.Importer.Plan(score).order)
+
+    return results.flatMap(\.part.voices).flatMap { voice in
+        voice.noteTable.map { "\($0.startPitch.pitchClass.letter)".uppercased() + "@\(Int($0.attack.doubleValue))" }
+    }
+}
+
+// An `<attributes>` starting a `<measure-repeat>` of `length` measures.
+internal func repeatStart(_ length: Int) -> String {
+    #"<attributes><measure-style><measure-repeat type="start">\#(length)</measure-repeat></measure-style></attributes>"#
+}
+
 // swiftlint:enable file_length

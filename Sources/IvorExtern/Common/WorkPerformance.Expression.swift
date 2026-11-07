@@ -55,8 +55,9 @@ extension WorkPerformance {
 
             // MARK: Fileprivate Instance Properties
 
-            fileprivate var end: UInt
             fileprivate let start: UInt
+
+            fileprivate var end: UInt
         }
 
         private struct Span {
@@ -64,10 +65,11 @@ extension WorkPerformance {
             // MARK: Fileprivate Instance Properties
 
             fileprivate let begin: UInt     // where the gain takes hold
+            fileprivate let start: UInt     // when the ramps start
+
             fileprivate var end: UInt?      // where it lets go, or `nil` if it never needs to
             fileprivate var last: UInt      // when the ramps end
             fileprivate var peak: Double
-            fileprivate let start: UInt     // when the ramps start
         }
 
         // MARK: Private Instance Properties
@@ -137,6 +139,14 @@ extension WorkPerformance.Expression {
     // MARK: Private Type Methods
 
     private static func _drifts(_ part: Part<WallTime, NoteNumber>,
+                                _ levels: [(time: UInt, level: Double)],
+                                _ index: Int) -> Bool {
+        _drifts(part,
+                from: WallTime(levels[index].time),
+                through: WallTime(levels[index + 1].time))
+    }
+
+    private static func _drifts(_ part: Part<WallTime, NoteNumber>,
                                 from start: WallTime,
                                 through end: WallTime) -> Bool {
         part.noteTable.contains { note in
@@ -152,6 +162,11 @@ extension WorkPerformance.Expression {
         }
     }
 
+    private static func _isRamp(_ levels: [(time: UInt, level: Double)],
+                                _ index: Int) -> Bool {
+        levels[index].time < levels[index + 1].time && levels[index].level != levels[index + 1].level
+    }
+
     // The note table's stretches of unbroken sound. Notes that touch are one
     // run, since there is no silence to move the gain in.
     private static func _runs(of part: Part<WallTime, NoteNumber>) -> [Run] {
@@ -163,11 +178,26 @@ extension WorkPerformance.Expression {
             if let last = runs.last, attack <= last.end {
                 runs[runs.count - 1].end = max(last.end, release)
             } else {
-                runs.append(Run(end: release, start: attack))
+                runs.append(Run(start: attack, end: release))
             }
         }
 
         return runs
+    }
+
+    private static func _span(_ levels: ArraySlice<(time: UInt, level: Double)>,
+                              runs: [Run]) -> Span {
+        let start = levels.first?.time ?? 0
+        let last = levels.last?.time ?? 0
+        let startRun = runs.first { $0.start < start && start < $0.end }
+        let lastRun = runs.first { $0.start < last && last < $0.end }
+        let end = runs.first { $0.start >= (lastRun?.end ?? last) }?.start
+
+        return Span(begin: startRun?.start ?? start,
+                    start: start,
+                    end: end,
+                    last: last,
+                    peak: levels.map(\.level).max() ?? 1)
     }
 
     private static func _spans(of part: Part<WallTime, NoteNumber>,
@@ -204,34 +234,6 @@ extension WorkPerformance.Expression {
         }
 
         return spans
-    }
-
-    private static func _drifts(_ part: Part<WallTime, NoteNumber>,
-                                _ levels: [(time: UInt, level: Double)],
-                                _ index: Int) -> Bool {
-        _drifts(part,
-                from: WallTime(levels[index].time),
-                through: WallTime(levels[index + 1].time))
-    }
-
-    private static func _isRamp(_ levels: [(time: UInt, level: Double)],
-                                _ index: Int) -> Bool {
-        levels[index].time < levels[index + 1].time && levels[index].level != levels[index + 1].level
-    }
-
-    private static func _span(_ levels: ArraySlice<(time: UInt, level: Double)>,
-                              runs: [Run]) -> Span {
-        let start = levels.first?.time ?? 0
-        let last = levels.last?.time ?? 0
-        let startRun = runs.first { $0.start < start && start < $0.end }
-        let lastRun = runs.first { $0.start < last && last < $0.end }
-        let end = runs.first { $0.start >= (lastRun?.end ?? last) }?.start
-
-        return Span(begin: startRun?.start ?? start,
-                    end: end,
-                    last: last,
-                    peak: levels.map(\.level).max() ?? 1,
-                    start: start)
     }
 
     // MARK: Private Instance Methods

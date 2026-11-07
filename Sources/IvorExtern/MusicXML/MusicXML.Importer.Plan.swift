@@ -43,6 +43,9 @@ extension MusicXML.Importer {
         // part (a repeat or ending is often only marked in one part, but
         // applies to the whole score).
         private struct Measure {
+
+            // MARK: Fileprivate Instance Properties
+
             fileprivate var closesRepeat: Int?
             fileprivate var coda: String?
             fileprivate var dalsegno: String?
@@ -62,6 +65,9 @@ extension MusicXML.Importer {
         // whether a `da capo`/`dal segno` jump is in progress (which
         // suppresses further repeats and jumps).
         private struct Walk {
+
+            // MARK: Fileprivate Instance Properties
+
             fileprivate var index = 0
             fileprivate var inJump = false
             fileprivate var loopStart = 0
@@ -83,11 +89,6 @@ extension MusicXML.Importer.Plan {
     private static func _advance(after measure: Measure,
                                  in measures: [Measure],
                                  _ state: inout Walk) -> Bool {
-        if !state.inJump,
-           measure.opensRepeat {
-            state.loopStart = state.index
-        }
-
         if measure.endingStops {
             state.skipEnding = false
         }
@@ -113,7 +114,7 @@ extension MusicXML.Importer.Plan {
             }
         }
 
-        _closeRepeat(after: measure, &state)
+        _closeRepeat(after: measure, in: measures, &state)
 
         return false
     }
@@ -173,9 +174,11 @@ extension MusicXML.Importer.Plan {
         }
     }
 
-    // Applies a backward repeat: loops to the span start until its `times`
-    // are exhausted, then falls through to the next measure.
+    // Applies a backward repeat: loops to the span start until its `times`,
+    // or the highest ending in the span if that's more, are exhausted, then
+    // falls through to the next measure.
     private static func _closeRepeat(after measure: Measure,
+                                     in measures: [Measure],
                                      _ state: inout Walk) {
         guard !state.inJump,
               let times = measure.closesRepeat
@@ -185,7 +188,7 @@ extension MusicXML.Importer.Plan {
             return
         }
 
-        guard state.pass < times
+        guard state.pass < max(times, _highestEnding(from: state.loopStart, in: measures))
         else {
             state.pass = 1
             state.loopStart = state.index + 1
@@ -197,6 +200,24 @@ extension MusicXML.Importer.Plan {
         state.pass += 1
         state.skipEnding = false
         state.index = state.loopStart
+    }
+
+    // The highest `<ending>` number in the repeat span starting at `start`,
+    // which runs up to the next forward repeat.
+    private static func _highestEnding(from start: Int,
+                                       in measures: [Measure]) -> Int {
+        var highest = 0
+
+        for index in measures.indices.dropFirst(start) {
+            if index > start,
+               measures[index].opensRepeat {
+                break
+            }
+
+            highest = max(highest, measures[index].endingNumbers?.max() ?? 0)
+        }
+
+        return highest
     }
 
     private static func _index(coda name: String?,
@@ -212,6 +233,16 @@ extension MusicXML.Importer.Plan {
                                in measures: [Measure]) -> Int? {
         measures.firstIndex { $0.segno == name }
             ?? measures.firstIndex { $0.segno != nil }
+    }
+
+    // Whether no other `<ending>` comes straight after the one at `index`.
+    private static func _isLastEnding(at index: Int,
+                                      in measures: [Measure]) -> Bool {
+        guard let stop = measures[index...].firstIndex(where: \.endingStops),
+              stop + 1 < measures.count
+        else { return true }
+
+        return measures[stop + 1].endingNumbers == nil
     }
 
     // Gathers each measure index's navigation markers across every part.
@@ -244,6 +275,20 @@ extension MusicXML.Importer.Plan {
         return measures
     }
 
+    // Applies a forward repeat, the first time the walk reaches it: a new
+    // span starts its own passes, whatever the one before it left behind.
+    private static func _openRepeat(_ measure: Measure,
+                                    _ state: inout Walk) {
+        guard !state.inJump,
+              measure.opensRepeat,
+              state.index != state.loopStart
+        else { return }
+
+        state.loopStart = state.index
+        state.pass = 1
+        state.skipEnding = false
+    }
+
     // The linear play/skip walk over the measure grid. Bounded by a generous
     // step cap so a malformed structure terminates rather than spins.
     private static func _playOrder(_ measures: [Measure]) throws(MusicXML.Error) -> [Int] {
@@ -261,7 +306,9 @@ extension MusicXML.Importer.Plan {
 
             let measure = measures[state.index]
 
-            if _skips(measure, &state) {
+            _openRepeat(measure, &state)
+
+            if _skips(measure, in: measures, &state) {
                 continue
             }
 
@@ -276,13 +323,16 @@ extension MusicXML.Importer.Plan {
     }
 
     // Applies a measure's `<ending>` markers to the skip flag and, when the
-    // measure is in an ending not played this pass, steps over it. Returns
-    // `true` when the measure was skipped.
+    // measure is in an ending not played this pass, steps over it. A jump
+    // takes no repeats, so after one only the last ending of a chain plays.
+    // Returns `true` when the measure was skipped.
     private static func _skips(_ measure: Measure,
+                               in measures: [Measure],
                                _ state: inout Walk) -> Bool {
-        if !state.inJump,
-           let numbers = measure.endingNumbers {
-            state.skipEnding = !(numbers.isEmpty || numbers.contains(state.pass))
+        if let numbers = measure.endingNumbers {
+            state.skipEnding = state.inJump
+                ? !_isLastEnding(at: state.index, in: measures)
+                : !(numbers.isEmpty || numbers.contains(state.pass))
         }
 
         guard state.skipEnding

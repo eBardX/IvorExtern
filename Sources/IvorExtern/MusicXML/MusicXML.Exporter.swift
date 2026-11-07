@@ -431,7 +431,6 @@ extension MusicXML.Exporter {
         return items
     }
 
-    // The note/chord or rest item(s) covering one boundary interval.
     private static func _makeDynamicsDirection(_ item: MXLDynamics.Item) -> MXLDirection {
         MXLDirection(kind: [MXLDirection.Kind(content: .dynamics([MXLDynamics(items: [item])]))])
     }
@@ -562,7 +561,7 @@ extension MusicXML.Exporter {
         // extra), but MusicXML declares it inside `<midi-instrument>` too,
         // so like elevation it needs a `<score-instrument>` even when the
         // part has no instrument assignment.
-        let midiChannel = intValue(part.extras, .midiChannel).flatMap { MXLMidi16(uintValue: UInt($0)) }
+        let midiChannel = intValue(part.extras, .midiChannel).flatMap(UInt.init(exactly:)).flatMap(MXLMidi16.init(uintValue:))
 
         if first != nil || elevation != nil || midiChannel != nil {
             let instrument = first?.instrument ?? .vanilla
@@ -574,12 +573,12 @@ extension MusicXML.Exporter {
 
             let exactProgram = intValue(first?.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: instrument.stringValue).map { Int($0.program.uintValue) }
-            let midiProgram = (exactProgram ?? derivedProgram).flatMap { MXLMidi128(uintValue: UInt($0)) }
+            let midiProgram = (exactProgram ?? derivedProgram).flatMap(UInt.init(exactly:)).flatMap(MXLMidi128.init(uintValue:))
             // `<midi-bank>` numbers banks from 1; the `midiBank` extra, from 0.
             let midiBank = intValue(first?.extras, .midiBank).flatMap { $0 >= 0 ? MXLMidi16384(uintValue: UInt($0 + 1)) : nil }
             let exactUnpitched = intValue(first?.extras, .midiUnpitched)
             let derivedUnpitched = generalMIDIPercussionNote(name: instrument.stringValue).map { $0 + 1 }
-            let midiUnpitched = (exactUnpitched ?? derivedUnpitched).flatMap { MXLMidi128(uintValue: UInt($0)) }
+            let midiUnpitched = (exactUnpitched ?? derivedUnpitched).flatMap(UInt.init(exactly:)).flatMap(MXLMidi128.init(uintValue:))
             let volume = doubleValue(first?.extras, .midiVolume)
 
             // `<midi-program>` is optional per the MusicXML schema, so a

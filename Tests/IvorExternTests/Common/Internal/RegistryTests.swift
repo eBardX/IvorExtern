@@ -20,6 +20,15 @@ extension RegistryTests {
     }
 
     @Test
+    func exporters_writeEveryFileFormat() {
+        let fileFormats: [FileFormat] = [.abc, .dkm, .gmn, .midi, .musicXML, .mxl]
+        let writable = exporters.flatMap(\.writableFileFormats)
+
+        #expect(writable.count == fileFormats.count)
+        #expect(fileFormats.allSatisfy { writable.contains($0) })
+    }
+
+    @Test
     func importers_notEmpty() {
         #expect(!importers.isEmpty)
     }
@@ -27,5 +36,14 @@ extension RegistryTests {
     @Test
     func importers_onlyIncludeCandidatesWithReadableFileFormats() {
         #expect(importers.allSatisfy { !$0.readableFileFormats.isEmpty })
+    }
+
+    @Test
+    func importers_readEveryFileFormat() {
+        let fileFormats: [FileFormat] = [.abc, .dkm, .gmn, .midi, .musicXML, .mxl]
+        let readable = importers.flatMap(\.readableFileFormats)
+
+        #expect(readable.count == fileFormats.count)
+        #expect(fileFormats.allSatisfy { readable.contains($0) })
     }
 }

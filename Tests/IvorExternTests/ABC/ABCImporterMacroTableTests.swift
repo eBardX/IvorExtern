@@ -39,6 +39,23 @@ extension ABCImporterMacroTableTests {
         }
     }
 
+    @Test(arguments: [("[CE]n", "[CE]C"),
+                      ("An", "AC"),
+                      ("n2", "C2"),
+                      ("{g}n", "{g}C")])
+    func expand_transposingMacro_copiesEverythingButPlaceholders(replacement: String, expected: String) throws {
+        let symbols = try macroTable.expand(makeABCMacroMatch(replacement: replacement))
+
+        #expect(try symbols == abcSymbols(from: expected))
+    }
+
+    @Test
+    func expand_transposingMacro_leavesDecorationsVerbatim() throws {
+        let symbols = try macroTable.expand(makeABCMacroMatch(replacement: "!p!n"))
+
+        #expect(try symbols == abcSymbols(from: "!p!C"))
+    }
+
     @Test
     func expand_transposingMacro_matchedNote_substitutesPitch() throws {
         let macro = try #require(ABCMacro(target: "Tn", replacement: "o"))
@@ -107,6 +124,26 @@ extension ABCImporterMacroTableTests {
         let match = macroTable.findMatch(symbols, 0, [macro])
 
         #expect(match == nil)
+    }
+
+    @Test(arguments: [("Tn/", "TC/"),
+                      ("Tn//", "TC//"),
+                      ("Tn/4", "TC/4"),
+                      ("Tn3/", "TC3/"),
+                      ("Tn3/2", "TC3/2")])
+    func findMatch_transposingMacro_fractionalNoteLength_matches(target: String, text: String) throws {
+        let macro = try #require(ABCMacro(target: target, replacement: "n"))
+        let symbols = try abcSymbols(from: text)
+
+        #expect(macroTable.findMatch(symbols, 0, [macro])?.matchedNote != nil)
+    }
+
+    @Test(arguments: ["Tn//4", "Tn/2/"])
+    func findMatch_transposingMacro_malformedNoteLength_returnsNil(target: String) throws {
+        let macro = try #require(ABCMacro(target: target, replacement: "n"))
+        let symbols = try abcSymbols(from: "TC/4")
+
+        #expect(macroTable.findMatch(symbols, 0, [macro]) == nil)
     }
 
     @Test

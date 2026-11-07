@@ -5,6 +5,8 @@ import IvorMXL
 import Testing
 
 struct MusicXMLImporterWalkerExpansionTests {
+    private let fourFour = "<attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+    private let repeatStop = #"<attributes><measure-style><measure-repeat type="stop"/></measure-style></attributes>"#
 }
 
 // MARK: -
@@ -60,9 +62,27 @@ extension MusicXMLImporterWalkerExpansionTests {
             return
         }
 
-        #expect(patternMeasure3 == part.measures[0].items)
+        #expect(patternMeasure3 == part.measures[0].items + part.measures[2].items)
         #expect(patternMeasure4 == part.measures[1].items)
         #expect(measure5 == part.measures[4].items)
+    }
+
+    @Test
+    func plan_measureRepeat_playsAcrossABackwardRepeat() throws {
+        let notes = try playedNotes([#"\#(fourFour)<barline location="left"><repeat direction="forward"/></barline>"# + musicXMLNote("C"),
+                                     #"\#(repeatStart(1))<barline location="right"><repeat direction="backward"/></barline>"#,
+                                     repeatStop + musicXMLNote("D")])
+
+        #expect(notes == ["C@0", "C@4", "C@8", "C@12", "D@16"])
+    }
+
+    @Test
+    func plan_measureRepeat_writtenOutMeasure_playsOnce() throws {
+        let notes = try playedNotes([fourFour + musicXMLNote("C"),
+                                     repeatStart(1) + musicXMLNote("C"),
+                                     repeatStop + musicXMLNote("D")])
+
+        #expect(notes == ["C@0", "C@4", "D@8"])
     }
 
     @Test
@@ -145,6 +165,20 @@ extension MusicXMLImporterWalkerExpansionTests {
         #expect(thirdItems == part.measures[2].items)
     }
 
+    @Test(arguments: [("3", "4", 3, 9), ("6", "8", 3, 9), ("4", "4", 4, 12)])
+    func plan_multipleRest_lastsAsManyMeasuresOfItsTime(beats: String,
+                                                        beatType: String,
+                                                        duration: Int,
+                                                        attack: Int) throws {
+        let time = "<time><beats>\(beats)</beats><beat-type>\(beatType)</beat-type></time>"
+        let notes = try playedNotes(["<attributes><divisions>1</divisions>\(time)</attributes>" + musicXMLNote("C", duration: duration),
+                                     "<attributes><measure-style><multiple-rest>2</multiple-rest></measure-style></attributes>",
+                                     "",
+                                     musicXMLNote("D", duration: duration)])
+
+        #expect(notes == ["C@0", "D@\(attack)"])
+    }
+
     @Test
     func plan_noMeasureStyle_returnsWrittenItemsUnchanged() throws {
         let musicXML = """
@@ -175,5 +209,40 @@ extension MusicXMLImporterWalkerExpansionTests {
         }
 
         #expect(items == part.measures[0].items)
+    }
+
+    @Test
+    func plan_oneMeasureRepeat_replaysItsPatternEachMeasure() throws {
+        let notes = try playedNotes([fourFour + musicXMLNote("C"),
+                                     repeatStart(1),
+                                     "",
+                                     repeatStop + musicXMLNote("D"),
+                                     repeatStart(1),
+                                     repeatStop + musicXMLNote("E")])
+
+        #expect(notes == ["C@0", "C@4", "C@8", "D@12", "D@16", "E@20"])
+    }
+
+    @Test
+    func plan_twoMeasureRepeat_replaysItsPatternInOrder() throws {
+        let notes = try playedNotes([fourFour + musicXMLNote("C"),
+                                     musicXMLNote("D"),
+                                     repeatStart(2),
+                                     "",
+                                     repeatStop + musicXMLNote("E")])
+
+        #expect(notes == ["C@0", "D@4", "C@8", "D@12", "E@16"])
+    }
+
+    @Test
+    func plan_twoMeasureRepeat_writtenOutMeasure_keepsItsPlaceInThePattern() throws {
+        let notes = try playedNotes([fourFour + musicXMLNote("C"),
+                                     musicXMLNote("D"),
+                                     repeatStart(2),
+                                     musicXMLNote("F"),
+                                     "",
+                                     repeatStop + musicXMLNote("E")])
+
+        #expect(notes == ["C@0", "D@4", "C@8", "F@12", "C@16", "E@20"])
     }
 }

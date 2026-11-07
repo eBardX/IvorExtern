@@ -4,6 +4,7 @@
 import IvorGMN
 import IvorModel
 import IvorTiming
+import IvorTuning
 import Testing
 import XestiNumbers
 import XestiTools
@@ -29,6 +30,43 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_articulationTag_bowKnownTypes_becomeBowFlags() throws {
+        let types: [(String, Extra)] = [("DOWN", .downBow),
+                                        ("up", .upBow)]
+
+        for (type, extra) in types {
+            let bow = try #require(GMNArticulation(kind: .bow, type: type))
+            let context = try walkGMN([.tag(.articulation(bow)), .note(makeGMNNote())])
+
+            #expect(hasFlag(context.noteTable.map(\.extras).first.flatMap(\.self), extra))
+        }
+    }
+
+    @Test
+    func walk_articulationTag_bowUnknownType_becomesArticulationExtra() throws {
+        let bow = try #require(GMNArticulation(kind: .bow, type: "sideways"))
+        let context = try walkGMN([.tag(.articulation(bow)), .note(makeGMNNote())])
+
+        #expect(stringValue(context.noteTable.map(\.extras).first.flatMap(\.self), .articulation) == "bow")
+    }
+
+    @Test
+    func walk_articulationTag_kinds_becomeTheirFlags() throws {
+        let kinds: [(GMNArticulation.Kind, Extra)] = [(.fermata, .fermata),
+                                                      (.harmonic, .harmonic),
+                                                      (.marcato, .marcato),
+                                                      (.staccato, .staccato),
+                                                      (.tenuto, .tenuto)]
+
+        for (kind, extra) in kinds {
+            let articulation = try #require(GMNArticulation(kind: kind, body: [.note(makeGMNNote())]))
+            let context = try walkGMN([.tag(.articulation(articulation))])
+
+            #expect(hasFlag(context.noteTable.map(\.extras).first.flatMap(\.self), extra))
+        }
+    }
+
+    @Test
     func walk_beamTag_walksNotesInBody() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))
         let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
@@ -46,6 +84,14 @@ extension GuidoImporterWalkerTests {
         }
 
         #expect(count == 1)
+    }
+
+    @Test
+    func walk_breathMarkTag_attachesFlagAndWalksBody() throws {
+        let breathMark = try GMNBreathMark(body: [.note(makeGMNNote())])
+        let context = try walkGMN([.tag(.breathMark(breathMark))])
+
+        #expect(hasFlag(context.noteTable.map(\.extras).first.flatMap(\.self), .breathMark))
     }
 
     @Test
@@ -71,6 +117,28 @@ extension GuidoImporterWalkerTests {
 
         #expect(count == 2)
         #expect(context.currentBeatTime == BeatTime(2))
+    }
+
+    @Test
+    func walk_chord_restSegment_stillSetsTheStickyDuration() throws {
+        let rest = GMNRest(duration: GMNDuration(numerator: 1, denominator: 2))
+        let restSegment = try #require(GMNChord.Segment(symbols: [.rest(rest)]))
+        let noteSegment = try #require(GMNChord.Segment(symbols: [.note(makeGMNNote(duration: nil))]))
+        let chord = try #require(GMNChord(segments: [restSegment, noteSegment]))
+        let context = try walkGMN([.chord(chord)])
+
+        #expect(context.noteTable.map(\.duration) == [BeatDuration(2)])
+    }
+
+    @Test
+    func walk_chord_tagInASegment_isSkipped() throws {
+        let intensity = GMNIntensity(type: "ff")
+        let segment = try #require(GMNChord.Segment(symbols: [.tag(.intensity(intensity)), .note(makeGMNNote())]))
+        let chord = try #require(GMNChord(segments: [segment]))
+        let context = try walkGMN([.chord(chord)])
+
+        #expect(context.noteTable.map(\.attack) == [.zero])
+        #expect(context.dynamicEvents.isEmpty)
     }
 
     @Test
@@ -130,6 +198,15 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_cueTag_staysInertAndBreaksATie() throws {
+        let tie = try #require(GMNTie(span: .end))
+        let cue = try GMNCue(body: [.note(makeGMNNote())])
+        let context = try walkGMN([.note(makeGMNNote()), .tag(.tie(tie)), .tag(.cue(cue)), .note(makeGMNNote())])
+
+        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+    }
+
+    @Test
     func walk_dottedNote_appliesDots() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))
         let duration = GMNDuration(numerator: 1, denominator: 4, dots: GMNDuration.DotCount(uintValue: 1))
@@ -152,6 +229,23 @@ extension GuidoImporterWalkerTests {
         #expect(context.noteTable.isEmpty)
         #expect(context.tempoEvents.isEmpty)
         #expect(context.currentBeatTime == .zero)
+    }
+
+    @Test
+    func walk_fingeringTag_attachesTextAndWalksBody() throws {
+        let fingering = try GMNFingering(text: "3", body: [.note(makeGMNNote())])
+        let context = try walkGMN([.tag(.fingering(fingering))])
+
+        #expect(stringValue(context.noteTable.map(\.extras).first.flatMap(\.self), .fingering) == "3")
+    }
+
+    @Test
+    func walk_graceTag_staysInertAndBreaksATie() throws {
+        let tie = try #require(GMNTie(span: .end))
+        let grace = try GMNGrace(body: [.note(makeGMNNote())])
+        let context = try walkGMN([.note(makeGMNNote()), .tag(.tie(tie)), .tag(.grace(grace)), .note(makeGMNNote())])
+
+        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
     }
 
     @Test
@@ -208,6 +302,14 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_note_emptyPitch_advancesWithoutInsertingNote() throws {
+        let context = try walkGMN([.note(makeGMNNote(name: .empty))])
+
+        #expect(context.noteTable.map(\.attack).isEmpty)
+        #expect(context.currentBeatTime == BeatTime(1))
+    }
+
+    @Test
     func walk_note_insertsNoteAndAdvances() throws {
         let octave = try #require(GMNPitch.Octave(intValue: 1))
         let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
@@ -228,6 +330,67 @@ extension GuidoImporterWalkerTests {
 
         #expect(count == 1)
         #expect(context.currentBeatTime == BeatTime(1))
+    }
+
+    @Test
+    func walk_note_resolvesAccidentals() throws {
+        let accidentals: [(GMNPitch.Accidental, Pitch.Accidental)] = [(.doubleFlat, .doubleFlat),
+                                                                      (.doubleSharp, .doubleSharp),
+                                                                      (.flat, .flat),
+                                                                      (.impliedSharp, .sharp),
+                                                                      (.omitted, .natural),
+                                                                      (.sharp, .sharp)]
+
+        for (accidental, expected) in accidentals {
+            let context = try walkGMN([.note(makeGMNNote(accidental: accidental))])
+
+            #expect(context.noteTable.map(\.startPitch.pitchClass.accidental) == [expected])
+        }
+    }
+
+    @Test
+    func walk_note_resolvesNames() throws {
+        let names: [(GMNPitch.Name, Pitch.Letter)] = [(.a, .a),
+                                                      (.ais, .a),
+                                                      (.b, .b),
+                                                      (.c, .c),
+                                                      (.cis, .c),
+                                                      (.d, .d),
+                                                      (.dis, .d),
+                                                      (.do, .c),
+                                                      (.e, .e),
+                                                      (.f, .f),
+                                                      (.fa, .f),
+                                                      (.fis, .f),
+                                                      (.g, .g),
+                                                      (.gis, .g),
+                                                      (.h, .b),
+                                                      (.la, .a),
+                                                      (.mi, .e),
+                                                      (.re, .d),
+                                                      (.si, .b),
+                                                      (.sol, .g),
+                                                      (.ti, .b)]
+
+        for (name, letter) in names {
+            let context = try walkGMN([.note(makeGMNNote(name: name))])
+
+            #expect(context.noteTable.map(\.startPitch.pitchClass.letter) == [letter])
+        }
+    }
+
+    @Test
+    func walk_ornamentTag_kinds_becomeTheirFlags() throws {
+        let kinds: [(GMNOrnament.Kind, Extra)] = [(.mordent, .mordent),
+                                                  (.trill, .trill),
+                                                  (.turn, .turn)]
+
+        for (kind, extra) in kinds {
+            let ornament = try #require(GMNOrnament(kind: kind, body: [.note(makeGMNNote())]))
+            let context = try walkGMN([.tag(.ornament(ornament))])
+
+            #expect(hasFlag(context.noteTable.map(\.extras).first.flatMap(\.self), extra))
+        }
     }
 
     @Test
@@ -357,6 +520,20 @@ extension GuidoImporterWalkerTests {
 
         #expect(count == 3)
         #expect(context.currentBeatTime == BeatTime(3))
+    }
+
+    @Test
+    func walk_variableReference_numericDeclarationsParseAlongsideIt() throws {
+        let name = try #require(GMNVariable.Name(stringValue: "x"))
+        let floatingName = try #require(GMNVariable.Name(stringValue: "y"))
+        let integerName = try #require(GMNVariable.Name(stringValue: "z"))
+        let walker = Guido.Importer.Walker(variables: [floatingName: GMNVariable(name: floatingName, value: .floating(1.5)),
+                                                       integerName: GMNVariable(name: integerName, value: .integer(5)),
+                                                       name: GMNVariable(name: name, value: .string("c d"))])
+
+        let context = try walker.walk(Guido.Voice(symbols: [.variable(name)]))
+
+        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
     }
 
     @Test

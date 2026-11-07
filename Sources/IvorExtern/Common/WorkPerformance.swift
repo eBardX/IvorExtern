@@ -115,7 +115,7 @@ public struct WorkPerformance {
 
     // MARK: Public Instance Properties
 
-    /// When the last note ends, or zero for a work with no notes.
+    /// The time of the last event, or zero for a work with no events.
     public let duration: WallTime
 
     /// The events, in the order they are sent.
@@ -133,8 +133,9 @@ public struct WorkPerformance {
     /// in the work’s order.
     public let partChannels: [MIDIChannel]
 
-    /// Every channel each part plays on, in the work’s order: its own, and
-    /// any its instruments’ assignments move it to.
+    /// Every channel each part plays on, in the work’s order: the one each
+    /// of its instruments sounds on, which is the part’s own unless an
+    /// assignment moves the instrument.
     public let partChannelSets: [[MIDIChannel]]
 }
 
@@ -152,7 +153,8 @@ extension WorkPerformance {
     /// - Parameter partOutputs:    Each part’s output, in the work’s order.
     ///
     /// - Returns:  Sixteen outputs, one for each channel from channel 1, as
-    ///             a MIDI router takes them.
+    ///             a MIDI router takes them, with `nil` for a channel no part
+    ///             plays on.
     public func channelOutputs<Output>(forPartOutputs partOutputs: [Output]) -> [Output?] {
         var outputs = [Output?](repeating: nil,
                                 count: 16)
@@ -201,59 +203,6 @@ extension WorkPerformance {
         }
 
         return events
-    }
-
-    // A part's patch changes, every channel it plays on, and how each of its instruments sounds. Its instruments are
-    // taken in the order they come in: each channel's first patch is sent at the start, and a later one only if it
-    // differs from the channel's patch by then.
-    private static func _patchEvents(for part: Part<WallTime, NoteNumber>,
-                                     on partChannel: MIDIChannel,
-                                     realization: Realization?) -> ([Event], [MIDIChannel], [Instrument: (MIDIChannel, MIDIPatch)]) {
-        var resolved: [Instrument: (MIDIChannel, MIDIPatch)] = [:]
-
-        func resolve(_ instrument: Instrument) -> (MIDIChannel, MIDIPatch) {
-            if let known = resolved[instrument] {
-                return known
-            }
-
-            let result = _resolve(instrument,
-                                  in: part.partID,
-                                  on: partChannel,
-                                  realization: realization)
-
-            resolved[instrument] = result
-
-            return result
-        }
-
-        var changes = [(time: WallTime.zero, instrument: part.instrumentMap[.zero])]
-
-        for entry in part.instrumentMap where entry.time > .zero {
-            changes.append((entry.time, entry.instrument))
-        }
-
-        var events: [Event] = []
-        var patches: [MIDIChannel: MIDIPatch] = [:]
-
-        for (time, instrument) in changes {
-            let (channel, patch) = resolve(instrument)
-            let previous = patches[channel]
-
-            guard previous != patch
-            else { continue }
-
-            let eventTime = previous == nil ? WallTime.zero : time
-
-            for message in patch.selectionMessages(on: channel,
-                                                   after: previous) {
-                events.append(Event(time: eventTime,
-                                    message: message))
-            }
-
-            patches[channel] = patch
-        }
-
-        return (events, patches.keys.sorted(), resolved)
     }
 
     // A part's pan on `channels`, the ones it owns.
@@ -325,6 +274,59 @@ extension WorkPerformance {
         }
 
         return (times.sorted(), exactPans)
+    }
+
+    // A part's patch changes, every channel it plays on, and how each of its instruments sounds. Its instruments are
+    // taken in the order they come in: each channel's first patch is sent at the start, and a later one only if it
+    // differs from the channel's patch by then.
+    private static func _patchEvents(for part: Part<WallTime, NoteNumber>,
+                                     on partChannel: MIDIChannel,
+                                     realization: Realization?) -> ([Event], [MIDIChannel], [Instrument: (MIDIChannel, MIDIPatch)]) {
+        var resolved: [Instrument: (MIDIChannel, MIDIPatch)] = [:]
+
+        func resolve(_ instrument: Instrument) -> (MIDIChannel, MIDIPatch) {
+            if let known = resolved[instrument] {
+                return known
+            }
+
+            let result = _resolve(instrument,
+                                  in: part.partID,
+                                  on: partChannel,
+                                  realization: realization)
+
+            resolved[instrument] = result
+
+            return result
+        }
+
+        var changes = [(time: WallTime.zero, instrument: part.instrumentMap[.zero])]
+
+        for entry in part.instrumentMap where entry.time > .zero {
+            changes.append((entry.time, entry.instrument))
+        }
+
+        var events: [Event] = []
+        var patches: [MIDIChannel: MIDIPatch] = [:]
+
+        for (time, instrument) in changes {
+            let (channel, patch) = resolve(instrument)
+            let previous = patches[channel]
+
+            guard previous != patch
+            else { continue }
+
+            let eventTime = previous == nil ? WallTime.zero : time
+
+            for message in patch.selectionMessages(on: channel,
+                                                   after: previous) {
+                events.append(Event(time: eventTime,
+                                    message: message))
+            }
+
+            patches[channel] = patch
+        }
+
+        return (events, patches.keys.sorted(), resolved)
     }
 
     private static func _resolve(_ instrument: Instrument,

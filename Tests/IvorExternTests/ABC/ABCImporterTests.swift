@@ -48,6 +48,23 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_abcCopyrightAndEditedByDirectives_populateInfo() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            %%abc-copyright 1998 Acme
+            %%abc-edited-by J. Editor
+            K:C
+            C
+            """)
+
+        #expect(work.info.rights.map(\.text) == ["1998 Acme"])
+        #expect(work.info.rights.first?.scope == .transcription)
+        #expect(work.info.credits.map(\.name) == ["J. Editor"])
+        #expect(work.info.credits.first?.role == .editor)
+    }
+
+    @Test
     func read_bareMidiChannelDirective_putsChannelExtraOnPart() throws {
         let abc = """
             X:1
@@ -160,6 +177,36 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_dynamicChange_isAStep() throws {
+        let part = try #require(standardBeatParts(of: readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            !p! C D !f! E
+            """))?.first)
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2), BeatTime(2)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.p, .p, .f])
+    }
+
+    @Test
+    func read_dynamicWithoutACanonicalLevel_keepsItsMark() throws {
+        let part = try #require(standardBeatParts(of: readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            !p! C !sfz! D
+            """))?.first)
+        let marks = part.dynamicMap.map { stringValue($0.extras, .dynamicMark) }
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(1)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.p, .p])
+        #expect(marks == [nil, "sfz"])
+    }
+
+    @Test
     func read_emptyData_throws() {
         let wrapper = FileWrapper(regularFileWithContents: Data())
 
@@ -193,6 +240,20 @@ extension ABCImporterTests {
             #expect(work.info.composers == ["Trad."])
             #expect(work.info.remarks == [Remark(text: "The Big Book", label: "book")].compactMap(\.self))
         }
+    }
+
+    @Test
+    func read_hairpin_leavesAGlideBetweenItsEndpoints() throws {
+        let part = try #require(standardBeatParts(of: readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            !<(! C D !<)! E
+            """))?.first)
+
+        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2)])
+        #expect(part.dynamicMap.map(\.dynamic) == [.mp, .mf])
     }
 
     @Test
@@ -259,6 +320,22 @@ extension ABCImporterTests {
         let parts = try #require(standardBeatParts(of: work))
 
         #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+    }
+
+    @Test
+    func read_midiProgramDirectivesAfterInlineVoiceFields_assignEachVoice() throws {
+        let parts = try #require(standardBeatParts(of: readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            [V:A] C
+            %%MIDI program 40
+            [V:B] D
+            %%MIDI program 41
+            """)))
+
+        #expect(parts.map { $0.instrumentMap.map { intValue($0.extras, .midiProgram) } } == [[41], [42]])
     }
 
     @Test
@@ -444,6 +521,19 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_repeatWithBarLineInside_replaysWholeSection() throws {
+        let part = try #require(standardBeatParts(of: readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            |: C D | E F :|
+            """))?.first)
+
+        #expect(part.noteTable.map(\.attack) == (0..<8).map { BeatTime(Number($0)) })
+    }
+
+    @Test
     func read_restAdvancesTimeWithoutInsertingNote() throws {
         let abc = """
             X:1
@@ -545,6 +635,26 @@ extension ABCImporterTests {
                                  Remark(text: "Play it fast", label: "notes"),
                                  Remark(text: "From a fiddler", label: "source"),
                                  Remark(text: "An aside")].compactMap(\.self))
+    }
+
+    @Test
+    func read_tempoChangeOnItsOwnLine_isAStep() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            Q:1/4=120
+            K:C
+            C
+            Q:1/4=60
+            D
+            """)
+
+        guard case let .standardBeat(_, tempoMap) = work.content
+        else { Issue.record("Expected standardBeat content"); return }
+
+        #expect(tempoMap.map(\.beatTime) == [.zero, BeatTime(1), BeatTime(1)])
+        #expect(tempoMap.map(\.tempo.uintValue) == [120, 120, 60])
     }
 
     @Test

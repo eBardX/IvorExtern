@@ -92,14 +92,14 @@ internal func convertToMusicXMLIdentification(remarks: [Remark],
 
     for remark in remarks {
         switch remark.label {
-        case RemarkLabel.source where source == nil:
-            source = remark.text
+        case RemarkLabel.encodingDescription:
+            encodingItems.append(.encodingDescription(remark.text))
 
         case RemarkLabel.relation:
             relations.append(MXLTypedText(value: remark.text))
 
-        case RemarkLabel.encodingDescription:
-            encodingItems.append(.encodingDescription(remark.text))
+        case RemarkLabel.source where source == nil:
+            source = remark.text
 
         default:
             fields.append(MXLMiscellaneous.Field(value: remark.text,
@@ -182,15 +182,6 @@ private func _addCredits(_ credits: [MXLCredit],
 
         for kind in credit.kind.map({ $0.normalizingWhitespace().lowercased() }) {
             switch kind {
-            case "title" where !hadTitle && info.title == nil:
-                info.title = text
-
-            case "dedication" where info.dedication == nil:
-                info.dedication = text
-
-            case "subtitle":
-                info.subtitles.append(text)
-
             case "arranger" where !hasCreators,
                  "composer" where !hasCreators,
                  "lyricist" where !hasCreators:
@@ -198,10 +189,19 @@ private func _addCredits(_ credits: [MXLCredit],
                     info.credits.append(credit)
                 }
 
+            case "dedication" where info.dedication == nil:
+                info.dedication = text
+
             case "rights" where !hasRights:
                 if let notice = RightsNotice(text: text) {
                     info.rights.append(notice)
                 }
+
+            case "subtitle":
+                info.subtitles.append(text)
+
+            case "title" where !hadTitle && info.title == nil:
+                info.title = text
 
             default:
                 break

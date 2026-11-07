@@ -42,37 +42,6 @@ extension WorkPerformanceTests {
     }
 
     @Test
-    func events_notesSayWhichPartTheyBelongTo() throws {
-        // The last of 16 parts shares channel 1 with the first.
-        let performance = try #require(WorkPerformance(work: makeKeyboardWallWork(Array(repeating: [(0, 1, 60)],
-                                                                                        count: 16))))
-        let notes = performance.events.filter {
-            switch $0.message {
-            case .noteOff,
-                 .noteOn:
-                true
-
-            default:
-                false
-            }
-        }
-
-        #expect(Set(notes.compactMap(\.partIndex)) == Set(0..<16))
-        #expect(notes.allSatisfy { $0.partIndex != nil })
-        #expect(performance.events.filter { $0.partIndex != nil }.count == notes.count)
-    }
-
-    @Test
-    func ownedChannelSets_leaveOutWhatAnEarlierPartPlaysOn() throws {
-        let performance = try #require(WorkPerformance(work: makeKeyboardWallWork(Array(repeating: [(0, 1, 60)],
-                                                                                        count: 16))))
-
-        #expect(performance.ownedChannelSets.first?.map(\.uintValue) == [1])
-        #expect(performance.ownedChannelSets.last?.isEmpty == true)
-        #expect(performance.ownedChannelSets.count == 16)
-    }
-
-    @Test
     func event_sameTime_ordersOffsBanksProgramsPansExpressionOns() {
         let time = makeWallTime(1)
         let ordered: [MIDIChannelMessage] = [.noteOff(1, 60, 0),
@@ -403,6 +372,27 @@ extension WorkPerformanceTests {
     }
 
     @Test
+    func events_notesSayWhichPartTheyBelongTo() throws {
+        // The last of 16 parts shares channel 1 with the first.
+        let performance = try #require(WorkPerformance(work: makeKeyboardWallWork(Array(repeating: [(0, 1, 60)],
+                                                                                        count: 16))))
+        let notes = performance.events.filter {
+            switch $0.message {
+            case .noteOff,
+                 .noteOn:
+                true
+
+            default:
+                false
+            }
+        }
+
+        #expect(Set(notes.compactMap(\.partIndex)) == Set(0..<16))
+        #expect(notes.allSatisfy { $0.partIndex != nil })
+        #expect(performance.events.filter { $0.partIndex != nil }.count == notes.count)
+    }
+
+    @Test
     func events_panExact14Bit_sendsMSBThenLSB() throws {
         var part = try #require(makeKeyboardWallParts([[(0, 1, 60)]]).first)
 
@@ -487,5 +477,15 @@ extension WorkPerformanceTests {
     func init_otherWork_isNil() {
         #expect(WorkPerformance(work: Work(content: .standardBeat([], TempoMap()))) == nil)
         #expect(WorkPerformance(work: Work(content: .keyboardBeat([], TempoMap()))) == nil)
+    }
+
+    @Test
+    func ownedChannelSets_leaveOutWhatAnEarlierPartPlaysOn() throws {
+        let performance = try #require(WorkPerformance(work: makeKeyboardWallWork(Array(repeating: [(0, 1, 60)],
+                                                                                        count: 16))))
+
+        #expect(performance.ownedChannelSets.first?.map(\.uintValue) == [1])
+        #expect(performance.ownedChannelSets.last?.isEmpty == true)
+        #expect(performance.ownedChannelSets.count == 16)
     }
 }
