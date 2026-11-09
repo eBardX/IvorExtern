@@ -21,6 +21,7 @@ extension MIDIVoiceTests {
                                name: "",
                                notes: [],
                                panEvents: [],
+                               pedalEvents: [],
                                programChangeEvents: [],
                                volumeEvents: [])
 
@@ -43,6 +44,8 @@ extension MIDIVoiceTests {
                              startTime: SMFEventTime(0))
         let pan = MIDIChannelMessage.controlChange(channel, .panMSB, MIDIData1Value(0x60))
         let panEvent = SMFEvent.midi(SMFEventTime(0), pan)
+        let pedal = MIDIChannelMessage.controlChange(channel, .sustain, MIDIData1Value(127))
+        let pedalEvent = SMFEvent.midi(SMFEventTime(0), pedal)
         let program = MIDIChannelMessage.programChange(channel, MIDIProgram(41))
         let programChangeEvent = SMFEvent.midi(SMFEventTime(0), program)
         let bank = MIDIChannelMessage.controlChange(channel, .bankSelectMSB, MIDIData1Value(1))
@@ -57,6 +60,7 @@ extension MIDIVoiceTests {
                                name: "Right Hand",
                                notes: [note],
                                panEvents: [panEvent],
+                               pedalEvents: [pedalEvent],
                                programChangeEvents: [programChangeEvent],
                                volumeEvents: [volumeEvent])
 
@@ -67,6 +71,7 @@ extension MIDIVoiceTests {
         #expect(voice.notes.count == 1)
         #expect(voice.notes[0].startTime == note.startTime)
         #expect(voice.panEvents == [panEvent])
+        #expect(voice.pedalEvents == [pedalEvent])
         #expect(voice.programChangeEvents == [programChangeEvent])
         #expect(voice.volumeEvents == [volumeEvent])
     }

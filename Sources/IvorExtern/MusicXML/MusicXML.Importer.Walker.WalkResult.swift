@@ -7,13 +7,12 @@ extension MusicXML.Importer.Walker {
 
     // MARK: Internal Nested Types
 
-    // The pan, tempo, and notated-dynamics events a part's `<sound>`/
+    // The pan, pedal, tempo, and notated-dynamics events a part's `<sound>`/
     // `<direction>` elements produced, gathered alongside the part's
     // resolved voices — one instance per MusicXML part. Each voice's own
     // note-level dynamics travel with it instead, as `MusicXML.Voice`'s own
     // `noteDynamicEvents` — see that type's doc comment. A struct, not a
-    // plain tuple, purely to stay under SwiftLint's `large_tuple` limit at
-    // four members.
+    // plain tuple, purely to stay under SwiftLint's `large_tuple` limit.
     internal struct WalkResult {
 
         // MARK: Internal Instance Properties
@@ -21,6 +20,7 @@ extension MusicXML.Importer.Walker {
         internal let directionDynamicEvents: [MusicXML.Importer.Context.DynamicEvent]
         internal let panEvents: [(beatTime: BeatTime, pan: Pan)]
         internal let part: MusicXML.Part
+        internal let pedalEvents: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)]
         internal let tempoEvents: [(beatTime: BeatTime, tempo: Tempo)]
     }
 }

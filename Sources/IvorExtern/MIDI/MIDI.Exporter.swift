@@ -201,6 +201,8 @@ extension MIDI.Exporter {
 
         events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
+        events += _pedalEvents(part.pedals, channel: channel, tickMap: tickMap)
+
         // Note-off velocity is the note's `releaseVelocity`, if it has
         // one, or else 64, which MIDI prescribes for a release velocity
         // nobody measured (see `Context.handleNote`). The dynamic at the
@@ -415,6 +417,26 @@ extension MIDI.Exporter {
                 }
             } else if let panValue = convertToMIDIPanValue(entry.pan) {
                 events.append(.midi(eventTime, .controlChange(channel, .panMSB, panValue)))
+            }
+        }
+
+        return events
+    }
+
+    // Each entry becomes a control change (CC 64–68) at its time, rounded to
+    // MIDI's 0–127 scale, in table order — so a re-pedal's Off stays ahead of
+    // its On. Portamento is exported too: only playback holds it back.
+    private static func _pedalEvents<TickMap: MIDI.ExportTimeMap>(_ pedals: [Pedal: PedalTable<TickMap.TimeType>],
+                                                                  channel: MIDI.Channel,
+                                                                  tickMap: TickMap) -> [MIDI.Event] {
+        var events: [MIDI.Event] = []
+
+        for pedal in Pedal.allCases {
+            for entry in pedals[pedal] ?? PedalTable() {
+                guard let eventTime = tickMap.eventTime(at: entry.time)
+                else { continue }
+
+                events.append(.midi(eventTime, .controlChange(channel, controller(for: pedal), convertToMIDIValue(entry.level))))
             }
         }
 

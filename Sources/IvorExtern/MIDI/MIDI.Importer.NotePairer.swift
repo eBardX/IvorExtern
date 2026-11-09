@@ -8,9 +8,9 @@ extension MIDI.Importer {
     // MARK: Internal Nested Types
 
     // Pairs a single channel's note-on/note-off messages into sounding
-    // notes (FIFO per key) while collecting that channel's `.panMSB` and
-    // Bank Select (`.bankSelectMSB`/`.bankSelectLSB`) control changes,
-    // tick-ordered. The upstream `ignoreErrors`/`stripMetaText` options are
+    // notes (FIFO per key) while collecting that channel's `.panMSB`,
+    // Bank Select (`.bankSelectMSB`/`.bankSelectLSB`) and pedal (CC 64–68)
+    // control changes, tick-ordered. The upstream `ignoreErrors`/`stripMetaText` options are
     // dropped along with the type that carried them, since the importer
     // never set either one.
     internal struct NotePairer {
@@ -24,6 +24,7 @@ extension MIDI.Importer {
             self.notes = []
             self.openNotes = [:]
             self.panEvents = []
+            self.pedalEvents = []
             self.programChangeEvents = []
             self.volumeEvents = []
         }
@@ -39,6 +40,7 @@ extension MIDI.Importer {
                                                    onVelocity: MIDI.KeyVelocity,
                                                    peakKeyPressure: MIDIData1Value?)]]
         private var panEvents: [SMFEvent]
+        private var pedalEvents: [SMFEvent]
         private var programChangeEvents: [SMFEvent]
         private var volumeEvents: [SMFEvent]
     }
@@ -51,7 +53,8 @@ extension MIDI.Importer.NotePairer {
     // MARK: Internal Instance Methods
 
     // Ignores every channel event other than note-on, note-off, `.panMSB`
-    // control change, Bank Select control change, and program change.
+    // control change, Bank Select control change, pedal control change
+    // (CC 64–68), and program change.
     // Throws `.unexpectedNoteOff` for a note-off (or a zero-velocity
     // note-on) with no open note-on.
     internal mutating func ingest(_ event: SMFEvent) throws(MIDI.Error) {
@@ -73,6 +76,9 @@ extension MIDI.Importer.NotePairer {
         case .controlChange(_, .panLSB, _),
              .controlChange(_, .panMSB, _):
             panEvents.append(event)
+
+        case let .controlChange(_, controller, _) where convertToPedal(controller) != nil:
+            pedalEvents.append(event)
 
         case let .noteOff(_, key, velocity):
             try _closeNote(key: key,
@@ -114,6 +120,7 @@ extension MIDI.Importer.NotePairer {
                           name: name,
                           notes: notes.sorted { $0.startTime < $1.startTime },
                           panEvents: panEvents,
+                          pedalEvents: pedalEvents,
                           programChangeEvents: programChangeEvents,
                           volumeEvents: volumeEvents)
     }

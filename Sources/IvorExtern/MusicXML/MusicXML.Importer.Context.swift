@@ -63,7 +63,9 @@ extension MusicXML.Importer {
         internal var measureStart: MusicXML.Duration = .zero
         internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic)]] = [:]
         internal var noteTables: [String?: NoteTable<BeatTime, IvorTuning.Pitch>] = [:]
+        internal var openPedals: [UInt: Pedal] = [:]
         internal var panEvents: [(beatTime: BeatTime, pan: Pan)] = []
+        internal var pedalEvents: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)] = []
         internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration, extras: Extras?)]] = [:]
         internal var pendingWedges: [MXLNumberLevel?: (beatTime: BeatTime, dynamic: Dynamic, kind: MXLWedge.Kind)] = [:]
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []
@@ -95,6 +97,104 @@ extension MusicXML.Importer.Context {
         }
 
         return noteTables[id] ?? NoteTable()
+    }
+
+    // A direction's `<pedal>` marks, and its `<sound>`'s pedal attributes.
+    // The `<sound>` values are the playback values, so they win over a
+    // `<pedal>` mark for the same pedal, and come first. Each `<pedal>` mark
+    // is tracked by its `number` (default 1), so a `stop` lets up whichever
+    // pedal the matching opener put down — the damper if none is open — and
+    // `change` lets it up and puts it down again at one instant (Off then
+    // On). Per the MusicXML 4.0 `pedal-type` definitions, `continue`,
+    // `discontinue` and `resume` only shape the drawn pedal line:
+    // `discontinue` ends a line *without* the lift `stop` represents, and
+    // `resume` starts one *without* the downstroke `start` represents, so
+    // none of the three changes the level.
+    internal mutating func recordPedals(_ direction: MXLDirection,
+                                        at beatTime: BeatTime) {
+        let soundPedals = direction.sound.map { recordPedals($0, at: beatTime) } ?? []
+
+        for kind in direction.kind {
+            guard case let .pedal(mark) = kind.content
+            else { continue }
+
+            let number = mark.number?.uintValue ?? 1
+            let pedal: Pedal
+            let levels: [Pedal.Level]
+
+            switch mark.kind {
+            case .change:
+                pedal = openPedals[number] ?? .sustain
+                levels = [.off, .on]
+
+                openPedals[number] = pedal
+
+            case .continue,
+                 .discontinue,
+                 .resume:
+                continue
+
+            case .sostenuto:
+                pedal = .sostenuto
+                levels = [.on]
+
+                openPedals[number] = pedal
+
+            case .start:
+                pedal = .sustain
+                levels = [.on]
+
+                openPedals[number] = pedal
+
+            case .stop:
+                pedal = openPedals.removeValue(forKey: number) ?? .sustain
+                levels = [.off]
+            }
+
+            guard !soundPedals.contains(pedal)
+            else { continue }
+
+            for level in levels {
+                pedalEvents.append((beatTime: beatTime, pedal: pedal, level: level))
+            }
+        }
+    }
+
+    // A `<sound>`'s `damper-pedal`, `sostenuto-pedal` and `soft-pedal`
+    // attributes: `yes` is all the way down, `no` all the way up, and a
+    // number is a level on the 0–100 scale, for half-pedaling. Returns the
+    // pedals it set.
+    @discardableResult
+    internal mutating func recordPedals(_ sound: MXLSound,
+                                        at beatTime: BeatTime) -> Set<Pedal> {
+        var pedals: Set<Pedal> = []
+
+        for (pedal, value) in [(Pedal.sustain, sound.damperPedal),
+                               (Pedal.sostenuto, sound.sostenutoPedal),
+                               (Pedal.soft, sound.softPedal)] {
+            guard let value
+            else { continue }
+
+            pedalEvents.append((beatTime: beatTime, pedal: pedal, level: Self._pedalLevel(value)))
+            pedals.insert(pedal)
+        }
+
+        return pedals
+    }
+
+    // MARK: Private Type Methods
+
+    private static func _pedalLevel(_ value: MXLYesNoNumber) -> Pedal.Level {
+        switch value {
+        case .no:
+            .off
+
+        case let .number(percent):
+            convertToPedalLevel(percent: percent)
+
+        case .yes:
+            .on
+        }
     }
 }
 

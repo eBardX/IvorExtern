@@ -9,6 +9,8 @@ import Testing
 import XestiNumbers
 import XestiTools
 
+// swiftlint:disable file_length
+
 struct GuidoImporterWalkerTests {
 }
 
@@ -394,6 +396,22 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_pedalTags_recordSustainAtTheCurrentBeat() throws {
+        let octave = try #require(GMNPitch.Octave(intValue: 1))
+        let note = GMNNote(pitch: GMNPitch(name: .c, accidental: .omitted, octave: octave),
+                           duration: GMNDuration(numerator: 1, denominator: 4))
+        let walker = Guido.Importer.Walker(variables: [:])
+        let voice = Guido.Voice(symbols: [.tag(.pedal(GMNPedal(kind: .on))),
+                                          .note(note),
+                                          .tag(.pedal(GMNPedal(kind: .off)))])
+
+        let context = try walker.walk(voice)
+
+        #expect(context.sustainTable.map(\.time) == [0, 1])
+        #expect(context.sustainTable.map(\.level) == [.on, .off])
+    }
+
+    @Test
     func walk_rest_advancesWithoutInsertingNote() throws {
         let rest = GMNRest(duration: GMNDuration(numerator: 1, denominator: 4))
         let walker = Guido.Importer.Walker(variables: [:])
@@ -562,3 +580,5 @@ extension GuidoImporterWalkerTests {
         #expect(flags[1].end)
     }
 }
+
+// swiftlint:enable file_length

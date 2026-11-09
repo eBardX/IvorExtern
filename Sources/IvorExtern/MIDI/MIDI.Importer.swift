@@ -145,6 +145,12 @@ extension MIDI.Importer {
             }
         }
 
+        for case let .midi(eventTime, .controlChange(_, controller, value)) in voice.pedalEvents {
+            if let pedal = convertToPedal(controller) {
+                context.handlePedal(eventTime, pedal, value)
+            }
+        }
+
         var exprMSB: UInt?
         var exprLSB: UInt?
 
@@ -182,6 +188,7 @@ extension MIDI.Importer {
                     dynamicMap: context.dynamicMap,
                     instrumentTable: instrumentTable,
                     panMap: context.panMap,
+                    pedals: context.pedals,
                     extras: Extras(elements: [Extra(name: Extra.midiChannel.name,
                                                     values: [.int(Int(voice.channel.uintValue))])]))
     }

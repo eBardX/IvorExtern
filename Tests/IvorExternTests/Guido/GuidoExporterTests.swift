@@ -271,6 +271,27 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func convert_onlySustainIsWritten() throws {
+        var table = PedalTable<BeatTime>()
+
+        table.insert(time: 0, level: .on)
+
+        #expect(try guidoExportedPedalKinds([.soft: table, .sostenuto: table]).isEmpty)
+    }
+
+    @Test
+    func convert_repedal_writesOffThenOn() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sustain.insert(time: 1, level: .off)
+        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 2, level: .off)
+
+        #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off, .on, .off])
+    }
+
+    @Test
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -322,6 +343,17 @@ extension GuidoExporterTests {
         }.first)
 
         #expect(try tempo.metronome == .rate(unit: #require(GMNTempo.Metronome.BeatUnit(1, 4)), beats: 144))
+    }
+
+    @Test
+    func convert_threshold_partialLevelsCollapse() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 3, denominator: 4)))
+        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 2, level: Pedal.Level(Number(numerator: 1, denominator: 4)))
+
+        #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off])
     }
 
     @Test
@@ -520,6 +552,21 @@ extension GuidoExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_pedals() throws {
+        let work = try readGuido(Fixtures.pedalGuido)
+        let pedals = try pedalSummary(standardBeatParts(of: work))
+
+        #expect(pedals == [.sustain: ["on @ 0", "off @ 2", "on @ 2", "off @ 3"]])
+
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+
+        #expect(try pedalSummary(standardBeatParts(of: recovered)) == pedals)
     }
 
     @Test

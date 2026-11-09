@@ -175,6 +175,19 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_halfLevel_writesSoundPercent() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 1, denominator: 2)))
+        sustain.insert(time: 2, level: .off)
+
+        let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
+
+        #expect(directions.map(\.marks) == [[.start], [.stop]])
+        #expect(directions.map(\.damper) == [.number(50), .no])
+    }
+
+    @Test
     func convert_instrumentTable_midiChannelAndBankExtras_emitMidiChannelAndBank() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -268,6 +281,15 @@ extension MusicXMLExporterTests {
 
         #expect(scorePart.instrument.first?.name == "Kazoo Ensemble")
         #expect(scorePart.group2.isEmpty)
+    }
+
+    @Test
+    func convert_legatoAndPortamento_areDropped() throws {
+        var table = PedalTable<BeatTime>()
+
+        table.insert(time: 0, level: .on)
+
+        #expect(try musicXMLExportedPedalDirections([.legato: table, .portamento: table]).isEmpty)
     }
 
     @Test
@@ -409,6 +431,21 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_repedal_writesChange() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sustain.insert(time: 1, level: .off)
+        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 2, level: .off)
+
+        let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
+
+        #expect(directions.map(\.marks) == [[.start], [.change], [.stop]])
+        #expect(directions.allSatisfy { $0.damper == nil })
+    }
+
+    @Test
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -442,6 +479,35 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_softPedal_writesSoundOnly() throws {
+        var soft = PedalTable<BeatTime>()
+
+        soft.insert(time: 0, level: .on)
+        soft.insert(time: 2, level: .off)
+
+        let directions = try musicXMLExportedPedalDirections([.soft: soft])
+
+        #expect(directions.map(\.marks) == [[], []])
+        #expect(directions.map(\.soft) == [.yes, .no])
+    }
+
+    @Test
+    func convert_sostenuto_usesItsOwnNumber() throws {
+        var sustain = PedalTable<BeatTime>()
+        var sostenuto = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sostenuto.insert(time: 1, level: .on)
+        sustain.insert(time: 2, level: .off)
+        sostenuto.insert(time: 3, level: .off)
+
+        let pedals = try musicXMLExportedPedalDirections([.sostenuto: sostenuto, .sustain: sustain]).flatMap(\.pedals)
+
+        #expect(pedals.map(\.kind) == [.start, .sostenuto, .stop, .stop])
+        #expect(pedals.map { $0.number?.uintValue } == [nil, 2, nil, 2])
+    }
+
+    @Test
     func convert_tempoMap_emitsTempoDirection() throws {
         var tempoMap = TempoMap()
 
@@ -456,6 +522,16 @@ extension MusicXMLExporterTests {
         let tempo = try #require(sounds(in: score).compactMap(\.tempo).first)
 
         #expect(tempo == 144)
+    }
+
+    @Test
+    func convert_threshold_halfIsDown() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 63, denominator: 127)))
+        sustain.insert(time: 1, level: Pedal.Level(Number(numerator: 64, denominator: 127)))
+
+        #expect(try musicXMLExportedPedalDirections([.sustain: sustain]).map(\.marks) == [[], [.start]])
     }
 
     @Test
@@ -710,6 +786,7 @@ extension MusicXMLExporterTests {
 
     // MusicXML declares elevation once per part, so it applies to every
     // pan change in that part, not just the first.
+
     @Test
     func roundTrip_panMap_appliesVerticalToEveryEntry() throws {
         var table = NoteTable<BeatTime, Pitch>()
@@ -787,6 +864,7 @@ extension MusicXMLExporterTests {
     // Elevation is the vertical angle of pan, so it rides on the `PanMap`
     // even though MusicXML declares it inside `<midi-instrument>` — and it
     // survives the trip on a part with no instrument assignment of its own.
+
     @Test
     func roundTrip_panMap_preservesVertical() throws {
         var table = NoteTable<BeatTime, Pitch>()
@@ -807,6 +885,25 @@ extension MusicXMLExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         #expect(recoveredPart.panMap[.zero] == Pan(vertical: 45))
+    }
+
+    @Test
+    func roundTrip_pedals() throws {
+        let works = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(Fixtures.pedalMusicXML.utf8)),
+                                                 as: .musicXML)
+        let work = try #require(works.first)
+        let pedals = try pedalSummary(standardBeatParts(of: work))
+
+        #expect(pedals == [.soft: ["on @ 0", "off @ 2"],
+                           .sostenuto: ["on @ 1", "off @ 3"],
+                           .sustain: ["on @ 0", "off @ 1", "on @ 1", "1/2 @ 2", "off @ 3"]])
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+
+        #expect(try pedalSummary(standardBeatParts(of: recovered)) == pedals)
     }
 
     @Test(arguments: [nil, 1, 40, 64, 127])

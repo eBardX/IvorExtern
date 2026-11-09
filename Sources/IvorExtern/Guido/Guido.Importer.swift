@@ -52,7 +52,8 @@ extension Guido.Importer {
                  noteTable: context.noteTable,
                  dynamicMap: _makeDynamicMap(context.dynamicEvents),
                  instrumentTable: _makeInstrumentTable(context.instrumentEvents,
-                                                       firstAttack: context.noteTable.timeRange?.lowerBound))
+                                                       firstAttack: context.noteTable.timeRange?.lowerBound),
+                 pedals: [.sustain: context.sustainTable])
         }
 
         return Work(name: determineWorkName(validated),

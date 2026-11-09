@@ -22,6 +22,7 @@ extension MIDI.Importer {
             self.dynamicMap = DynamicMap()
             self.noteTable = NoteTable()
             self.panMap = PanMap()
+            self.pedals = [:]
         }
 
         // MARK: Internal Instance Properties
@@ -29,6 +30,7 @@ extension MIDI.Importer {
         internal var dynamicMap: DynamicMap<TimeMap.TimeType>
         internal var noteTable: NoteTable<TimeMap.TimeType, NoteNumber>
         internal var panMap: PanMap<TimeMap.TimeType>
+        internal var pedals: [Pedal: PedalTable<TimeMap.TimeType>]
         internal var timeMap: TimeMap
     }
 }
@@ -122,6 +124,17 @@ extension MIDI.Importer.Context {
         panMap.insert(time: time,
                       pan: pan,
                       extras: extras)
+    }
+
+    // Every pedal event becomes an entry, repeats included, so the stream
+    // round-trips (only an identical event at the same tick folds, per
+    // `PedalTable`'s rule). The value is kept exactly — no snapping — so
+    // half-pedaling survives. Events must come in file order.
+    internal mutating func handlePedal(_ eventTime: MIDI.EventTime,
+                                       _ pedal: Pedal,
+                                       _ value: MIDI.PedalValue) {
+        pedals[pedal, default: PedalTable()].insert(time: timeMap.time(at: eventTime),
+                                                    level: convertToPedalLevel(midiValue: value))
     }
 }
 

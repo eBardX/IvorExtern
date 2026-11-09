@@ -84,7 +84,7 @@ extension MusicXML.Exporter {
 
     // Every 4-beat measure boundary strictly between the start and the end of
     // the work — `.zero` and the final bound are supplied separately by
-    // `_boundaries(events:tempos:pans:annotations:barTimes:endTime:)`.
+    // `_boundaries(events:tempos:directions:annotations:barTimes:endTime:)`.
     private static func _barTimes(measureCount: UInt) -> [BeatTime] {
         var barTimes: [BeatTime] = []
         var barBeat: UInt = 4
@@ -99,14 +99,14 @@ extension MusicXML.Exporter {
 
     // The sorted union of every time this part's body needs to notice:
     // `.zero` and the work's end, every bar line, every note's attack and
-    // end, and every tempo/pan/dynamic annotation's own time. Splitting a
+    // end, and every tempo/pan/pedal/dynamic annotation's own time. Splitting a
     // note at one of these — even one with no note of its own — is what lets
     // a tempo change, pan change, or dynamic mark/wedge boundary land exactly
     // where the model says it should, and what lets a note crossing a bar
     // line split into per-measure, tied segments.
     private static func _boundaries(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan)],
+                                    directions: [(BeatTime, MXLDirection)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: [BeatTime],
                                     endTime: BeatTime) -> [BeatTime] {
@@ -125,7 +125,7 @@ extension MusicXML.Exporter {
             boundaries.insert(time)
         }
 
-        for (time, _) in pans {
+        for (time, _) in directions {
             boundaries.insert(time)
         }
 
@@ -338,7 +338,7 @@ extension MusicXML.Exporter {
     }
 
     // One chunk per boundary interval, each either a tied note/chord fragment
-    // or a rest, with any tempo/pan/dynamics `<direction>` scheduled at its
+    // or a rest, with any tempo/pan/pedal/dynamics `<direction>` scheduled at its
     // own start folded in ahead of it. Dynamics travel exclusively through
     // `<direction>` marks and `<wedge>` hairpins here, never through a note's
     // own `dynamics` attribute: `MusicXML.Importer`'s
@@ -348,13 +348,13 @@ extension MusicXML.Exporter {
     // direction-level mark once any one note carried its own velocity.
     private static func _makeChunks(events: [Event],
                                     tempos: [(BeatTime, Tempo)],
-                                    pans: [(BeatTime, Pan)],
+                                    directions: [(BeatTime, MXLDirection)],
                                     annotations: [DynamicAnnotation],
                                     sortedBoundaries: [BeatTime],
                                     divisions: Int) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
         var chunks: [(start: BeatTime, items: [MXLMusicItem])] = []
         var tempoIndex = 0
-        var panIndex = 0
+        var directionIndex = 0
         var ramps: [BeatTime: Ramp] = [:]
 
         for annotation in annotations {
@@ -373,8 +373,8 @@ extension MusicXML.Exporter {
             var items = _makeDirectionItems(at: start,
                                             tempos: tempos,
                                             tempoIndex: &tempoIndex,
-                                            pans: pans,
-                                            panIndex: &panIndex,
+                                            directions: directions,
+                                            directionIndex: &directionIndex,
                                             annotations: annotations,
                                             ramps: ramps)
 
@@ -386,14 +386,14 @@ extension MusicXML.Exporter {
         return chunks
     }
 
-    // The `<direction>` items (tempo, pan, dynamics marks, wedge
+    // The `<direction>` items (tempo, pan, pedal, dynamics marks, wedge
     // start/stop) scheduled at one boundary's own start, folded in ahead of
     // that boundary's note or rest.
     private static func _makeDirectionItems(at start: BeatTime,
                                             tempos: [(BeatTime, Tempo)],
                                             tempoIndex: inout Int,
-                                            pans: [(BeatTime, Pan)],
-                                            panIndex: inout Int,
+                                            directions: [(BeatTime, MXLDirection)],
+                                            directionIndex: inout Int,
                                             annotations: [DynamicAnnotation],
                                             ramps: [BeatTime: Ramp]) -> [MXLMusicItem] {
         var items: [MXLMusicItem] = []
@@ -403,9 +403,9 @@ extension MusicXML.Exporter {
             tempoIndex += 1
         }
 
-        while panIndex < pans.count, pans[panIndex].0 <= start {
-            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(pan: pans[panIndex].1))))
-            panIndex += 1
+        while directionIndex < directions.count, directions[directionIndex].0 <= start {
+            items.append(.direction(directions[directionIndex].1))
+            directionIndex += 1
         }
 
         for annotation in annotations {
@@ -517,19 +517,19 @@ extension MusicXML.Exporter {
                                       tempoMap: TempoMap) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
-        let pans = _panDirectives(part.panMap)
+        let directions = _playbackDirections(part)
         let tempos = index == 0 ? _tempoDirectives(tempoMap) : []
         let barTimes = _barTimes(measureCount: measureCount)
         let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
         let sortedBoundaries = _boundaries(events: events,
                                            tempos: tempos,
-                                           pans: pans,
+                                           directions: directions,
                                            annotations: annotations,
                                            barTimes: barTimes,
                                            endTime: endTime)
         let chunks = try _makeChunks(events: events,
                                      tempos: tempos,
-                                     pans: pans,
+                                     directions: directions,
                                      annotations: annotations,
                                      sortedBoundaries: sortedBoundaries,
                                      divisions: divisions)
@@ -678,6 +678,17 @@ extension MusicXML.Exporter {
         }
 
         return directives
+    }
+
+    // A part's pan and pedal `<direction>`s, in time order — pan first at
+    // any one time.
+    private static func _playbackDirections(_ part: Part<BeatTime, Pitch>) -> [(BeatTime, MXLDirection)] {
+        let pans = _panDirectives(part.panMap).map { ($0.0, _makeSoundDirection(convertToMusicXMLSound(pan: $0.1))) }
+
+        return (pans + makeMusicXMLPedalDirections(part.pedals))
+            .enumerated()
+            .sorted { ($0.element.0, $0.offset) < ($1.element.0, $1.offset) }
+            .map(\.element)
     }
 
     private static func _tempoDirectives(_ tempoMap: TempoMap) -> [(BeatTime, Tempo)] {

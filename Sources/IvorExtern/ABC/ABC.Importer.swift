@@ -56,6 +56,7 @@ extension ABC.Importer {
                         noteTable: result.context.noteTable,
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
                         instrumentTable: instrumentTable,
+                        pedals: [.sustain: result.context.sustainTable],
                         extras: extras)
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)

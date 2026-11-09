@@ -27,6 +27,7 @@ extension ABCImporterContextTests {
 
         #expect(context.currentBeatTime == .zero)
         #expect(context.noteTable.isEmpty)
+        #expect(context.sustainTable.isEmpty)
         #expect(context.unitNoteLength == (1, 8))
     }
 

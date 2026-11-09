@@ -54,6 +54,7 @@ extension Guido.Importer {
         internal var pendingDynamicRamps: [GMNTag.Ident?: (beatTime: BeatTime, dynamic: Dynamic, direction: GMNDynamicRamp.Direction)] = [:]
         internal var pendingNote: (attackTime: BeatTime, notes: [Guido.Note], extras: [Extra])?
         internal var pendingNoteExtras: [Extra] = []
+        internal var sustainTable: PedalTable<BeatTime> = PedalTable()
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false
     }

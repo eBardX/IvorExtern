@@ -103,6 +103,25 @@ extension MIDIImporterNotePairerTests {
     }
 
     @Test
+    func ingest_pedalControlChanges_collectedInFileOrder() throws {
+        let channel = MIDIChannel(1)
+        let events: [SMFEvent] = [.midi(SMFEventTime(0), .controlChange(channel, .sustain, MIDIData1Value(127))),
+                                  .midi(SMFEventTime(0), .controlChange(channel, .channelVolumeMSB, MIDIData1Value(90))),
+                                  .midi(SMFEventTime(96), .controlChange(channel, .sustain, MIDIData1Value(0))),
+                                  .midi(SMFEventTime(96), .controlChange(channel, .legato, MIDIData1Value(127))),
+                                  .midi(SMFEventTime(96), .controlChange(channel, .sustain, MIDIData1Value(127)))]
+        var pairer = MIDI.Importer.NotePairer(channel: channel)
+
+        for event in events {
+            try pairer.ingest(event)
+        }
+
+        let voice = try pairer.makeVoice(name: "Test")
+
+        #expect(voice.pedalEvents == [events[0], events[2], events[3], events[4]])
+    }
+
+    @Test
     func ingest_programChange_collected() throws {
         let t0 = SMFEventTime(0)
         let channel = MIDIChannel(1)

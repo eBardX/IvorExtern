@@ -27,5 +27,6 @@ extension GuidoImporterContextTests {
 
         #expect(context.currentBeatTime == .zero)
         #expect(context.noteTable.isEmpty)
+        #expect(context.sustainTable.isEmpty)
     }
 }

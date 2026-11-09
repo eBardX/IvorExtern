@@ -1089,4 +1089,234 @@ internal func repeatStart(_ length: Int) -> String {
     #"<attributes><measure-style><measure-repeat type="start">\#(length)</measure-repeat></measure-style></attributes>"#
 }
 
+internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
+    let work = try readABC("""
+        X:1
+        T:Test
+        M:4/4
+        L:1/4
+        K:C
+        \(body)
+        """)
+
+    guard case let .standardBeat(parts, _) = work.content
+    else { Issue.record("Expected standardBeat content"); throw CancellationError() }
+
+    return try #require(parts.first)
+}
+
+internal func guidoPedalPart(_ gmn: String) throws -> Part<BeatTime, Pitch> {
+    let work = try Guido.Importer().convert(Guido.Parser().parse(Data(gmn.utf8)))
+
+    guard case let .standardBeat(parts, _) = work.content
+    else { Issue.record("Expected standardBeat content"); throw CancellationError() }
+
+    return try #require(parts.first)
+}
+
+// Imports one channel-1 track with a note at tick 0 plus the given
+// controller events (tick, controller, value) at 480 ticks per beat.
+internal func midiImportedPedals(_ events: [(tick: UInt, controller: MIDIController, value: UInt)]) throws -> [Pedal: PedalTable<BeatTime>] {
+    let channel = MIDIChannel(1)
+    let key = MIDIData1Value(60)
+    var smfEvents: [SMFEvent] = [.midi(.zero, .noteOn(channel, key, MIDIData1Value(100)))]
+
+    for event in events {
+        smfEvents.append(.midi(SMFEventTime(event.tick),
+                               .controlChange(channel, event.controller, MIDIData1Value(clamping: event.value))))
+    }
+
+    smfEvents.append(.midi(SMFEventTime(1_440), .noteOff(channel, key, MIDIData1Value(64))))
+    smfEvents.append(.meta(SMFEventTime(1_440), .endOfTrack))
+
+    let sequence = SMFSequence(format: .format1,
+                               division: .metrical(SMFTickRate(480)),
+                               tracks: [SMFTrack(events: smfEvents)])
+    let work = try MIDI.Importer().convert(sequence)
+
+    guard case let .keyboardBeat(parts, _) = work.content
+    else { Issue.record("Expected keyboardBeat content"); return [:] }
+
+    return try #require(parts.first).pedals
+}
+
+// One part of quarter notes. Before note i come `marks[i]` (as a
+// `<direction>` whose `<sound>` is `directionSounds[i]`, if any) and
+// `sounds[i]` (as a bare `<sound>`).
+internal func musicXMLImportedPedals(_ marks: [String],
+                                     directionSounds: [String] = [],
+                                     sounds: [String] = []) throws -> [Pedal: PedalTable<BeatTime>] {
+    let count = max(marks.count, directionSounds.count, sounds.count, 1)
+    var body = ""
+
+    for index in 0..<count {
+        let mark = index < marks.count ? marks[index] : nil
+        let directionSound = index < directionSounds.count ? directionSounds[index] : nil
+
+        if let mark {
+            body += "<direction><direction-type>\(mark)</direction-type>\(directionSound ?? "")</direction>\n"
+        }
+
+        if index < sounds.count {
+            body += sounds[index] + "\n"
+        }
+
+        body += "<note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration><type>quarter</type></note>\n"
+    }
+
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+          <part id="P1">
+            <measure number="1">
+              <attributes><divisions>1</divisions></attributes>
+              \(body)
+            </measure>
+          </part>
+        </score-partwise>
+        """
+
+    return try #require(musicXMLImportedParts(musicXML).first).pedals
+}
+
+internal func musicXMLImportedParts(_ musicXML: String) throws -> [Part<BeatTime, Pitch>] {
+    let works = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(musicXML.utf8)),
+                                             as: .musicXML)
+    let work = try #require(works.first)
+
+    guard case let .standardBeat(parts, _) = work.content
+    else { Issue.record("Expected standardBeat content"); return [] }
+
+    return parts
+}
+
+// One part of quarter notes C D E F with the given pedals.
+internal func abcExportedWithPedals(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> String {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    for (index, pitch) in [Pitch.c4, .d4, .e4, .f4].enumerated() {
+        noteTable.insert(attack: BeatTime(Number(index)), duration: 1, pitch: pitch)
+    }
+
+    return try writeABC(standardBeatWork(parts: [Part(name: "Piano", noteTable: noteTable, pedals: pedals)]))
+}
+
+// The CC 64–68 events in the exported track of one keyboard part with a
+// note from 0 to 4 and the given pedals, in file order.
+internal func midiExportedPedalEvents(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [(tick: UInt, controller: MIDIController, value: UInt)] {
+    var noteTable = NoteTable<BeatTime, NoteNumber>()
+
+    noteTable.insert(attack: 0, duration: 4, pitch: NoteNumber(60))
+
+    let part = Part<BeatTime, NoteNumber>(name: "Piano", noteTable: noteTable, pedals: pedals)
+    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+
+    return sequence.tracks.flatMap(\.events).compactMap { event in
+        guard case let .midi(eventTime, .controlChange(_, controller, value)) = event,
+              convertToPedal(controller) != nil
+        else { return nil }
+
+        return (tick: eventTime.uintValue, controller: controller, value: value.uintValue)
+    }
+}
+
+internal func guidoExportedPedalKinds(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [GMNPedal.Kind] {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    noteTable.insert(attack: 0, duration: 4, pitch: .c4)
+
+    let part = Part<BeatTime, Pitch>(name: "Piano", noteTable: noteTable, pedals: pedals)
+    let score = try Guido.Exporter().convert(standardBeatWork(parts: [part]))
+
+    return symbols(in: score).compactMap { symbol in
+        guard case let .tag(.pedal(pedal)) = symbol
+        else { return nil }
+
+        return pedal.kind
+    }
+}
+
+internal func musicXMLExportedPedalDirections(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [ExportedPedalDirection] {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    noteTable.insert(attack: 0, duration: 4, pitch: .c4)
+
+    let part = Part<BeatTime, Pitch>(name: "Piano", noteTable: noteTable, pedals: pedals)
+    let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
+
+    return directions(in: score).compactMap { direction in
+        let marks = direction.kind.compactMap { kind -> MXLPedal? in
+            guard case let .pedal(pedal) = kind.content
+            else { return nil }
+
+            return pedal
+        }
+        let sound = direction.sound
+
+        guard !marks.isEmpty || sound?.damperPedal != nil || sound?.softPedal != nil || sound?.sostenutoPedal != nil
+        else { return nil }
+
+        return ExportedPedalDirection(pedals: marks, sound: sound)
+    }
+}
+
+internal func pedalMessages(_ performance: WorkPerformance) -> [MIDIChannelMessage] {
+    performance.events.map(\.message).filter {
+        guard case let .controlChange(_, controller, _) = $0
+        else { return false }
+
+        return (64...68).contains(controller.uintValue)
+    }
+}
+
+// `levels` as (seconds, level).
+internal func wallSustainTable(_ levels: [(Double, Pedal.Level)]) -> PedalTable<WallTime> {
+    var table = PedalTable<WallTime>()
+
+    for (seconds, level) in levels {
+        table.insert(time: makeWallTime(seconds), level: level)
+    }
+
+    return table
+}
+
+// Each pedal's entries as "level @ time" (plain forms), of a work's only part.
+internal func pedalSummary(_ parts: [Part<BeatTime, some PitchProtocol>]?) throws -> [Pedal: [String]] {
+    let part = try #require(parts?.first)
+
+    return part.pedals.mapValues { table in
+        table.map { "\($0.level.plain) @ \($0.time.plain)" }
+    }
+}
+
+// A `<direction>` carrying the given `<pedal>` marks and, optionally, a
+// `<sound>`.
+internal func pedalDirection(_ marks: [MXLPedal],
+                             sound: MXLSound? = nil) -> MXLDirection {
+    MXLDirection(kind: marks.map { MXLDirection.Kind(content: .pedal($0)) },
+                 sound: sound)
+}
+
+// A sustain table of the given (beat, level) entries, in order.
+internal func beatSustainTable(_ levels: [(BeatTime, Pedal.Level)]) -> PedalTable<BeatTime> {
+    var table = PedalTable<BeatTime>()
+
+    for (time, level) in levels {
+        table.insert(time: time, level: level)
+    }
+
+    return table
+}
+
+// The `<pedal>` marks in `direction`, in order.
+internal func pedalMarks(_ direction: MXLDirection) -> [MXLPedal] {
+    direction.kind.compactMap { kind in
+        guard case let .pedal(pedal) = kind.content
+        else { return nil }
+
+        return pedal
+    }
+}
+
 // swiftlint:enable file_length

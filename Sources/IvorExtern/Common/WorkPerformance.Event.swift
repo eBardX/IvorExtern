@@ -12,10 +12,12 @@ extension WorkPerformance {
     ///
     /// Events at the same time are ordered note-offs first, then bank
     /// selects (MSB, then LSB), then program changes, then pan (MSB, then
-    /// LSB), then expression (MSB, then LSB), then any other control
-    /// change, then note-ons, so that a note repeated back to back sounds
-    /// again — with its new instrument, pan and expression, if they change
-    /// there.
+    /// LSB), then expression (MSB, then LSB), then pedals (CC 64–68), then
+    /// any other control change, then note-ons, so that a note repeated back
+    /// to back sounds again — with its new instrument, pan and expression,
+    /// if they change there — and a pedal goes down before a note it should
+    /// hold. Notes that end where a pedal is re-pedaled are let go of first,
+    /// while the pedal is still down, so its release frees them.
     public struct Event {
 
         // MARK: Public Initializers
@@ -78,17 +80,20 @@ extension WorkPerformance.Event {
         case .controlChange(_, .panMSB, _):
             4
 
+        case let .controlChange(_, controller, _) where convertToPedal(controller) != nil:
+            8
+
         case .noteOff:
             0
 
         case .noteOn:
-            9
+            10
 
         case .programChange:
             3
 
         default:
-            8
+            9
         }
     }
 }

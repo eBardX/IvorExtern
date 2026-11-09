@@ -49,6 +49,20 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_halfPedaling_keepsExactValues() throws {
+        let pedals = try midiImportedPedals([(0, .sustain, 0),
+                                             (120, .sustain, 64),
+                                             (240, .sustain, 100),
+                                             (360, .sustain, 0)])
+        let levels = try #require(pedals[.sustain]?.map(\.level))
+
+        #expect(levels == [.off,
+                           Pedal.Level(Number(numerator: 64, denominator: 127)),
+                           Pedal.Level(Number(numerator: 100, denominator: 127)),
+                           .off])
+    }
+
+    @Test
     func convert_instrumentNameEvent_emptyText_fallsBackToGeneralMIDIName() throws {
         let emptyName = try #require(SMFText(stringValue: ""))
         let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIProgram(41))
@@ -214,6 +228,11 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_noPedalEvents_hasNoPedals() throws {
+        #expect(try midiImportedPedals([]).isEmpty)
+    }
+
+    @Test
     func convert_noteOnVelocities_keptOnEachNote() throws {
         let channel = MIDIChannel(1)
         let track = SMFTrack(events: [.midi(.zero, .noteOn(channel, MIDIData1Value(60), MIDIData1Value(100))),
@@ -240,6 +259,20 @@ extension MIDIImporterTests {
         // velocities apart.
         #expect(noteVelocities == [60: 100, 64: 40])
         #expect(dynamicVelocities.allSatisfy { $0 == nil })
+    }
+
+    @Test
+    func convert_onePedalTablePerController() throws {
+        let pedals = try midiImportedPedals([(0, .sustain, 127),
+                                             (0, .sostenuto, 127),
+                                             (0, .softPedal, 127),
+                                             (0, .legato, 127),
+                                             (0, .portamento, 127),
+                                             (480, .sostenuto, 0)])
+
+        #expect(Set(pedals.keys) == Set(Pedal.allCases))
+        #expect(pedals[.sostenuto]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sostenuto]?.map(\.time) == [0, 1])
     }
 
     @Test
@@ -280,6 +313,17 @@ extension MIDIImporterTests {
 
         #expect(intValue(parts.first?.extras, .midiChannel) == 3)
         #expect(entryChannels == [nil])
+    }
+
+    @Test
+    func convert_repedalAtOneTick_keepsOffThenOn() throws {
+        let pedals = try midiImportedPedals([(0, .sustain, 127),
+                                             (480, .sustain, 0),
+                                             (480, .sustain, 127),
+                                             (960, .sustain, 0)])
+
+        #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
+        #expect(pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
     }
 
     @Test
@@ -375,6 +419,14 @@ extension MIDIImporterTests {
 
         #expect(work.smpteStartTime.frameRate == .fps30)
         #expect(work.smpteStartTime.description == "00:00:00:00")
+    }
+
+    @Test
+    func convert_switchValues_importAsOffAndOn() throws {
+        let pedals = try midiImportedPedals([(0, .sustain, 127),
+                                             (480, .sustain, 0)])
+
+        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
     }
 
     @Test

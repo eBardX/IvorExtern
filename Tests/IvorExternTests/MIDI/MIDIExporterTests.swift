@@ -94,6 +94,29 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_everyPedalExported_portamentoIncluded() throws {
+        var pedals: [Pedal: PedalTable<BeatTime>] = [:]
+
+        for pedal in Pedal.allCases {
+            pedals[pedal, default: PedalTable()].insert(time: 0, level: .on)
+        }
+
+        let controllers = try midiExportedPedalEvents(pedals).map(\.controller.uintValue)
+
+        #expect(Set(controllers) == [64, 65, 66, 67, 68])
+    }
+
+    @Test
+    func convert_halfLevel_roundsToNearestValue() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 64, denominator: 127)))
+        sustain.insert(time: 1, level: Pedal.Level(Number(numerator: 1, denominator: 2)))
+
+        #expect(try midiExportedPedalEvents([.sustain: sustain]).map(\.value) == [64, 64])
+    }
+
+    @Test
     func convert_instrumentTable_changesMidPart_emitTwoProgramChanges() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
@@ -436,6 +459,26 @@ extension MIDIExporterTests {
         #expect(!sequence.tracks[1].events.contains {
             if case .midi(_, .controlChange(_, .channelVolumeMSB, _)) = $0 { true } else { false }
         })
+    }
+
+    @Test
+    func convert_noPedals_writesNoPedalEvents() throws {
+        #expect(try midiExportedPedalEvents([:]).isEmpty)
+    }
+
+    @Test
+    func convert_repedal_keepsOffThenOnAtOneTick() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sustain.insert(time: 1, level: .off)
+        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 2, level: .off)
+
+        let events = try midiExportedPedalEvents([.sustain: sustain])
+
+        #expect(events.map(\.tick) == [0, 480, 480, 960])
+        #expect(events.map(\.value) == [127, 0, 127, 0])
     }
 
     @Test
@@ -807,6 +850,7 @@ extension MIDIExporterTests {
     }
 
     // MIDI can only represent instantaneous tempo changes; after the first pass, further roundtrips must not alter the TempoMap.
+
     @Test
     func roundTrip_attackVelocity_preservesExactValue() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
@@ -1213,6 +1257,34 @@ extension MIDIExporterTests {
         let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
 
         expectPanMapsMatch(recoveredPart.panMap, panMap)
+    }
+
+    @Test
+    func roundTrip_pedals() throws {
+        let works = try MIDI.Importer().read(from: FileWrapper(regularFileWithContents: Fixtures.pedalMIDI()),
+                                             as: .midi)
+        let work = try #require(works.first)
+        let pedals = try pedalSummary(keyboardBeatParts(of: work))
+
+        #expect(pedals == [.legato: ["on @ 0", "off @ 2"],
+                           .soft: ["on @ 1", "off @ 1 3/4"],
+                           .sostenuto: ["on @ 0", "off @ 1 1/2"],
+                           .sustain: ["off @ 0",
+                                      "40/127 @ 0 1/4",
+                                      "64/127 @ 0 1/2",
+                                      "100/127 @ 0 3/4",
+                                      "on @ 1",
+                                      "64/127 @ 1 1/4",
+                                      "off @ 1 1/2",
+                                      "on @ 1 1/2",
+                                      "off @ 2"]])
+
+        let recovered = try roundTrip(work,
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+
+        #expect(try pedalSummary(keyboardBeatParts(of: recovered)) == pedals)
     }
 
     @Test(arguments: [nil, 1, 40, 127])

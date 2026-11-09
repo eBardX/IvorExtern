@@ -42,6 +42,7 @@ extension WorkPerformanceEventTests {
                                               .programChange(1, 20),
                                               .controlChange(1, .panMSB, 64),
                                               .controlChange(1, .panLSB, 0),
+                                              .controlChange(1, .sostenuto, 127),
                                               .controlChange(1, .brightness, 64),
                                               .noteOn(1, 60, 100)]
         let events = messages.map { WorkPerformance.Event(time: .zero, message: $0) }

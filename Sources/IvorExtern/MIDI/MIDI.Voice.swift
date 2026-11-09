@@ -13,7 +13,8 @@ extension MIDI {
     // `bankSelectEvents` only its `.bankSelectMSB`/`.bankSelectLSB` control
     // changes, `expressionEvents` only its `.expressionControllerMSB`/
     // `.expressionControllerLSB` control changes, and `volumeEvents` only
-    // its `.channelVolumeMSB` control changes — all filtered out during the
+    // its `.channelVolumeMSB` control changes, and `pedalEvents` only its
+    // pedal (CC 64–68) control changes, in file order — all filtered out during the
     // same pass that pairs notes — no other channel event is read, so
     // nothing else is kept.
     internal struct Voice {
@@ -26,6 +27,7 @@ extension MIDI {
         internal let name: String
         internal let notes: [MIDI.Note]
         internal let panEvents: [SMFEvent]
+        internal let pedalEvents: [SMFEvent]
         internal let programChangeEvents: [SMFEvent]
         internal let volumeEvents: [SMFEvent]
     }

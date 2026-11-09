@@ -139,11 +139,33 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_noPedalTags_hasNoPedals() throws {
+        #expect(try guidoPedalPart("[ c d e f ]").pedals.isEmpty)
+    }
+
+    @Test
+    func convert_pedalOnAndOff_populateSustainTable() throws {
+        let part = try guidoPedalPart("[ \\pedalOn c d \\pedalOff e f ]")
+
+        #expect(Array(part.pedals.keys) == [.sustain])
+        #expect(part.pedals[.sustain]?.map(\.time) == [0, 2])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
+    }
+
+    @Test
     func convert_rampTag_leavesAGlideBetweenItsEndpoints() throws {
         let part = try #require(standardBeatParts(of: readGuido(#"[ \cresc( c d ) e ]"#))?.first)
 
         #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2)])
         #expect(part.dynamicMap.map(\.dynamic) == [.mp, .mf])
+    }
+
+    @Test
+    func convert_repedal_keepsOffThenOn() throws {
+        let part = try guidoPedalPart("[ \\pedalOn c d \\pedalOff \\pedalOn e \\pedalOff ]")
+
+        #expect(part.pedals[.sustain]?.map(\.time) == [0, 2, 2, 3])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
     }
 
     @Test

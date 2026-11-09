@@ -61,7 +61,8 @@ extension MusicXML.Importer {
     // still yields one empty `Part`, named by `determinePartName`. Pan, like
     // an instrument assignment, applies to the whole MusicXML part rather
     // than any one voice, so every voice split from the same part shares the
-    // one pan map built from that part's own `<sound>` events. Dynamics
+    // one pan map built from that part's own `<sound>` events, and the same
+    // goes for its pedal tables. Dynamics
     // split the opposite way: a voice with any note carrying its own
     // `dynamics` (velocity) attribute uses a map built purely from those —
     // the more precise, MIDI-style source — falling back to the part's
@@ -70,6 +71,7 @@ extension MusicXML.Importer {
     private static func _convert(_ part: MusicXML.Part,
                                  groupName: String?,
                                  panMap: PanMap<BeatTime>,
+                                 pedals: [Pedal: PedalTable<BeatTime>],
                                  directionDynamicMap: DynamicMap<BeatTime>) -> [Part<BeatTime, Pitch>] {
         let instrumentTable = _makeInstrumentTable(part.part)
         let extras = _makeExtras(part.part)
@@ -80,6 +82,7 @@ extension MusicXML.Importer {
                             dynamicMap: directionDynamicMap,
                             instrumentTable: instrumentTable,
                             panMap: panMap,
+                            pedals: pedals,
                             extras: extras)] }
 
         return part.voices.enumerated().map { index, voice in
@@ -93,6 +96,7 @@ extension MusicXML.Importer {
                         dynamicMap: dynamicMap,
                         instrumentTable: instrumentTable,
                         panMap: panMap,
+                        pedals: pedals,
                         extras: extras)
         }
     }
@@ -103,6 +107,7 @@ extension MusicXML.Importer {
             _convert($0.part,
                      groupName: groupNames[$0.part.part.id],
                      panMap: _makePanMap($0.part.part, $0.panEvents),
+                     pedals: _makePedals($0.pedalEvents),
                      directionDynamicMap: _makeDirectionDynamicMap($0.directionDynamicEvents))
         }
     }
@@ -348,6 +353,19 @@ extension MusicXML.Importer {
         else { return partName }
 
         return "\(partName), Voice \(index + 1)"
+    }
+
+    // Inserted in walk order, so same-time entries — a `change`'s Off then
+    // On — keep their order.
+    private static func _makePedals(_ events: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)]) -> [Pedal: PedalTable<BeatTime>] {
+        var pedals: [Pedal: PedalTable<BeatTime>] = [:]
+
+        for event in events {
+            pedals[event.pedal, default: PedalTable()].insert(time: event.beatTime,
+                                                              level: event.level)
+        }
+
+        return pedals
     }
 
     // The same prev/curr double-insert step MIDI's, Guido's, and ABC's

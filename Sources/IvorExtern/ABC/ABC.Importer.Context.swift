@@ -72,6 +72,7 @@ extension ABC.Importer {
         internal var pendingNoteExtras: [Extra] = []
         internal var pendingTuplet: (beatCount: UInt, noteCount: UInt, remainingCount: UInt)?
         internal var shorthands: [ABCShorthand: ABCUserSymbol.Definition] = Self.defaultShorthands
+        internal var sustainTable: PedalTable<BeatTime> = PedalTable()
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false
         internal var unitNoteLength: (numerator: UInt, denominator: UInt)

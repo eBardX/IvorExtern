@@ -221,6 +221,24 @@ extension ABCImporterWalkerTests {
     }
 
     @Test
+    func walk_pedDecorations_recordSustainAtTheDecoratedNote() throws {
+        let abc = """
+            X:1
+            L:1/4
+            K:C
+            C !ped!D !ped-up!E|
+            """
+        let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+        let tune = try #require(tunebook.tunes.first)
+
+        let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
+        let sustain = results[0].context.sustainTable
+
+        #expect(sustain.map(\.time) == [1, 2])
+        #expect(sustain.map(\.level) == [.on, .off])
+    }
+
+    @Test
     func walk_shorthandMappedToAnnotation_isDropped() throws {
         let notes = try abcNoteExtras("""
             X:1

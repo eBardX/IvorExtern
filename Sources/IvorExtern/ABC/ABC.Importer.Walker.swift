@@ -386,7 +386,9 @@ extension ABC.Importer.Walker {
     // a *closing* hairpin marker is written right after the notes it covers,
     // so `context.currentBeatTime` has to reflect them — but they may still
     // be sitting in `pendingEvent`, undecided until the walk sees whether the
-    // next item ties onto them, unless this flushes them itself.
+    // next item ties onto them, unless this flushes them itself. abcm2ps's
+    // `!ped!` and `!ped-up!` become sustain-pedal entries rather than
+    // articulations.
     private func _handleDecoration(_ decoration: ABCDecoration,
                                    _ context: inout ABC.Importer.Context) throws(ABC.Error) {
         try _commitPending(&context)
@@ -433,6 +435,16 @@ extension ABC.Importer.Walker {
                                    &context)
 
             context.pendingDiminuendo = nil
+
+        // abcm2ps's damper-pedal marks (not in the ABC 2.1 standard): the
+        // pedal goes down or up at the note they decorate.
+        case "ped":
+            context.sustainTable.insert(time: context.currentBeatTime,
+                                        level: .on)
+
+        case "ped-up":
+            context.sustainTable.insert(time: context.currentBeatTime,
+                                        level: .off)
 
         default:
             if Self.dynamicMarkWords.contains(decoration.name.stringValue.lowercased()) {

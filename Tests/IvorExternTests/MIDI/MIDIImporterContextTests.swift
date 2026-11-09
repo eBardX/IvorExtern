@@ -44,6 +44,21 @@ extension MIDIImporterContextTests {
     }
 
     @Test
+    func handlePedal_keepsEveryEventExactly() {
+        let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
+        var context = MIDI.Importer.Context(timeMap: beatMap)
+
+        context.handlePedal(SMFEventTime(0), .sustain, MIDI.PedalValue(127))
+        context.handlePedal(SMFEventTime(480), .sustain, MIDI.PedalValue(0))
+        context.handlePedal(SMFEventTime(480), .sustain, MIDI.PedalValue(64))
+        context.handlePedal(SMFEventTime(480), .soft, MIDI.PedalValue(127))
+
+        #expect(context.pedals[.sustain]?.map(\.time) == [BeatTime(0), BeatTime(1), BeatTime(1)])
+        #expect(context.pedals[.sustain]?.map(\.level) == [.on, .off, Pedal.Level(Number(numerator: 64, denominator: 127))])
+        #expect(context.pedals[.soft]?.map(\.level) == [.on])
+    }
+
+    @Test
     func init_emptyState() {
         let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
         let context = MIDI.Importer.Context(timeMap: beatMap)
@@ -51,5 +66,6 @@ extension MIDIImporterContextTests {
         #expect(context.noteTable.isEmpty)
         #expect(context.dynamicMap.isEmpty)
         #expect(context.panMap.isEmpty)
+        #expect(context.pedals.isEmpty)
     }
 }

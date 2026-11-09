@@ -19,6 +19,26 @@ struct MusicXMLImporterTests {
 
 extension MusicXMLImporterTests {
     @Test
+    func read_change_isOffThenOnAtOneTime() throws {
+        let pedals = try musicXMLImportedPedals(["<pedal type=\"start\"/>",
+                                                 "<pedal type=\"change\"/>",
+                                                 "<pedal type=\"stop\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
+        #expect(pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
+    }
+
+    @Test
+    func read_continueDiscontinueResume_leaveTheLevelAlone() throws {
+        let pedals = try musicXMLImportedPedals(["<pedal type=\"start\"/>",
+                                                 "<pedal type=\"discontinue\"/>",
+                                                 "<pedal type=\"resume\"/>",
+                                                 "<pedal type=\"continue\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.level) == [.on])
+    }
+
+    @Test
     func read_creditsOnly_fillWhatIdentificationLacks() throws {
         let work = try readMusicXML(header: """
               <credit page="1"><credit-type>title</credit-type><credit-words>Aubade</credit-words></credit>
@@ -113,6 +133,19 @@ extension MusicXMLImporterTests {
                                  Remark(text: "Manuscript", label: "source"),
                                  Remark(text: "Proofread twice", label: "encoding description"),
                                  Remark(text: "Wistful", label: "mood")].compactMap(\.self))
+    }
+
+    @Test
+    func read_interleavedNumbers_pairStopWithItsOpener() throws {
+        let pedals = try musicXMLImportedPedals(["<pedal type=\"start\" number=\"1\"/>",
+                                                 "<pedal type=\"sostenuto\" number=\"2\"/>",
+                                                 "<pedal type=\"stop\" number=\"1\"/>",
+                                                 "<pedal type=\"stop\" number=\"2\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.time) == [0, 2])
+        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sostenuto]?.map(\.time) == [1, 3])
+        #expect(pedals[.sostenuto]?.map(\.level) == [.on, .off])
     }
 
     @Test
@@ -343,6 +376,11 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_noPedals_hasNoPedals() throws {
+        #expect(try musicXMLImportedPedals([]).isEmpty)
+    }
+
+    @Test
     func read_noteDynamics_takesPrecedenceOverDirectionDynamics() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -527,6 +565,17 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_soundAttributes_setLevels() throws {
+        let pedals = try musicXMLImportedPedals([],
+                                                sounds: ["<sound damper-pedal=\"yes\" soft-pedal=\"50\"/>",
+                                                         "<sound damper-pedal=\"no\" sostenuto-pedal=\"yes\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(pedals[.soft]?.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 2))])
+        #expect(pedals[.sostenuto]?.map(\.time) == [1])
+    }
+
+    @Test
     func read_soundDynamics_setsLevelWithoutVelocityExtra() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -641,6 +690,21 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_soundWinsOverPedalMarkInOneDirection() throws {
+        let pedals = try musicXMLImportedPedals(["<pedal type=\"start\"/>"],
+                                                directionSounds: ["<sound damper-pedal=\"40\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.level) == [Pedal.Level(Number(numerator: 2, denominator: 5))])
+    }
+
+    @Test
+    func read_stopWithNoOpener_letsUpTheDamper() throws {
+        let pedals = try musicXMLImportedPedals(["<pedal type=\"stop\"/>"])
+
+        #expect(pedals[.sustain]?.map(\.level) == [.off])
+    }
+
+    @Test
     func read_tiedNotesWithDynamics_keepFirstVelocity() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
@@ -723,6 +787,35 @@ extension MusicXMLImporterTests {
 
         #expect(throws: (any Error).self) {
             try MusicXML.Importer().read(from: wrapper, as: .midi)
+        }
+    }
+
+    @Test
+    func read_voicesShareThePartsPedals() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <direction><direction-type><pedal type="start"/></direction-type></direction>
+                  <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration><voice>1</voice><type>half</type></note>
+                  <backup><duration>2</duration></backup>
+                  <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration><voice>2</voice><type>quarter</type></note>
+                  <direction><direction-type><pedal type="stop"/></direction-type></direction>
+                  <note><pitch><step>D</step><octave>3</octave></pitch><duration>1</duration><voice>2</voice><type>quarter</type></note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let parts = try musicXMLImportedParts(musicXML)
+
+        #expect(parts.count == 2)
+
+        for part in parts {
+            #expect(part.pedals[.sustain]?.map(\.time) == [0, 1])
+            #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
         }
     }
 

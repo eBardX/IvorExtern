@@ -47,6 +47,15 @@ private import IvorTuning
 /// expression (the `expressionValue` extra of a dynamic-map entry), that is
 /// sent as it is instead.
 ///
+/// Pedals follow pan’s rule: a part sends its pedals on every channel it
+/// owns, percussion included, and a later part sharing a channel sends none,
+/// so a shared channel’s pedals hold every part’s notes on it. Each
+/// pedal-table entry is sent exactly as stored, in table order, never
+/// sampled, so a re-pedal (an Off then an On at one time) lets the pedal up
+/// and puts it down again. Muting mutes notes only, so a muted part’s
+/// pedals are still sent. Portamento (CC 65) isn’t sent yet: a future
+/// gliding-notes feature will send it, and decide who owns it.
+///
 /// Every note says which part it belongs to, so that a mixer can mute one
 /// part of several sharing a channel. The performance itself sends no channel
 /// volume (CC 7), which it leaves to the mixer.
@@ -104,10 +113,19 @@ public struct WorkPerformance {
                                       on: channels,
                                       expression: expression)
             events += expression.events(on: expressive)
+            events += Self._pedalEvents(for: part,
+                                        on: channels)
         }
 
         self.duration = events.map(\.time).max() ?? .zero
-        self.events = events.sorted()
+        //
+        // Events that `Event`'s order ranks equal keep the order they were
+        // added in — a re-pedal's Off before its On — explicitly, since
+        // `sorted()` doesn't promise stability.
+        //
+        self.events = events.enumerated()
+            .sorted { $0.element < $1.element || (!($1.element < $0.element) && $0.offset < $1.offset) }
+            .map(\.element)
         self.ownedChannelSets = ownedChannelSets
         self.partChannels = partChannels
         self.partChannelSets = partChannelSets
@@ -327,6 +345,27 @@ extension WorkPerformance {
         }
 
         return (events, patches.keys.sorted(), resolved)
+    }
+
+    // A part's pedals on `channels`, the ones it owns: every entry of every
+    // pedal table, in table order. Portamento is held back (see the type's
+    // comment).
+    private static func _pedalEvents(for part: Part<WallTime, NoteNumber>,
+                                     on channels: [MIDIChannel]) -> [Event] {
+        var events: [Event] = []
+
+        for pedal in Pedal.allCases where pedal != .portamento {
+            for entry in part.pedals[pedal] ?? PedalTable() {
+                let value = convertToMIDIValue(entry.level)
+
+                for channel in channels {
+                    events.append(Event(time: entry.time,
+                                        message: .controlChange(channel, controller(for: pedal), value)))
+                }
+            }
+        }
+
+        return events
     }
 
     private static func _resolve(_ instrument: Instrument,

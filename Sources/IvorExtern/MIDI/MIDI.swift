@@ -17,6 +17,7 @@ internal struct MIDI {
     internal typealias Normalizer    = SMFNormalizer
     internal typealias NoteNumber    = MIDIData1Value
     internal typealias PanValue      = MIDIData1Value
+    internal typealias PedalValue    = MIDIData1Value
     internal typealias Program       = MIDIProgram
     internal typealias Sequence      = SMFSequence
     internal typealias Tempo         = SMFTempo

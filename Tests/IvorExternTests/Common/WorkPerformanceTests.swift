@@ -42,7 +42,7 @@ extension WorkPerformanceTests {
     }
 
     @Test
-    func event_sameTime_ordersOffsBanksProgramsPansExpressionOns() {
+    func event_sameTime_ordersOffsBanksProgramsPansExpressionPedalsOns() {
         let time = makeWallTime(1)
         let ordered: [MIDIChannelMessage] = [.noteOff(1, 60, 0),
                                              .controlChange(1, .bankSelectMSB, 121),
@@ -53,6 +53,7 @@ extension WorkPerformanceTests {
                                              .controlChange(1, .expressionControllerMSB, 100),
                                              .controlChange(1, .expressionControllerLSB, 3),
                                              .controlChange(1, .sustain, 0),
+                                             .controlChange(1, .channelVolumeMSB, 90),
                                              .noteOn(1, 60, 100)]
         let events = ordered.reversed().map { WorkPerformance.Event(time: time, message: $0) }
 
@@ -109,6 +110,7 @@ extension WorkPerformanceTests {
     //
     // 29.381986 + 1.304348 in seconds is a hair over 30.686334, but the release is exact.
     //
+
     @Test
     func events_backToBackNotes_releaseBeforeRetriggeringDespiteRounding() throws {
         let performance = try #require(WorkPerformance(work: makeKeyboardWallWork([[(29.381986, 1.304348, 78),
@@ -136,6 +138,17 @@ extension WorkPerformanceTests {
                                               .controlChange(1, .panMSB, 64)]
 
         #expect(messagesWithoutExpression(performance) == expected)
+    }
+
+    @Test
+    func events_durationIncludesAPedalUpAfterTheLastNote() throws {
+        var parts = makeKeyboardWallParts([[(0, 1, 60)]])
+
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .on), (3, .off)])
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+
+        #expect(performance.duration == makeWallTime(3))
     }
 
     @Test
@@ -449,6 +462,20 @@ extension WorkPerformanceTests {
     }
 
     @Test
+    func events_pedalDownAtAnAttack_precedesTheNoteOn() throws {
+        var parts = makeKeyboardWallParts([[(1, 1, 60)]])
+
+        parts[0].pedals[.sustain] = wallSustainTable([(1, .on)])
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+        let messages = performance.events.filter { $0.time == makeWallTime(1) }.map(\.message)
+        let pedalIndex = try #require(messages.firstIndex(of: .controlChange(1, .sustain, 127)))
+        let noteOnIndex = try #require(messages.firstIndex { if case .noteOn = $0 { true } else { false } })
+
+        #expect(pedalIndex < noteOnIndex)
+    }
+
+    @Test
     func events_percussion_playsOnChannel10() throws {
         let work = makeKeyboardWallWork([[(0, 1, 36)]])
         let part = try #require(work.part(work.partIDs[0], as: Part<WallTime, NoteNumber>.self))
@@ -458,6 +485,78 @@ extension WorkPerformanceTests {
 
         #expect(performance.events.map(\.message.channel.uintValue) == [10, 10, 10, 10])
         #expect(performance.partChannelSets.map { $0.map(\.uintValue) } == [[10]])
+    }
+
+    @Test
+    func events_percussionChannel_getsPedals() throws {
+        var parts = makeKeyboardWallParts([[(0, 1, 36)]])
+
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .on)])
+
+        let work = Work(content: .keyboardWall(parts))
+        let realization = try Realization(defaults: PatchTable([parts[0].instrumentTable[.zero]: patchAssignment(.generalMIDI1Percussion)]))
+        let performance = try #require(WorkPerformance(work: work,
+                                                       realization: realization))
+
+        #expect(pedalMessages(performance) == [.controlChange(10, .sustain, 127)])
+    }
+
+    @Test
+    func events_portamento_isNotSent() throws {
+        var parts = makeKeyboardWallParts([[(0, 1, 60)]])
+        var portamento = PedalTable<WallTime>()
+
+        portamento.insert(time: .zero, level: .on)
+        parts[0].pedals[.portamento] = portamento
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+
+        #expect(pedalMessages(performance).isEmpty)
+    }
+
+    @Test
+    func events_repedal_sendsOffThenOnAtOneTime() throws {
+        var parts = makeKeyboardWallParts([[(0, 1, 60), (1, 1, 62)]])
+
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .on), (1, .off), (1, .on), (2, .off)])
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+        let atOne = performance.events.filter { $0.time == makeWallTime(1) }.map(\.message)
+
+        #expect(pedalMessages(performance) == [.controlChange(1, .sustain, 127),
+                                               .controlChange(1, .sustain, 0),
+                                               .controlChange(1, .sustain, 127),
+                                               .controlChange(1, .sustain, 0)])
+        #expect(Array(atOne.dropLast()) == [.noteOff(1, 60, 0),
+                                            .controlChange(1, .sustain, 0),
+                                            .controlChange(1, .sustain, 127)])
+
+        guard case .noteOn(1, 62, _)? = atOne.last
+        else { Issue.record("Expected the note-on last"); return }
+    }
+
+    @Test
+    func events_sharedChannel_firstPartWins() throws {
+        var parts = makeKeyboardWallParts(Array(repeating: [(0, 1, 60)], count: 16))
+
+        parts[15].pedals[.sustain] = wallSustainTable([(0, .on)])
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+
+        #expect(performance.partChannels[15] == 1)
+        #expect(pedalMessages(performance).isEmpty)
+    }
+
+    @Test
+    func events_sustainEntries_becomeCC64OnEachOwnedChannel() throws {
+        var parts = makeKeyboardWallParts([[(0, 1, 60)], [(0, 1, 64)]])
+
+        parts[1].pedals[.sustain] = wallSustainTable([(0, .on), (2, .off)])
+
+        let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
+
+        #expect(pedalMessages(performance) == [.controlChange(2, .sustain, 127),
+                                               .controlChange(2, .sustain, 0)])
     }
 
     @Test

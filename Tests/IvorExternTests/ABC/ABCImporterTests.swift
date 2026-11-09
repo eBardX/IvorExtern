@@ -521,6 +521,37 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_noPedMarks_hasNoPedals() throws {
+        #expect(try abcPedalPart("C D E F").pedals.isEmpty)
+    }
+
+    @Test
+    func read_pedAndPedUp_populateSustainTable() throws {
+        let part = try abcPedalPart("C !ped!D !ped-up!E F")
+
+        #expect(Array(part.pedals.keys) == [.sustain])
+        #expect(part.pedals[.sustain]?.map(\.time) == [1, 2])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(part.noteCount == 4)
+    }
+
+    @Test
+    func read_pedMarks_areNotArticulations() throws {
+        let extras = try abcNoteExtras("""
+            X:1
+            T:Test
+            M:4/4
+            L:1/8
+            K:C
+            !ped!C D !ped-up!E F
+            """)
+
+        for noteExtras in extras {
+            #expect(stringValue(noteExtras, .articulation) == nil)
+        }
+    }
+
+    @Test
     func read_repeatWithBarLineInside_replaysWholeSection() throws {
         let part = try #require(standardBeatParts(of: readABC("""
             X:1

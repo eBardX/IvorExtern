@@ -607,6 +607,15 @@ extension Guido.Importer.Walker {
 
             try _walk(ornament.body, &context, &inProgressVariableNames)
 
+        // Guido has only the damper pedal: `\pedalOn` and `\pedalOff` put it
+        // down and let it up at the current beat. A body, if any, is walked
+        // as for any other wrapping tag.
+        case let .pedal(pedal):
+            context.sustainTable.insert(time: context.currentBeatTime,
+                                        level: pedal.kind == .on ? .on : .off)
+
+            try _walk(pedal.body, &context, &inProgressVariableNames)
+
         // The whole-tag `\slur<...>{...}` bracket form — as opposed to the
         // open-span `Begin`/`End` pair the two cases below handle — needs
         // no id: `body` alone unambiguously delimits the span, so the

@@ -1,5 +1,5 @@
 {
-  "originHash" : "d2676b7d18b47ec87cdc4e390bcda8d183f7710271866d8ca615b4ab42ad7528",
+  "originHash" : "4b63dc77453ea089a19176697dfc87ab6c747fddd1425c81b674c4bb61298f17",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorABC.git",
       "state" : {
-        "revision" : "dca5802491341ce0f0ac513e38c3d6924483d0ad",
-        "version" : "0.1.0"
+        "revision" : "1814f9a3eb79e0a24ba4d55f5260a9492010ad33",
+        "version" : "0.1.1"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "1174df67aa70aaf90053487c49a0b58c6a129846",
-        "version" : "0.50.0"
+        "revision" : "a1ac622547fcd67ee645838b3a4ee078d42e63e3",
+        "version" : "0.51.0"
       }
     },
     {

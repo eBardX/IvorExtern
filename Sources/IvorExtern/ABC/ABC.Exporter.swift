@@ -441,18 +441,22 @@ extension ABC.Exporter {
     // crossing a barline splits into tied segments (each independently
     // tuplet-scaled), gaps become rests, and every measure sums to exactly
     // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
-    // duration becomes a tuplet-marked segment instead.
+    // duration becomes a tuplet-marked segment instead. Only the sustain
+    // pedal is written, as abcm2ps's `!ped!`/`!ped-up!` on the first note at
+    // or after each change (see `_pedalDecorations(_:)`).
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directives = _instrumentDirectives(part)
+        let pedalDecorations = _pedalDecorations(part.pedals[.sustain])
         let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
         let barTimes = _barTimes(measureCount: measureCount)
         let sortedBoundaries = _boundaries(events: events, barTimes: barTimes, endTime: endTime)
         var entries: [ABCBodyEntry] = []
         var pending: [ABCSymbol] = []
         var directiveIndex = 0
+        var pedalIndex = 0
 
         func flush() {
             guard !pending.isEmpty
@@ -490,6 +494,12 @@ extension ABC.Exporter {
                 let isLastSegment = event.end == end
 
                 if isFirstSegment {
+                    while pedalIndex < pedalDecorations.count,
+                          pedalDecorations[pedalIndex].0 <= start {
+                        pending.append(.decoration(pedalDecorations[pedalIndex].1))
+                        pedalIndex += 1
+                    }
+
                     pending += _leadingArticulationSymbols(event.extrasList)
                 }
 
@@ -609,6 +619,28 @@ extension ABC.Exporter {
     // `V:` field, since that's ABC's only place to record a part name.
     private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
         parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
+    }
+
+    // The sustain pedal thresholded at `Pedal.Level.isDown`: `!ped!` where it
+    // goes down, `!ped-up!` where it comes up, and `!ped-up!!ped!` for a
+    // re-pedal. ABC has no other pedal, so the other tables are dropped, and
+    // so is a change after the last note, since there is no note to carry it.
+    private static func _pedalDecorations(_ table: PedalTable<BeatTime>?) -> [(BeatTime, ABCDecoration)] {
+        var decorations: [(BeatTime, ABCDecoration)] = []
+        var previous: Pedal.Level = .off
+
+        for (time, levels) in groupedByTime(table ?? PedalTable()) {
+            for isDown in pedalSwitches(after: previous, levels) {
+                if let name = ABCDecoration.Name(stringValue: isDown ? "ped" : "ped-up"),
+                   let decoration = ABCDecoration(name: name) {
+                    decorations.append((time, decoration))
+                }
+            }
+
+            previous = levels.last ?? previous
+        }
+
+        return decorations
     }
 
     private static func _remarkField(_ remark: Remark,

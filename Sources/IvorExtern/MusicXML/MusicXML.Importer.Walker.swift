@@ -56,6 +56,7 @@ extension MusicXML.Importer.Walker {
             results.append(WalkResult(directionDynamicEvents: context.directionDynamicEvents,
                                       panEvents: context.panEvents,
                                       part: MusicXML.Part(part: scorePart, voices: Self._voices(from: context)),
+                                      pedalEvents: context.pedalEvents,
                                       tempoEvents: context.tempoEvents))
         }
 
@@ -519,6 +520,8 @@ extension MusicXML.Importer.Walker {
                 Self._handleWedge(wedge, at: beatTime, &context)
             }
 
+            context.recordPedals(direction, at: beatTime)
+
         case let .forward(forward):
             let duration = try rhythm.resolve(count: forward.duration.intValue,
                                               activeDivisions: context.activeDivisions,
@@ -544,6 +547,8 @@ extension MusicXML.Importer.Walker {
             if let dynamic = convertToDynamic(sound) {
                 Self._recordDirectionDynamic(dynamic, at: beatTime, &context)
             }
+
+            context.recordPedals(sound, at: beatTime)
         }
     }
 

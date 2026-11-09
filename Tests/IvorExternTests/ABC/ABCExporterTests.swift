@@ -791,6 +791,21 @@ extension ABCExporterTests {
     }
 
     @Test
+    func roundTrip_pedals() throws {
+        let work = try readABC(Fixtures.pedalABC)
+        let pedals = try pedalSummary(standardBeatParts(of: work))
+
+        #expect(pedals == [.sustain: ["on @ 0", "off @ 2", "on @ 2", "off @ 3"]])
+
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        #expect(try pedalSummary(standardBeatParts(of: recovered)) == pedals)
+    }
+
+    @Test
     func roundTrip_singleUnnamedPart_staysUnnamed() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -922,6 +937,17 @@ extension ABCExporterTests {
     }
 
     @Test
+    func write_changeBetweenNotes_landsOnTheNextNote() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0.5, level: .on)
+
+        let abc = try abcExportedWithPedals([.sustain: sustain])
+
+        #expect(abc.contains("C!ped!D"))
+    }
+
+    @Test
     func write_editorCredit_writesEditedByField() throws {
         var info = Work.Info()
 
@@ -995,6 +1021,38 @@ extension ABCExporterTests {
         let text = try writeABC(Work(name: "Sketch 3", content: .standardBeat([], TempoMap())))
 
         #expect(text.contains("T:Sketch 3\n"))
+    }
+
+    @Test
+    func write_onlySustainIsWritten() throws {
+        var table = PedalTable<BeatTime>()
+
+        table.insert(time: 0, level: .on)
+
+        #expect(try !abcExportedWithPedals([.soft: table]).contains("ped"))
+    }
+
+    @Test
+    func write_pedAndPedUp() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sustain.insert(time: 2, level: .off)
+
+        let abc = try abcExportedWithPedals([.sustain: sustain])
+
+        #expect(abc.contains("!ped!CD!ped-up!EF"))
+    }
+
+    @Test
+    func write_repedal_writesPedUpThenPed() throws {
+        var sustain = PedalTable<BeatTime>()
+
+        sustain.insert(time: 0, level: .on)
+        sustain.insert(time: 1, level: .off)
+        sustain.insert(time: 1, level: .on)
+
+        #expect(try abcExportedWithPedals([.sustain: sustain]).contains("!ped-up!!ped!D"))
     }
 
     @Test

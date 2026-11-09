@@ -2,6 +2,7 @@
 
 @testable import IvorExtern
 import IvorModel
+import IvorMXL
 import IvorTiming
 import IvorTuning
 import Testing
@@ -49,6 +50,8 @@ extension MusicXMLImporterContextTests {
         #expect(context.measureAdvance == .zero)
         #expect(context.measureStart == .zero)
         #expect(context.noteTables.isEmpty)
+        #expect(context.openPedals.isEmpty)
+        #expect(context.pedalEvents.isEmpty)
         #expect(context.pendingTies.isEmpty)
         #expect(context.tempoEvents.isEmpty)
         #expect(context.times.isEmpty)
@@ -89,5 +92,43 @@ extension MusicXMLImporterContextTests {
         let fetched = context.noteTable(forVoice: "1")
 
         #expect(!fetched.isEmpty)
+    }
+
+    @Test
+    func recordPedals_direction_pairsStopWithItsOpenerByNumber() {
+        var context = MusicXML.Importer.Context()
+        let two = MXLNumberLevel(uintValue: 2)
+
+        context.recordPedals(pedalDirection([MXLPedal(kind: .sostenuto, number: two)]), at: 0)
+        context.recordPedals(pedalDirection([MXLPedal(kind: .start)]), at: 1)
+        context.recordPedals(pedalDirection([MXLPedal(kind: .stop, number: two)]), at: 2)
+        context.recordPedals(pedalDirection([MXLPedal(kind: .change)]), at: 3)
+
+        #expect(context.pedalEvents.map(\.pedal) == [.sostenuto, .sustain, .sostenuto, .sustain, .sustain])
+        #expect(context.pedalEvents.map(\.level) == [.on, .on, .off, .off, .on])
+        #expect(context.openPedals == [1: .sustain])
+    }
+
+    @Test
+    func recordPedals_direction_soundWinsOverMarkForTheSamePedal() {
+        var context = MusicXML.Importer.Context()
+
+        context.recordPedals(pedalDirection([MXLPedal(kind: .start), MXLPedal(kind: .sostenuto, number: MXLNumberLevel(uintValue: 2))],
+                                            sound: MXLSound(damperPedal: .number(25))),
+                             at: 0)
+
+        #expect(context.pedalEvents.map(\.pedal) == [.sustain, .sostenuto])
+        #expect(context.pedalEvents.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 4)), .on])
+    }
+
+    @Test
+    func recordPedals_sound_returnsThePedalsItSet() {
+        var context = MusicXML.Importer.Context()
+
+        let pedals = context.recordPedals(MXLSound(softPedal: .yes, sostenutoPedal: .no), at: 1)
+
+        #expect(pedals == [.soft, .sostenuto])
+        #expect(context.pedalEvents.map(\.level) == [.off, .on])
+        #expect(context.pedalEvents.map(\.pedal) == [.sostenuto, .soft])
     }
 }

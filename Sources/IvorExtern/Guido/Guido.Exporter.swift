@@ -85,12 +85,12 @@ extension Guido.Exporter {
 
     // The sorted union of every time this part's body needs to notice: `.zero`
     // and the work's end, every bar line, every note's attack and end, and
-    // every tempo/instrument/dynamic annotation's own time. Splitting a note
-    // at one of these — even one with no note of its own — is what lets a
-    // tempo change, instrument change, or dynamic mark/ramp boundary land
+    // every tempo/instrument/pedal/dynamic annotation's own time. Splitting a
+    // note at one of these — even one with no note of its own — is what lets a
+    // tempo change, instrument change, pedal change, or dynamic mark/ramp boundary land
     // exactly where the model says it should.
     private static func _boundaries(events: [Event],
-                                    directives: [(BeatTime, GMNInstrument)],
+                                    directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: [BeatTime],
@@ -232,8 +232,8 @@ extension Guido.Exporter {
         return tags.map { .tag($0) }
     }
 
-    private static func _instrumentDirectives(_ instrumentTable: InstrumentTable<BeatTime>) -> [(BeatTime, GMNInstrument)] {
-        var directives: [(BeatTime, GMNInstrument)] = []
+    private static func _instrumentDirectives(_ instrumentTable: InstrumentTable<BeatTime>) -> [(BeatTime, GMNTag)] {
+        var directives: [(BeatTime, GMNTag)] = []
 
         for entry in instrumentTable {
             let exactProgram = intValue(entry.extras, .midiProgram)
@@ -242,7 +242,7 @@ extension Guido.Exporter {
 
             let name = stringValue(entry.extras, .instrumentName) ?? entry.instrument.stringValue
 
-            directives.append((entry.time, GMNInstrument(name: name, midi: midi)))
+            directives.append((entry.time, .instrument(GMNInstrument(name: name, midi: midi))))
         }
 
         return directives
@@ -343,7 +343,7 @@ extension Guido.Exporter {
     // barlines carry no timing information, so deferring one past a tied
     // note is a purely cosmetic reordering, not a loss.
     private static func _makeChunks(events: [Event],
-                                    directives: [(BeatTime, GMNInstrument)],
+                                    directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: [BeatTime],
@@ -367,7 +367,7 @@ extension Guido.Exporter {
             }
 
             while directiveIndex < directives.count, directives[directiveIndex].0 <= start {
-                symbols.append(.tag(.instrument(directives[directiveIndex].1)))
+                symbols.append(.tag(directives[directiveIndex].1))
                 directiveIndex += 1
             }
 
@@ -403,7 +403,10 @@ extension Guido.Exporter {
                                       measureCount: UInt,
                                       tempoMap: TempoMap) throws(Guido.Error) -> [GMNSymbol] {
         let events = _events(part.noteTable)
-        let directives = _instrumentDirectives(part.instrumentTable)
+        let directives = (_instrumentDirectives(part.instrumentTable) + _pedalDirectives(part.pedals[.sustain]))
+            .enumerated()
+            .sorted { ($0.element.0, $0.offset) < ($1.element.0, $1.offset) }
+            .map(\.element)
         let tempos = _tempoDirectives(tempoMap)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let barTimes = _barTimes(measureCount: measureCount)
@@ -478,6 +481,26 @@ extension Guido.Exporter {
     // One event's own segment symbols: articulation-wrapped note/chord
     // symbols, with a leading `\slurBegin:n` on the event's first segment
     // and a trailing `\slurEnd:n` on its last.
+    // Guido has only the damper pedal, so only the sustain table is written,
+    // thresholded at `Pedal.Level.isDown`: `\pedalOn` where it goes down,
+    // `\pedalOff` where it comes up, and `\pedalOff \pedalOn` for a re-pedal.
+    // The other pedals are dropped. Each tag lands ahead of the note at its
+    // time, after any instrument change there.
+    private static func _pedalDirectives(_ table: PedalTable<BeatTime>?) -> [(BeatTime, GMNTag)] {
+        var directives: [(BeatTime, GMNTag)] = []
+        var previous: Pedal.Level = .off
+
+        for (time, levels) in groupedByTime(table ?? PedalTable()) {
+            for isDown in pedalSwitches(after: previous, levels) {
+                directives.append((time, .pedal(GMNPedal(kind: isDown ? .on : .off))))
+            }
+
+            previous = levels.last ?? previous
+        }
+
+        return directives
+    }
+
     private static func _segmentSymbols(event: Event,
                                         start: BeatTime,
                                         end: BeatTime,
