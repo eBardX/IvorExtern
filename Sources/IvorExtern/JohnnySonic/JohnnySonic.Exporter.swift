@@ -61,7 +61,7 @@ extension JohnnySonic.Exporter {
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)
             let endPitch   = convertToJohnnySonicPitch(note.endPitch)
-            let instrument = part.instrumentMap[note.attack].stringValue
+            let instrument = part.instrumentTable[note.attack].stringValue
 
             if duration > 0 {
                 commands.append(.pitchesNote(DKMPitchesNote(startBeat: startBeat,
@@ -95,7 +95,7 @@ extension JohnnySonic.Exporter {
             let location   = convertToJohnnySonicLocation(part.panMap[note.attack])
             let startPitch = convertToJohnnySonicPitch(note.startPitch)
             let endPitch   = convertToJohnnySonicPitch(note.endPitch)
-            let instrument = part.instrumentMap[note.attack].stringValue
+            let instrument = part.instrumentTable[note.attack].stringValue
 
             if duration > 0 {
                 commands.append(.pitchesNote(DKMPitchesNote(startBeat: startBeat,

@@ -79,7 +79,7 @@ extension ABCImporterTests {
         let work = try #require(works.first)
         let parts = try #require(standardBeatParts(of: work))
 
-        #expect(parts.first?.instrumentMap.isEmpty == true)
+        #expect(parts.first?.instrumentTable.isEmpty == true)
 
         let foundChannel = intValue(parts.first?.extras, .midiChannel)
 
@@ -274,7 +274,7 @@ extension ABCImporterTests {
 
         let foundChannel = intValue(parts.first?.extras, .midiChannel)
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
         #expect(foundChannel == 2)
     }
 
@@ -296,16 +296,16 @@ extension ABCImporterTests {
 
         var programs: [Int?] = []
 
-        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+        for entry in parts.first?.instrumentTable ?? InstrumentTable() {
             programs.append(intValue(entry.extras, .midiProgram))
         }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
         #expect(programs == [41])
     }
 
     @Test
-    func read_midiProgramDirective_populatesInstrumentMap() throws {
+    func read_midiProgramDirective_populatesInstrumentTable() throws {
         let abc = """
             X:1
             T:Instrument Tune
@@ -319,7 +319,7 @@ extension ABCImporterTests {
         let work = try #require(works.first)
         let parts = try #require(standardBeatParts(of: work))
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
     }
 
     @Test
@@ -335,7 +335,7 @@ extension ABCImporterTests {
             %%MIDI program 41
             """)))
 
-        #expect(parts.map { $0.instrumentMap.map { intValue($0.extras, .midiProgram) } } == [[41], [42]])
+        #expect(parts.map { $0.instrumentTable.map { intValue($0.extras, .midiProgram) } } == [[41], [42]])
     }
 
     @Test
@@ -358,7 +358,7 @@ extension ABCImporterTests {
         let work = try #require(ABC.Importer().read(from: wrapper, as: .abc).first)
         let parts = try #require(standardBeatParts(of: work))
 
-        #expect(parts.map { $0.instrumentMap[.zero] } == [Instrument("Flute"), Instrument("Bassoon")])
+        #expect(parts.map { $0.instrumentTable[.zero] } == [Instrument("Flute"), Instrument("Bassoon")])
     }
 
     @Test
@@ -403,16 +403,16 @@ extension ABCImporterTests {
         let rueckpos = try namedStandardPart(work, "Rueckpos")
         let organo = try namedStandardPart(work, "Organo")
 
-        #expect(rueckpos.instrumentMap[.zero] == Instrument("Choir Aahs"))
-        #expect(organo.instrumentMap[.zero] == Instrument("Piccolo"))
+        #expect(rueckpos.instrumentTable[.zero] == Instrument("Choir Aahs"))
+        #expect(organo.instrumentTable[.zero] == Instrument("Piccolo"))
 
         var banks: [Int?] = []
 
-        for entry in rueckpos.instrumentMap {
+        for entry in rueckpos.instrumentTable {
             banks.append(intValue(entry.extras, .midiBank))
         }
 
-        for entry in organo.instrumentMap {
+        for entry in organo.instrumentTable {
             banks.append(intValue(entry.extras, .midiBank))
         }
 
@@ -441,8 +441,8 @@ extension ABCImporterTests {
         let tuba = try namedStandardPart(work, "Tb")
         let cello = try namedStandardPart(work, "Vc")
 
-        #expect(tuba.instrumentMap[.zero] == Instrument("Tuba"))
-        #expect(cello.instrumentMap[.zero] == Instrument("Cello"))
+        #expect(tuba.instrumentTable[.zero] == Instrument("Tuba"))
+        #expect(cello.instrumentTable[.zero] == Instrument("Cello"))
 
         #expect(intValue(tuba.extras, .midiChannel) == 2)
     }

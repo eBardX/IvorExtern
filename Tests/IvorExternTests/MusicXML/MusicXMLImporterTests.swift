@@ -187,7 +187,7 @@ extension MusicXMLImporterTests {
         let foundChannel = intValue(parts.first?.extras, .midiChannel)
         var foundBank: Int?
 
-        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+        for entry in parts.first?.instrumentTable ?? InstrumentTable() {
             foundBank = intValue(entry.extras, .midiBank)
         }
 
@@ -222,7 +222,7 @@ extension MusicXMLImporterTests {
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap.isEmpty == true)
+        #expect(parts.first?.instrumentTable.isEmpty == true)
         #expect(intValue(parts.first?.extras, .midiChannel) == 5)
     }
 
@@ -433,7 +433,7 @@ extension MusicXMLImporterTests {
     }
 
     @Test
-    func read_scoreInstrument_populatesInstrumentMap() throws {
+    func read_scoreInstrument_populatesInstrumentTable() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
             <score-partwise version="4.0">
@@ -466,7 +466,7 @@ extension MusicXMLImporterTests {
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
     }
 
     @Test
@@ -480,7 +480,7 @@ extension MusicXMLImporterTests {
                                 </score-instrument>
                              """)
         let part = try #require(standardBeatParts(of: work)?.first)
-        let entry = try #require(part.instrumentMap.first)
+        let entry = try #require(part.instrumentTable.first)
 
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
         #expect(stringValue(entry.extras, .instrumentAbbreviation) == "Fl. 1")

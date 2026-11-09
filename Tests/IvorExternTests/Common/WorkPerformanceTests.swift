@@ -64,7 +64,7 @@ extension WorkPerformanceTests {
     @Test
     func events_assignment_overridesGeneralMIDIName() throws {
         let part = Part<WallTime, NoteNumber>(name: "Part 1")
-        let realization = try Realization(defaults: PatchTable([part.instrumentMap[.zero]: patchAssignment(.generalMIDI1(program: 20))]))
+        let realization = try Realization(defaults: PatchTable([part.instrumentTable[.zero]: patchAssignment(.generalMIDI1(program: 20))]))
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part])),
                                                        realization: realization))
 
@@ -127,7 +127,7 @@ extension WorkPerformanceTests {
         let assignment = try patchAssignment(.custom(program: 5,
                                                      bank: 15_489,
                                                      name: nil))
-        let realization = Realization(defaults: PatchTable([part.instrumentMap[.zero]: assignment]))
+        let realization = Realization(defaults: PatchTable([part.instrumentTable[.zero]: assignment]))
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part])),
                                                        realization: realization))
         let expected: [MIDIChannelMessage] = [.controlChange(1, .bankSelectMSB, 121),
@@ -337,8 +337,8 @@ extension WorkPerformanceTests {
     @Test
     func events_generalMIDI2_sendsBankBeforeProgram() throws {
         let part = Part<WallTime, NoteNumber>(name: "Part 1")
-        let realization = try Realization(defaults: PatchTable([part.instrumentMap[.zero]: patchAssignment(.generalMIDI2(program: 20,
-                                                                                                                         variation: 1))]))
+        let realization = try Realization(defaults: PatchTable([part.instrumentTable[.zero]: patchAssignment(.generalMIDI2(program: 20,
+                                                                                                                           variation: 1))]))
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part])),
                                                        realization: realization))
 
@@ -350,15 +350,15 @@ extension WorkPerformanceTests {
 
     @Test
     func events_instrument_picksGeneralMIDIProgram() throws {
-        var instrumentMap = InstrumentMap<WallTime>()
+        var instrumentTable = InstrumentTable<WallTime>()
 
-        try instrumentMap.insert(time: .zero,
-                                 instrument: #require(Instrument(stringValue: "Violin")))
-        try instrumentMap.insert(time: makeWallTime(2),
-                                 instrument: #require(Instrument(stringValue: "Not a GM Name")))
+        try instrumentTable.insert(time: .zero,
+                                   instrument: #require(Instrument(stringValue: "Violin")))
+        try instrumentTable.insert(time: makeWallTime(2),
+                                   instrument: #require(Instrument(stringValue: "Not a GM Name")))
 
         let part = Part<WallTime, NoteNumber>(name: "Part 1",
-                                              instrumentMap: instrumentMap)
+                                              instrumentTable: instrumentTable)
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall([part]))))
         let programs = performance.events.filter {
             if case .programChange = $0.message { true } else { false }
@@ -452,7 +452,7 @@ extension WorkPerformanceTests {
     func events_percussion_playsOnChannel10() throws {
         let work = makeKeyboardWallWork([[(0, 1, 36)]])
         let part = try #require(work.part(work.partIDs[0], as: Part<WallTime, NoteNumber>.self))
-        let realization = try Realization(defaults: PatchTable([part.instrumentMap[.zero]: patchAssignment(.generalMIDI1Percussion)]))
+        let realization = try Realization(defaults: PatchTable([part.instrumentTable[.zero]: patchAssignment(.generalMIDI1Percussion)]))
         let performance = try #require(WorkPerformance(work: work,
                                                        realization: realization))
 

@@ -176,7 +176,7 @@ extension JohnnySonic.Importer {
         return Part(name: normalizeName(notes.first?.instrument ?? ""),
                     noteTable: noteTable,
                     dynamicMap: dynamicMap,
-                    instrumentMap: _makeInstrumentMap(notes),
+                    instrumentTable: _makeInstrumentTable(notes),
                     panMap: panMap)
     }
 
@@ -238,7 +238,7 @@ extension JohnnySonic.Importer {
         return Part(name: normalizeName(notes.first?.instrument ?? ""),
                     noteTable: noteTable,
                     dynamicMap: dynamicMap,
-                    instrumentMap: _makeInstrumentMap(notes),
+                    instrumentTable: _makeInstrumentTable(notes),
                     panMap: panMap)
     }
 
@@ -250,22 +250,22 @@ extension JohnnySonic.Importer {
     // property of the grouping, not of the format, and this stays correct
     // independent of it.
     //
-    // Before its first entry, an `InstrumentMap` gives its default
+    // Before its first entry, an `InstrumentTable` gives its default
     // instrument. Nothing sounds before the first note, so its instrument
     // starts at zero instead, and the default doesn't sound, or show up
     // among the part's instruments, for a leading rest.
-    private static func _makeInstrumentMap(_ notes: [DKMPitchesNote]) -> InstrumentMap<BeatTime> {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    private static func _makeInstrumentTable(_ notes: [DKMPitchesNote]) -> InstrumentTable<BeatTime> {
+        var instrumentTable = InstrumentTable<BeatTime>()
 
         for note in notes {
             guard let instrument = convertToInstrument(note.instrument)
             else { continue }
 
-            instrumentMap.insert(time: instrumentMap.isEmpty ? .zero : convertToBeatTime(note.startBeat),
-                                 instrument: instrument)
+            instrumentTable.insert(time: instrumentTable.isEmpty ? .zero : convertToBeatTime(note.startBeat),
+                                   instrument: instrument)
         }
 
-        return instrumentMap
+        return instrumentTable
     }
 
     // The reference JohnnySonic player (`ProcessTempo` / `ConvertTempoToTime`

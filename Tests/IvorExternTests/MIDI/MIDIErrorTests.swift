@@ -17,6 +17,30 @@ struct MIDIErrorTests {
 
 extension MIDIErrorTests {
     @Test
+    func category() {
+        #expect(MIDI.Error.noWorksToExport.category?.stringValue == "IvorExtern")
+    }
+
+    @Test
+    func cause_otherCase() {
+        #expect(MIDI.Error.noWorksToExport.cause == nil)
+    }
+
+    @Test
+    func cause_withoutUnderlyingError() {
+        #expect(MIDI.Error.parseFailure(nil).cause == nil)
+    }
+
+    @Test
+    func cause_wrapsUnderlyingError() {
+        let underlying = MIDI.Error.noWorksToExport
+
+        #expect(MIDI.Error.convertFailure(underlying).cause?.message == underlying.message)
+        #expect(MIDI.Error.formatFailure(underlying).cause?.message == underlying.message)
+        #expect(MIDI.Error.parseFailure(underlying).cause?.message == underlying.message)
+    }
+
+    @Test
     func convertFailure_message() {
         let error = MIDI.Error.convertFailure(nil)
 

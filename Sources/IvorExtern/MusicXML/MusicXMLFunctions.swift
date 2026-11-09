@@ -133,7 +133,7 @@ internal func convertToDynamic(_ sound: MXLSound) -> Dynamic? {
 // percussion voice (channel 10's own note-number convention, not Program
 // Change), which is the more descriptive of the two whenever both are
 // present. `nil` when none of a name, an unpitched note, or a program is
-// present, leaving the part's `InstrumentMap` empty.
+// present, leaving the part's `InstrumentTable` empty.
 internal func convertToInstrument(_ scorePart: MusicXML.ScorePart) -> Instrument? {
     if let name = scorePart.instrument.first?.name.nilIfEmpty {
         return Instrument(stringValue: name)

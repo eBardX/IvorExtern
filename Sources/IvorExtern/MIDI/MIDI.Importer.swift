@@ -165,22 +165,22 @@ extension MIDI.Importer {
             }
         }
 
-        let instrumentMap = _makeInstrumentMap(voice.programChangeEvents,
-                                               voice.bankSelectEvents,
-                                               voice.volumeEvents,
-                                               instrumentNameEvents,
-                                               timeMap)
-        let name = voice.name.nilIfEmpty ?? _makeUnnamedPartName(instrumentMap,
+        let instrumentTable = _makeInstrumentTable(voice.programChangeEvents,
+                                                   voice.bankSelectEvents,
+                                                   voice.volumeEvents,
+                                                   instrumentNameEvents,
+                                                   timeMap)
+        let name = voice.name.nilIfEmpty ?? _makeUnnamedPartName(instrumentTable,
                                                                  hasInstrumentName: !instrumentNameEvents.isEmpty,
                                                                  channel: voice.channel)
 
         // A voice is split from its track by channel, so the channel
         // belongs to the part as a whole, where `MIDI.Exporter` finds it
-        // whether or not the part has any instrument map entries.
+        // whether or not the part has any instrument table entries.
         return Part(name: name,
                     noteTable: context.noteTable,
                     dynamicMap: context.dynamicMap,
-                    instrumentMap: instrumentMap,
+                    instrumentTable: instrumentTable,
                     panMap: context.panMap,
                     extras: Extras(elements: [Extra(name: Extra.midiChannel.name,
                                                     values: [.int(Int(voice.channel.uintValue))])]))
@@ -294,7 +294,7 @@ extension MIDI.Importer {
         return info
     }
 
-    // Program Change events carry every `InstrumentMap` entry's own time and
+    // Program Change events carry every `InstrumentTable` entry's own time and
     // (absent an override) instrument; Bank Select (CC 0 MSB / CC 32 LSB)
     // and Channel Volume events are stateful, not tied to any one entry, so
     // they're merged in tick order alongside the program changes and the
@@ -309,12 +309,12 @@ extension MIDI.Importer {
     // Select and Instrument Name are both placed ahead of Program Change in
     // the merge so a coincident event (same tick) resolves in MIDI
     // convention order.
-    private static func _makeInstrumentMap<TimeMap: MIDI.ImportTimeMap>(_ programChangeEvents: [SMFEvent],
-                                                                        _ bankSelectEvents: [SMFEvent],
-                                                                        _ volumeEvents: [SMFEvent],
-                                                                        _ instrumentNameEvents: [SMFEvent],
-                                                                        _ timeMap: TimeMap) -> InstrumentMap<TimeMap.TimeType> {
-        var instrumentMap = InstrumentMap<TimeMap.TimeType>()
+    private static func _makeInstrumentTable<TimeMap: MIDI.ImportTimeMap>(_ programChangeEvents: [SMFEvent],
+                                                                          _ bankSelectEvents: [SMFEvent],
+                                                                          _ volumeEvents: [SMFEvent],
+                                                                          _ instrumentNameEvents: [SMFEvent],
+                                                                          _ timeMap: TimeMap) -> InstrumentTable<TimeMap.TimeType> {
+        var instrumentTable = InstrumentTable<TimeMap.TimeType>()
         var bankMSB: MIDIData1Value?
         var bankLSB: MIDIData1Value?
         var volume: UInt?
@@ -358,16 +358,16 @@ extension MIDI.Importer {
 
                 let instrument = instrumentName.flatMap { Instrument(stringValue: $0) } ?? convertToInstrument(program)
 
-                instrumentMap.insert(time: time,
-                                     instrument: instrument,
-                                     extras: Extras(elements: elements))
+                instrumentTable.insert(time: time,
+                                       instrument: instrument,
+                                       extras: Extras(elements: elements))
 
             default:
                 break
             }
         }
 
-        return instrumentMap
+        return instrumentTable
     }
 
     // The work's SMPTE start time is the file's SMPTE Offset, if it has
@@ -384,12 +384,12 @@ extension MIDI.Importer {
     // Program Change, the voice falls back to "Channel N" alone. Either way
     // the channel itself is kept in the part's `midiChannel` extra (see
     // `_convert(_:_:_:)`), so the name is for display only.
-    private static func _makeUnnamedPartName(_ instrumentMap: InstrumentMap<some TimeProtocol>,
+    private static func _makeUnnamedPartName(_ instrumentTable: InstrumentTable<some TimeProtocol>,
                                              hasInstrumentName: Bool,
                                              channel: MIDI.Channel) -> String {
         var firstInstrument: Instrument?
 
-        for entry in instrumentMap where firstInstrument == nil {
+        for entry in instrumentTable where firstInstrument == nil {
             firstInstrument = entry.instrument
         }
 
@@ -420,7 +420,7 @@ extension MIDI.Importer {
     // number only when a track packs more than one channel into itself,
     // mirroring `MusicXML.Importer`'s own `_makePartName`. An unnamed
     // track's voices stay unnamed here, left for `_makeUnnamedPartName`
-    // once their instrument maps are known.
+    // once their instrument tables are known.
     private static func _makeVoiceName(trackName: String?,
                                        channel: MIDI.Channel,
                                        isMultiChannel: Bool) -> String {

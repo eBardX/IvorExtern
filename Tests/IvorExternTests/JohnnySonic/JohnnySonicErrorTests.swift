@@ -14,6 +14,30 @@ struct JohnnySonicErrorTests {
 
 extension JohnnySonicErrorTests {
     @Test
+    func category() {
+        #expect(JohnnySonic.Error.noWorksToExport.category?.stringValue == "IvorExtern")
+    }
+
+    @Test
+    func cause_otherCase() {
+        #expect(JohnnySonic.Error.noWorksToExport.cause == nil)
+    }
+
+    @Test
+    func cause_withoutUnderlyingError() {
+        #expect(JohnnySonic.Error.parseFailure(nil).cause == nil)
+    }
+
+    @Test
+    func cause_wrapsUnderlyingError() {
+        let underlying = JohnnySonic.Error.noWorksToExport
+
+        #expect(JohnnySonic.Error.convertFailure(underlying).cause?.message == underlying.message)
+        #expect(JohnnySonic.Error.formatFailure(underlying).cause?.message == underlying.message)
+        #expect(JohnnySonic.Error.parseFailure(underlying).cause?.message == underlying.message)
+    }
+
+    @Test
     func convertFailure_message() {
         let error = JohnnySonic.Error.convertFailure(nil)
 

@@ -170,7 +170,7 @@ extension GuidoExporterTests {
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(imported.map(\.name) == ["Voice 1", "Bass"])
-        #expect(imported.first?.instrumentMap.isEmpty == true)
+        #expect(imported.first?.instrumentTable.isEmpty == true)
     }
 
     @Test
@@ -192,16 +192,16 @@ extension GuidoExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedName_emitsMidiProgram() throws {
+    func convert_instrumentTable_recognizedName_emitsMidiProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let score = try Guido.Exporter().convert(standardBeatWork(parts: [part]))
         let instrument = try #require(instruments(in: score).first { $0.instrumentName == "Acoustic Grand Piano" })
 
@@ -209,16 +209,16 @@ extension GuidoExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_unrecognizedName_omitsMidiProgram() throws {
+    func convert_instrumentTable_unrecognizedName_omitsMidiProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let score = try Guido.Exporter().convert(standardBeatWork(parts: [part]))
         let instrument = try #require(instruments(in: score).first { $0.instrumentName == "Kazoo Ensemble" })
 
@@ -422,16 +422,16 @@ extension GuidoExporterTests {
     }
 
     @Test
-    func roundTrip_instrumentMap_preservesRecognizedName() throws {
+    func roundTrip_instrumentTable_preservesRecognizedName() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -442,7 +442,7 @@ extension GuidoExporterTests {
 
         var instruments: [Instrument] = []
 
-        for entry in recoveredPart.instrumentMap {
+        for entry in recoveredPart.instrumentTable {
             instruments.append(entry.instrument)
         }
 
@@ -683,13 +683,13 @@ extension GuidoExporterTests {
 
     @Test
     func write_instrumentNameExtra_namesInstrumentTag() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        instrumentMap.insert(time: .zero,
-                             instrument: Instrument("Flute"),
-                             extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")])]))
+        instrumentTable.insert(time: .zero,
+                               instrument: Instrument("Flute"),
+                               extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")])]))
 
-        let part = Part<BeatTime, Pitch>(name: "", noteTable: NoteTable(), instrumentMap: instrumentMap)
+        let part = Part<BeatTime, Pitch>(name: "", noteTable: NoteTable(), instrumentTable: instrumentTable)
         let score = try Guido.Exporter().convert(Work(name: "", content: .standardBeat([part], TempoMap())))
 
         #expect(instruments(in: score).map(\.instrumentName) == ["Flauto 1"])

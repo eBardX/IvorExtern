@@ -14,10 +14,41 @@ struct MusicXMLErrorTests {
 
 extension MusicXMLErrorTests {
     @Test
+    func category() {
+        #expect(MusicXML.Error.noWorksToExport.category?.stringValue == "IvorExtern")
+    }
+
+    @Test
+    func cause_otherCase() {
+        #expect(MusicXML.Error.noWorksToExport.cause == nil)
+    }
+
+    @Test
+    func cause_withoutUnderlyingError() {
+        #expect(MusicXML.Error.parseFailure(nil).cause == nil)
+    }
+
+    @Test
+    func cause_wrapsUnderlyingError() {
+        let underlying = MusicXML.Error.noWorksToExport
+
+        #expect(MusicXML.Error.convertFailure(underlying).cause?.message == underlying.message)
+        #expect(MusicXML.Error.formatFailure(underlying).cause?.message == underlying.message)
+        #expect(MusicXML.Error.parseFailure(underlying).cause?.message == underlying.message)
+    }
+
+    @Test
     func convertFailure_message() {
         let error = MusicXML.Error.convertFailure(nil)
 
         #expect(error.message == "Unable to convert MusicXML score to Ivor work")
+    }
+
+    @Test
+    func durationBeforeDivisions_message() {
+        let error = MusicXML.Error.durationBeforeDivisions("<note>")
+
+        #expect(error.message == "Durational element before any divisions: \u{2018}<note>\u{2019}")
     }
 
     @Test
@@ -70,6 +101,27 @@ extension MusicXMLErrorTests {
     }
 
     @Test
+    func unbalancedBackup_message() {
+        let error = MusicXML.Error.unbalancedBackup("<backup>")
+
+        #expect(error.message == "Unbalanced backup: \u{2018}<backup>\u{2019}")
+    }
+
+    @Test
+    func unbalancedRepeat_message() {
+        let error = MusicXML.Error.unbalancedRepeat("measure 3")
+
+        #expect(error.message == "Unbalanced repeat structure: \u{2018}measure 3\u{2019}")
+    }
+
+    @Test
+    func unexpandableMeasure_message() {
+        let error = MusicXML.Error.unexpandableMeasure("measure 2")
+
+        #expect(error.message == "Unexpandable measure span: \u{2018}measure 2\u{2019}")
+    }
+
+    @Test
     func unrecognizedPitchAccidental_message() {
         let error = MusicXML.Error.unrecognizedPitchAccidental(-1)
 
@@ -81,6 +133,20 @@ extension MusicXMLErrorTests {
         let error = MusicXML.Error.unrecognizedPitchOctave(4)
 
         #expect(error.message == "Unrecognized MusicXML pitch octave: \u{2018}4\u{2019}")
+    }
+
+    @Test
+    func unrepresentablePitch_message() {
+        let error = MusicXML.Error.unrepresentablePitch("C-2")
+
+        #expect(error.message == "Transposed pitch out of range: \u{2018}C-2\u{2019}")
+    }
+
+    @Test
+    func unresolvableDuration_message() {
+        let error = MusicXML.Error.unresolvableDuration("<note>")
+
+        #expect(error.message == "Unresolvable duration: \u{2018}<note>\u{2019}")
     }
 
     @Test

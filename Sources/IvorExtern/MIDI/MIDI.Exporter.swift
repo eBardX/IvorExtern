@@ -197,7 +197,7 @@ extension MIDI.Exporter {
 
         events += _panEvents(part.panMap, channel: channel, tickMap: tickMap)
 
-        events += _instrumentEvents(part.instrumentMap, channel: channel, tickMap: tickMap)
+        events += _instrumentEvents(part.instrumentTable, channel: channel, tickMap: tickMap)
 
         events += _expressionEvents(part.dynamicMap, channel: channel, tickMap: tickMap)
 
@@ -331,28 +331,28 @@ extension MIDI.Exporter {
     }
 
     // Emits a Program Change at the part's initial instrument and at every
-    // subsequent `instrumentMap` change point. A lookup miss against the
+    // subsequent `instrumentTable` change point. A lookup miss against the
     // General MIDI table omits the directive entirely rather than
     // defaulting to program 0. A `midiProgram` extra overrides the derived
     // program number when present (see `Extra+Ivor.swift`); a
     // `midiBank`/`midiVolume` extra on the entry emits a Bank Select MSB/
     // LSB pair / Channel Volume event immediately before the Program
     // Change, MIDI convention order — the reverse of the combine
-    // `MIDI.Importer._makeInstrumentMap` does on the way in. The
+    // `MIDI.Importer._makeInstrumentTable` does on the way in. The
     // instrument's display name (its `instrumentName` extra), or failing
     // that its own name, is also written as an Instrument Name (`FF 04`)
     // meta event immediately ahead of the Program Change, unconditionally —
     // the same "always write the resolved name" choice
     // `MusicXML.Exporter`'s own `<score-instrument name=…>` makes — so an
     // explicit name that doesn't match its program's generic General MIDI
-    // name (see `MIDI.Importer._makeInstrumentMap`) round-trips rather than
+    // name (see `MIDI.Importer._makeInstrumentTable`) round-trips rather than
     // silently degrading to that generic name.
-    private static func _instrumentEvents<TickMap: MIDI.ExportTimeMap>(_ instrumentMap: InstrumentMap<TickMap.TimeType>,
+    private static func _instrumentEvents<TickMap: MIDI.ExportTimeMap>(_ instrumentTable: InstrumentTable<TickMap.TimeType>,
                                                                        channel: MIDI.Channel,
                                                                        tickMap: TickMap) -> [MIDI.Event] {
         var events: [MIDI.Event] = []
 
-        for entry in instrumentMap {
+        for entry in instrumentTable {
             let exactProgram = intValue(entry.extras, .midiProgram).flatMap {
                 $0 >= 1 ? MIDI.Program(uintValue: UInt($0)) : nil
             }

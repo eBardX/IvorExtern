@@ -49,13 +49,13 @@ extension ABC.Importer {
             guard result.identity != nil || !_isEmptyImplicitVoice(result.context)
             else { return nil }
 
-            let (instrumentMap, extras) = _makeInstrumentMapAndExtras(voiceID: result.identity?.id,
-                                                                      directives: directives)
+            let (instrumentTable, extras) = _makeInstrumentTableAndExtras(voiceID: result.identity?.id,
+                                                                          directives: directives)
 
             return Part(name: determinePartName(result.identity),
                         noteTable: result.context.noteTable,
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
-                        instrumentMap: instrumentMap,
+                        instrumentTable: instrumentTable,
                         extras: extras)
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
@@ -329,15 +329,15 @@ extension ABC.Importer {
     // voice` wins over `%%MIDI program`. A `program` directive's own channel
     // token wins over a standalone `channel` directive, and that channel
     // applies whichever directive gave the instrument. It's kept in the
-    // part's own `midiChannel` extra rather than on an instrument map
+    // part's own `midiChannel` extra rather than on an instrument table
     // entry, since it holds for the whole tune.
     //
     // `%%MIDI program` numbers count from `%%MIDI programbase`: 0 unless a
     // directive says 1, as in abc2midi, though the ABC standard counts from
     // 1. abc2midi keeps the last `programbase` it reads, so this does too.
     //
-    private static func _makeInstrumentMapAndExtras(voiceID: ABC.Voice.ID?,
-                                                    directives: MIDIDirectives) -> (InstrumentMap<BeatTime>, Extras?) {
+    private static func _makeInstrumentTableAndExtras(voiceID: ABC.Voice.ID?,
+                                                      directives: MIDIDirectives) -> (InstrumentTable<BeatTime>, Extras?) {
         let own = directives.byVoice[voiceID] ?? []
         let programBase = directives.all.compactMap(convertToProgramBase).last ?? 0
 
@@ -366,15 +366,15 @@ extension ABC.Importer {
             elements.append(Extra(name: Extra.midiProgram.name, values: [.int(program.program)]))
         }
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
         if !elements.isEmpty {
-            instrumentMap.insert(time: .zero, instrument: instrument, extras: Extras(elements: elements))
+            instrumentTable.insert(time: .zero, instrument: instrument, extras: Extras(elements: elements))
         }
 
         let extras = channel.map { Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int($0)])]) }
 
-        return (instrumentMap, extras)
+        return (instrumentTable, extras)
     }
 
     // The same prev/curr double-insert step MIDI's and Guido's `TempoMap`

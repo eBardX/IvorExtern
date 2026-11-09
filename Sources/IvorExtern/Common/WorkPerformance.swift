@@ -185,7 +185,7 @@ extension WorkPerformance {
         var events: [Event] = []
 
         for note in part.noteTable {
-            guard let (channel, _) = sounds[part.instrumentMap[note.attack]]
+            guard let (channel, _) = sounds[part.instrumentTable[note.attack]]
             else { continue }
 
             let key = MIDIData1Value(clamping: note.startPitch.uintValue)
@@ -299,9 +299,9 @@ extension WorkPerformance {
             return result
         }
 
-        var changes = [(time: WallTime.zero, instrument: part.instrumentMap[.zero])]
+        var changes = [(time: WallTime.zero, instrument: part.instrumentTable[.zero])]
 
-        for entry in part.instrumentMap where entry.time > .zero {
+        for entry in part.instrumentTable where entry.time > .zero {
             changes.append((entry.time, entry.instrument))
         }
 

@@ -260,7 +260,7 @@ extension ABC.Exporter {
         var directives: [(BeatTime, ABCDirective)] = []
         let channel = intValue(part.extras, .midiChannel)
 
-        for entry in part.instrumentMap {
+        for entry in part.instrumentTable {
             let exactProgram = intValue(entry.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
 

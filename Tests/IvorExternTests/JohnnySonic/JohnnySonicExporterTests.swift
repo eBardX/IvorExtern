@@ -80,11 +80,11 @@ extension JohnnySonicExporterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Flute")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Flute")))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let score = try JohnnySonic.Exporter().convert(work)
 
@@ -305,12 +305,12 @@ extension JohnnySonicExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
         table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: NoteNumber(64))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Piano")))
-        try instrumentMap.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Flute")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Piano")))
+        try instrumentTable.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Flute")))
 
-        let part = Part(name: "Lead", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -361,25 +361,25 @@ extension JohnnySonicExporterTests {
 
         table1.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
-        var instrumentMap1 = InstrumentMap<BeatTime>()
+        var instrumentTable1 = InstrumentTable<BeatTime>()
 
-        try instrumentMap1.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Piano")))
+        try instrumentTable1.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Piano")))
 
         var table2 = NoteTable<BeatTime, NoteNumber>()
 
         table2.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: NoteNumber(67))
 
-        var instrumentMap2 = InstrumentMap<BeatTime>()
+        var instrumentTable2 = InstrumentTable<BeatTime>()
 
-        try instrumentMap2.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Flute")))
+        try instrumentTable2.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Flute")))
 
         // Distinct instruments are load-bearing here: the importer groups
         // notes into parts by instrument (see
         // `roundTrip_instrumentChanges_splitNotesIntoSeparateParts`), so two
         // parts sharing the default instrument would collapse into one on
         // the way back in.
-        let parts = [Part(name: "P1", noteTable: table1, instrumentMap: instrumentMap1),
-                     Part(name: "P2", noteTable: table2, instrumentMap: instrumentMap2)]
+        let parts = [Part(name: "P1", noteTable: table1, instrumentTable: instrumentTable1),
+                     Part(name: "P2", noteTable: table2, instrumentTable: instrumentTable2)]
         let work = Work(name: "MultiPart", content: .keyboardBeat(parts, TempoMap()))
 
         let recovered = try roundTrip(work,

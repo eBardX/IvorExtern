@@ -177,19 +177,19 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_midiBankExtra_emitsProgramThenVoiceDirective() throws {
+    func convert_instrumentTable_midiBankExtra_emitsProgramThenVoiceDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Church Organ")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(20)]),
-                                                           Extra(name: Extra.midiBank.name, values: [.int(8)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Church Organ")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(20)]),
+                                                             Extra(name: Extra.midiBank.name, values: [.int(8)])]))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
         let values = tune.body.compactMap { entry -> String? in
             guard case let .directive(directive) = entry
@@ -202,17 +202,17 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_midiChannelExtra_emitsChannelToken() throws {
+    func convert_instrumentTable_midiChannelExtra_emitsChannelToken() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap, extras: channelExtras(5))
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable, extras: channelExtras(5))
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
         let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
             guard case let .directive(directive) = entry
@@ -225,16 +225,16 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedName_emitsMidiDirective() throws {
+    func convert_instrumentTable_recognizedName_emitsMidiDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
         let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
             guard case let .directive(directive) = entry
@@ -248,16 +248,16 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedName_emitsProgramBaseOneInHeader() throws {
+    func convert_instrumentTable_recognizedName_emitsProgramBaseOneInHeader() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
         let values = tune.header.compactMap { entry -> String? in
             guard case let .directive(directive) = entry
@@ -270,16 +270,16 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_unrecognizedName_omitsDirective() throws {
+    func convert_instrumentTable_unrecognizedName_omitsDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
 
         #expect(!tune.body.contains { if case .directive = $0 { true } else { false } })
@@ -287,17 +287,17 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_unrecognizedNameWithMidiChannelExtra_emitsStandaloneChannelDirective() throws {
+    func convert_instrumentTable_unrecognizedNameWithMidiChannelExtra_emitsStandaloneChannelDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap, extras: channelExtras(3))
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable, extras: channelExtras(3))
         let tune = try ABC.Exporter().convert(standardBeatWork(parts: [part]))
         let directive = try #require(tune.body.compactMap { entry -> ABCDirective? in
             guard case let .directive(directive) = entry
@@ -310,7 +310,7 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_midiChannelExtraWithoutInstrumentMap_emitsStandaloneChannelDirective() throws {
+    func convert_midiChannelExtraWithoutInstrumentTable_emitsStandaloneChannelDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -633,16 +633,16 @@ extension ABCExporterTests {
     }
 
     @Test
-    func roundTrip_instrumentMap_preservesRecognizedName() throws {
+    func roundTrip_instrumentTable_preservesRecognizedName() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -653,7 +653,7 @@ extension ABCExporterTests {
 
         var instruments: [Instrument] = []
 
-        for entry in recoveredPart.instrumentMap {
+        for entry in recoveredPart.instrumentTable {
             instruments.append(entry.instrument)
         }
 
@@ -666,22 +666,22 @@ extension ABCExporterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var organMap = InstrumentMap<BeatTime>()
+        var organMap = InstrumentTable<BeatTime>()
 
         try organMap.insert(time: BeatTime(0),
                             instrument: #require(Instrument(stringValue: "Church Organ")),
                             extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(20)]),
                                                       Extra(name: Extra.midiBank.name, values: [.int(8)])]))
 
-        var fluteMap = InstrumentMap<BeatTime>()
+        var fluteMap = InstrumentTable<BeatTime>()
 
         try fluteMap.insert(time: BeatTime(0),
                             instrument: #require(Instrument(stringValue: "Flute")),
                             extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(74)]),
                                                       Extra(name: Extra.midiBank.name, values: [.int(0)])]))
 
-        let parts = [Part(name: "Organ", noteTable: table, instrumentMap: organMap),
-                     Part(name: "Flute", noteTable: table, instrumentMap: fluteMap)]
+        let parts = [Part(name: "Organ", noteTable: table, instrumentTable: organMap),
+                     Part(name: "Flute", noteTable: table, instrumentTable: fluteMap)]
         let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -692,7 +692,7 @@ extension ABCExporterTests {
         var found: [(String, Int?)] = []
 
         for name in ["Organ", "Flute"] {
-            for entry in try namedStandardPart(recovered, name).instrumentMap {
+            for entry in try namedStandardPart(recovered, name).instrumentTable {
                 found.append((entry.instrument.stringValue, intValue(entry.extras, .midiBank)))
             }
         }
@@ -710,10 +710,10 @@ extension ABCExporterTests {
         var parts: [Part<BeatTime, Pitch>] = []
 
         for name in ["Flute", "Bassoon"] {
-            var instrumentMap = InstrumentMap<BeatTime>()
+            var instrumentTable = InstrumentTable<BeatTime>()
 
-            try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: name)))
-            parts.append(Part(name: name, noteTable: table, instrumentMap: instrumentMap))
+            try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: name)))
+            parts.append(Part(name: name, noteTable: table, instrumentTable: instrumentTable))
         }
 
         let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap()))
@@ -723,8 +723,8 @@ extension ABCExporterTests {
                                       importer: ABC.Importer(),
                                       fileFormat: .abc)
 
-        #expect(try namedStandardPart(recovered, "Flute").instrumentMap[.zero] == Instrument("Flute"))
-        #expect(try namedStandardPart(recovered, "Bassoon").instrumentMap[.zero] == Instrument("Bassoon"))
+        #expect(try namedStandardPart(recovered, "Flute").instrumentTable[.zero] == Instrument("Flute"))
+        #expect(try namedStandardPart(recovered, "Bassoon").instrumentTable[.zero] == Instrument("Bassoon"))
     }
 
     @Test

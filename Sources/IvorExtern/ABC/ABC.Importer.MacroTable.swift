@@ -24,7 +24,19 @@ extension ABC.Importer {
 
     // MARK: Internal Nested Types
 
-    internal struct MacroTable {
+    // Not a namespace: its instance members live in the following
+    // extension, invisible to this check from here.
+    // swiftformat:disable:next enumNamespaces
+    internal struct MacroTable { // swiftlint:disable:this convenience_type
+
+        // MARK: Private Nested Types
+
+        // Which flavor of macro a target pattern describes, re-derived from
+        // `ABCMacro.target`'s raw text (see the type-level comment).
+        private enum Kind {
+            case `static`
+            case transposing
+        }
     }
 }
 
@@ -88,15 +100,6 @@ extension ABC.Importer.MacroTable {
         }
 
         return nil
-    }
-
-    // MARK: Private Nested Types
-
-    // Which flavor of macro a target pattern describes, re-derived from
-    // `ABCMacro.target`'s raw text (see the type-level comment).
-    private enum Kind {
-        case `static`
-        case transposing
     }
 
     // MARK: Private Type Properties

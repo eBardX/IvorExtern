@@ -264,16 +264,16 @@ extension MusicXML.Exporter {
         return events
     }
 
-    // The earliest `InstrumentMap` entry only. A `<score-part>` carries at
+    // The earliest `InstrumentTable` entry only. A `<score-part>` carries at
     // most one static `<score-instrument>`/`<midi-instrument>` pair, so a
     // mid-piece instrument change (unlike a mid-piece tempo, pan, or dynamic
     // change, all of which have a `<direction>`/`<sound>` home mid-measure)
     // has no lossless home in this exporter and is dropped after the first
     // entry.
-    private static func _firstInstrument(_ instrumentMap: InstrumentMap<BeatTime>) -> (instrument: Instrument, extras: Extras?)? {
+    private static func _firstInstrument(_ instrumentTable: InstrumentTable<BeatTime>) -> (instrument: Instrument, extras: Extras?)? {
         var first: (instrument: Instrument, extras: Extras?)?
 
-        for entry in instrumentMap where first == nil {
+        for entry in instrumentTable where first == nil {
             first = (entry.instrument, entry.extras)
         }
 
@@ -545,7 +545,7 @@ extension MusicXML.Exporter {
                                        part: Part<BeatTime, Pitch>) -> MusicXML.ScorePart {
         var instruments: [MXLScoreInstrument] = []
         var group2: [MusicXML.ScorePart.Group2] = []
-        let first = _firstInstrument(part.instrumentMap)
+        let first = _firstInstrument(part.instrumentTable)
 
         // Elevation lives on the `PanMap` — it is the vertical angle of pan,
         // not a property of instrument — but MusicXML declares it inside
@@ -584,7 +584,7 @@ extension MusicXML.Exporter {
             // `<midi-program>` is optional per the MusicXML schema, so a
             // part with only a channel, or a `.vanilla` instrument imported
             // from a bank/volume/unpitched-only `<midi-instrument>` (see
-            // `MusicXML.Importer._makeInstrumentMap`), still round-trips
+            // `MusicXML.Importer._makeInstrumentTable`), still round-trips
             // its data even though no program can be derived for it —
             // emitting the element on any one field being present, not
             // gating the whole thing on `midiProgram` alone.

@@ -374,24 +374,24 @@ internal func expectDynamicMapsMatch<TimeType: TimeProtocol>(_ recovered: Dynami
     }
 }
 
-// Compares two instrument maps' (time, instrument) entries, in order,
+// Compares two instrument tables' (time, instrument) entries, in order,
 // reporting which index diverges rather than just failing.
-internal func expectInstrumentMapsMatch<TimeType: TimeProtocol>(_ recovered: InstrumentMap<TimeType>,
-                                                                _ original: InstrumentMap<TimeType>,
-                                                                sourceLocation: SourceLocation = #_sourceLocation) {
+internal func expectInstrumentTablesMatch<TimeType: TimeProtocol>(_ recovered: InstrumentTable<TimeType>,
+                                                                  _ original: InstrumentTable<TimeType>,
+                                                                  sourceLocation: SourceLocation = #_sourceLocation) {
     let recoveredEntries = recovered.map { ($0.time, $0.instrument) }
     let originalEntries = original.map { ($0.time, $0.instrument) }
 
     #expect(recoveredEntries.count == originalEntries.count,
-            "instrument map entry count mismatch",
+            "instrument table entry count mismatch",
             sourceLocation: sourceLocation)
 
     for index in 0..<min(recoveredEntries.count, originalEntries.count) {
         #expect(recoveredEntries[index].0 == originalEntries[index].0,
-                "instrument map entry \(index) time mismatch",
+                "instrument table entry \(index) time mismatch",
                 sourceLocation: sourceLocation)
         #expect(recoveredEntries[index].1 == originalEntries[index].1,
-                "instrument map entry \(index) instrument mismatch",
+                "instrument table entry \(index) instrument mismatch",
                 sourceLocation: sourceLocation)
     }
 }
@@ -558,7 +558,7 @@ internal func emptyPart(_ name: String) -> Part<BeatTime, Pitch> {
     Part(name: name,
          noteTable: NoteTable(),
          dynamicMap: DynamicMap(),
-         instrumentMap: InstrumentMap())
+         instrumentTable: InstrumentTable())
 }
 
 internal let chocolateInstrument: Instrument = "Chocolate"
@@ -655,13 +655,13 @@ internal func makeNoteNumber(_ uintValue: UInt) -> NoteNumber {
 // `Vanilla` from the start, with a note at 0, then `Chocolate` from 2, with a note at 3.
 //
 internal func makeTwoInstrumentPart() -> Part<WallTime, NoteNumber> {
-    var instrumentMap = InstrumentMap<WallTime>()
+    var instrumentTable = InstrumentTable<WallTime>()
     var noteTable = NoteTable<WallTime, NoteNumber>()
 
-    instrumentMap.insert(time: .zero,
-                         instrument: .vanilla)
-    instrumentMap.insert(time: makeWallTime(2),
-                         instrument: chocolateInstrument)
+    instrumentTable.insert(time: .zero,
+                           instrument: .vanilla)
+    instrumentTable.insert(time: makeWallTime(2),
+                           instrument: chocolateInstrument)
 
     noteTable.insert(attack: .zero,
                      duration: makeWallDuration(1),
@@ -672,7 +672,7 @@ internal func makeTwoInstrumentPart() -> Part<WallTime, NoteNumber> {
 
     return Part<WallTime, NoteNumber>(name: "Part 1",
                                       noteTable: noteTable,
-                                      instrumentMap: instrumentMap)
+                                      instrumentTable: instrumentTable)
 }
 
 internal func makeWallDuration(_ seconds: Double) -> WallDuration {
@@ -730,11 +730,11 @@ internal func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
     return parts.map(\.name)
 }
 
-internal func instrumentMapExtras(_ part: Part<WallTime, NoteNumber>,
-                                  at wallTime: WallTime) -> Extras? {
+internal func instrumentTableExtras(_ part: Part<WallTime, NoteNumber>,
+                                    at wallTime: WallTime) -> Extras? {
     var result: Extras?
 
-    for entry in part.instrumentMap {
+    for entry in part.instrumentTable {
         if result == nil, entry.time == wallTime {
             result = entry.extras
         }
@@ -754,16 +754,16 @@ internal func timeCodeValues(_ extras: Extras?) -> [Extra.AssociatedValue]? {
 
 internal func sampleMIDIWork() -> Work {
     var noteTable = NoteTable<BeatTime, NoteNumber>()
-    var instrumentMap = InstrumentMap<BeatTime>()
+    var instrumentTable = InstrumentTable<BeatTime>()
 
     noteTable.insert(attack: .zero, duration: BeatDuration(1), pitch: NoteNumber(60))
-    instrumentMap.insert(time: .zero,
-                         instrument: Instrument("Flute"),
-                         extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")])]))
+    instrumentTable.insert(time: .zero,
+                           instrument: Instrument("Flute"),
+                           extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")])]))
 
     let part = Part(name: "Melody",
                     noteTable: noteTable,
-                    instrumentMap: instrumentMap)
+                    instrumentTable: instrumentTable)
 
     return Work(name: "Sketch",
                 content: .keyboardBeat([part], TempoMap()),
@@ -811,16 +811,16 @@ internal func readMusicXML(header: String,
 }
 
 internal func sampleMusicXMLWork() -> Work {
-    var instrumentMap = InstrumentMap<BeatTime>()
+    var instrumentTable = InstrumentTable<BeatTime>()
 
-    instrumentMap.insert(time: .zero,
-                         instrument: Instrument("Flute"),
-                         extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")]),
-                                                   Extra(name: Extra.instrumentAbbreviation.name, values: [.string("Fl. 1")])]))
+    instrumentTable.insert(time: .zero,
+                           instrument: Instrument("Flute"),
+                           extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")]),
+                                                     Extra(name: Extra.instrumentAbbreviation.name, values: [.string("Fl. 1")])]))
 
     let part = Part<BeatTime, Pitch>(name: "Flute",
                                      noteTable: NoteTable(),
-                                     instrumentMap: instrumentMap)
+                                     instrumentTable: instrumentTable)
 
     return Work(name: "Collected Pieces: Aubade",
                 content: .standardBeat([part], TempoMap()),

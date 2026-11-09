@@ -15,6 +15,39 @@ struct GuidoErrorTests {
 
 extension GuidoErrorTests {
     @Test
+    func category() {
+        #expect(Guido.Error.noWorksToExport.category?.stringValue == "IvorExtern")
+    }
+
+    @Test
+    func cause_otherCase() {
+        #expect(Guido.Error.noWorksToExport.cause == nil)
+    }
+
+    @Test
+    func cause_withoutUnderlyingError() {
+        #expect(Guido.Error.parseFailure(nil).cause == nil)
+    }
+
+    @Test
+    func cause_wrapsUnderlyingError() {
+        let underlying = Guido.Error.noWorksToExport
+
+        #expect(Guido.Error.convertFailure(underlying).cause?.message == underlying.message)
+        #expect(Guido.Error.formatFailure(underlying).cause?.message == underlying.message)
+        #expect(Guido.Error.parseFailure(underlying).cause?.message == underlying.message)
+    }
+
+    @Test
+    func circularVariableReference_message() throws {
+        let name = try #require(GMNVariable.Name(stringValue: "x"))
+
+        let error = Guido.Error.circularVariableReference(name)
+
+        #expect(error.message == "Circular variable reference: \u{2018}$x\u{2019}")
+    }
+
+    @Test
     func convertFailure_message() {
         let error = Guido.Error.convertFailure(nil)
 
@@ -68,6 +101,13 @@ extension GuidoErrorTests {
         let error = Guido.Error.unrecognizedPitchOctave(4)
 
         #expect(error.message == "Unrecognized Guido pitch octave: \u{2018}4\u{2019}")
+    }
+
+    @Test
+    func unrepresentableDuration_message() {
+        let error = Guido.Error.unrepresentableDuration("1/11")
+
+        #expect(error.message == "Unrepresentable duration: \u{2018}1/11\u{2019}")
     }
 
     @Test

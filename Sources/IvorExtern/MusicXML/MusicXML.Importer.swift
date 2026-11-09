@@ -71,14 +71,14 @@ extension MusicXML.Importer {
                                  groupName: String?,
                                  panMap: PanMap<BeatTime>,
                                  directionDynamicMap: DynamicMap<BeatTime>) -> [Part<BeatTime, Pitch>] {
-        let instrumentMap = _makeInstrumentMap(part.part)
+        let instrumentTable = _makeInstrumentTable(part.part)
         let extras = _makeExtras(part.part)
 
         guard !part.voices.isEmpty
         else { return [Part(name: determinePartName(part.part, groupName: groupName),
                             noteTable: NoteTable(),
                             dynamicMap: directionDynamicMap,
-                            instrumentMap: instrumentMap,
+                            instrumentTable: instrumentTable,
                             panMap: panMap,
                             extras: extras)] }
 
@@ -91,7 +91,7 @@ extension MusicXML.Importer {
                                             part.voices.count),
                         noteTable: voice.noteTable,
                         dynamicMap: dynamicMap,
-                        instrumentMap: instrumentMap,
+                        instrumentTable: instrumentTable,
                         panMap: panMap,
                         extras: extras)
         }
@@ -148,7 +148,7 @@ extension MusicXML.Importer {
     // A part's static `<score-part><midi-instrument><pan>` — the common
     // case, since most notation software declares pan once per part there
     // rather than as a repeated inline `<sound>` — seeds the map at `.zero`
-    // the same way `_makeInstrumentMap` seeds bank/volume from the
+    // the same way `_makeInstrumentTable` seeds bank/volume from the
     // same element. It's placed first so a stable sort keeps it
     // ahead of any real `<sound>` pan event also at `.zero`, letting that
     // more explicit, in-score event take priority when both exist.
@@ -221,7 +221,7 @@ extension MusicXML.Importer {
 
     // A `<midi-instrument>`'s `<midi-channel>` holds for the whole part, so
     // it's kept in the part's `midiChannel` extra rather than on an
-    // instrument map entry. Every voice split from the part shares it.
+    // instrument table entry. Every voice split from the part shares it.
     private static func _makeExtras(_ scorePart: MusicXML.ScorePart) -> Extras? {
         guard let channel = scorePart.group2.lazy.compactMap(\.midiInstrument).first?.midiChannel
         else { return nil }
@@ -231,18 +231,18 @@ extension MusicXML.Importer {
 
     // An instrument assignment, like pan, applies to the whole MusicXML part
     // rather than any one voice — see the type-level comment above — so
-    // every voice split from the same part shares this one map. A part with
+    // every voice split from the same part shares this one table. A part with
     // no usable instrument data at all (no name, no `<midi-instrument>")
-    // gets an empty map, which reads as `Instrument.vanilla` via
-    // `InstrumentMap`'s own default. A `<midi-instrument>` that carries
+    // gets an empty table, which reads as `Instrument.vanilla` via
+    // `InstrumentTable`'s own default. A `<midi-instrument>` that carries
     // only bank/volume/unpitched data and no `<midi-program>` — so
     // `convertToInstrument(_:)` can't name an instrument — still produces
     // an explicit `.vanilla` entry rather than being dropped; otherwise that
     // data would have nowhere to attach and would silently vanish on
     // import. Its channel isn't instrument data: it goes in the part's own
     // extras instead (see `_makeExtras`).
-    private static func _makeInstrumentMap(_ scorePart: MusicXML.ScorePart) -> InstrumentMap<BeatTime> {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    private static func _makeInstrumentTable(_ scorePart: MusicXML.ScorePart) -> InstrumentTable<BeatTime> {
+        var instrumentTable = InstrumentTable<BeatTime>()
         let midiInstrument = scorePart.group2.lazy.compactMap(\.midiInstrument).first
         let instrument = convertToInstrument(scorePart)
 
@@ -282,12 +282,12 @@ extension MusicXML.Importer {
         }
 
         if instrument != nil || !elements.isEmpty {
-            instrumentMap.insert(time: .zero,
-                                 instrument: instrument ?? .vanilla,
-                                 extras: elements.isEmpty ? nil : Extras(elements: elements))
+            instrumentTable.insert(time: .zero,
+                                   instrument: instrument ?? .vanilla,
+                                   extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 
-        return instrumentMap
+        return instrumentTable
     }
 
     // The same prev/curr double-insert step `_makeTempoMap` uses below, for
@@ -308,7 +308,7 @@ extension MusicXML.Importer {
         // the map would interpolate it away between entries). A part
         // declaring elevation but no pan at all still needs an entry at
         // `.zero` to carry it, so one facing straight ahead is synthesized,
-        // the same way `_makeInstrumentMap` falls back to a `.vanilla`
+        // the same way `_makeInstrumentTable` falls back to a `.vanilla`
         // instrument.
         let defaultEvent = _makeDefaultPanEvent(scorePart)
             ?? (elevation != nil ? (beatTime: BeatTime.zero, pan: Pan.center) : nil)

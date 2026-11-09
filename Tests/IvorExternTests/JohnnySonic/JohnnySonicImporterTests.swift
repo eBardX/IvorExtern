@@ -48,7 +48,7 @@ extension JohnnySonicImporterTests {
     }
 
     @Test
-    func convert_keyboardBeatWork_instrumentMapHasOneEntryPerNote() throws {
+    func convert_keyboardBeatWork_instrumentTableHasOneEntryPerNote() throws {
         let first = DKMPitchesNote(startBeat: 2,
                                    duration: 1,
                                    volume: 1,
@@ -76,7 +76,7 @@ extension JohnnySonicImporterTests {
         // effect for the leading rest.
         var entries: [(beatTime: BeatTime, instrument: Instrument)] = []
 
-        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+        for entry in parts.first?.instrumentTable ?? InstrumentTable() {
             entries.append((entry.time, entry.instrument))
         }
 
@@ -85,7 +85,7 @@ extension JohnnySonicImporterTests {
     }
 
     @Test
-    func convert_keyboardBeatWork_populatesInstrumentMap() throws {
+    func convert_keyboardBeatWork_populatesInstrumentTable() throws {
         let note = DKMPitchesNote(startBeat: 0,
                                   duration: 1,
                                   volume: 1,
@@ -99,7 +99,7 @@ extension JohnnySonicImporterTests {
         guard case let .keyboardBeat(parts, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
-        #expect(parts[0].instrumentMap[.zero] == Instrument("Piano"))
+        #expect(parts[0].instrumentTable[.zero] == Instrument("Piano"))
     }
 
     @Test

@@ -175,18 +175,18 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_midiChannelAndBankExtras_emitMidiChannelAndBank() throws {
+    func convert_instrumentTable_midiChannelAndBankExtras_emitMidiChannelAndBank() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(130)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(130)])]))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap, extras: channelExtras(3))
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable, extras: channelExtras(3))
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
         let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
             guard case let .scorePart(scorePart) = item
@@ -201,16 +201,16 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedName_emitsMidiProgram() throws {
+    func convert_instrumentTable_recognizedName_emitsMidiProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
         let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
             guard case let .scorePart(scorePart) = item
@@ -224,16 +224,16 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_recognizedPercussionName_emitsMidiUnpitched() throws {
+    func convert_instrumentTable_recognizedPercussionName_emitsMidiUnpitched() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Snare")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Snare")))
 
-        let part = Part(name: "Drums", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Drums", noteTable: table, instrumentTable: instrumentTable)
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
         let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
             guard case let .scorePart(scorePart) = item
@@ -248,16 +248,16 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_unrecognizedName_omitsMidiProgram() throws {
+    func convert_instrumentTable_unrecognizedName_omitsMidiProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Kazoo Ensemble")))
 
-        let part = Part(name: "", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "", noteTable: table, instrumentTable: instrumentTable)
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
         let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
             guard case let .scorePart(scorePart) = item
@@ -271,7 +271,7 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func convert_midiChannelExtraWithoutInstrumentMap_emitsMidiInstrumentWithoutProgram() throws {
+    func convert_midiChannelExtraWithoutInstrumentTable_emitsMidiInstrumentWithoutProgram() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -318,14 +318,14 @@ extension MusicXMLExporterTests {
 
         table.insert(attack: .zero, duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: .zero,
-                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(-1)]),
-                                                           Extra(name: Extra.midiUnpitched.name, values: [.int(-1)])]))
+        try instrumentTable.insert(time: .zero,
+                                   instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(-1)]),
+                                                             Extra(name: Extra.midiUnpitched.name, values: [.int(-1)])]))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap, extras: channelExtras(-1))
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable, extras: channelExtras(-1))
         let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
         let scorePart = try #require(score.partList.items.compactMap { item -> MusicXML.ScorePart? in
             guard case let .scorePart(scorePart) = item
@@ -557,7 +557,7 @@ extension MusicXMLExporterTests {
                                       importer: MusicXML.Importer(),
                                       fileFormat: .musicXML)
         let recoveredPart = try namedStandardPart(recovered, "Flute")
-        let entry = try #require(recoveredPart.instrumentMap.first)
+        let entry = try #require(recoveredPart.instrumentTable.first)
         var expected = work.info
 
         // `movement number` and `work number` come back first, since they
@@ -574,16 +574,16 @@ extension MusicXMLExporterTests {
     }
 
     @Test
-    func roundTrip_instrumentMap_preservesRecognizedName() throws {
+    func roundTrip_instrumentTable_preservesRecognizedName() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -594,7 +594,7 @@ extension MusicXMLExporterTests {
 
         var instruments: [Instrument] = []
 
-        for entry in recoveredPart.instrumentMap {
+        for entry in recoveredPart.instrumentTable {
             instruments.append(entry.instrument)
         }
 
@@ -607,15 +607,15 @@ extension MusicXMLExporterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(1)]),
-                                                           Extra(name: Extra.midiVolume.name, values: [.double(80)]),
-                                                           Extra(name: Extra.midiUnpitched.name, values: [.int(38)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(1)]),
+                                                             Extra(name: Extra.midiVolume.name, values: [.double(80)]),
+                                                             Extra(name: Extra.midiUnpitched.name, values: [.int(38)])]))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "InstrumentExtras", content: .standardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -628,7 +628,7 @@ extension MusicXMLExporterTests {
         var volume: Double?
         var unpitched: Int?
 
-        for entry in recoveredPart.instrumentMap {
+        for entry in recoveredPart.instrumentTable {
             program = intValue(entry.extras, .midiProgram)
             volume = doubleValue(entry.extras, .midiVolume)
             unpitched = intValue(entry.extras, .midiUnpitched)

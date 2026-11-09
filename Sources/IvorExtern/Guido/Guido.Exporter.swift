@@ -232,10 +232,10 @@ extension Guido.Exporter {
         return tags.map { .tag($0) }
     }
 
-    private static func _instrumentDirectives(_ instrumentMap: InstrumentMap<BeatTime>) -> [(BeatTime, GMNInstrument)] {
+    private static func _instrumentDirectives(_ instrumentTable: InstrumentTable<BeatTime>) -> [(BeatTime, GMNInstrument)] {
         var directives: [(BeatTime, GMNInstrument)] = []
 
-        for entry in instrumentMap {
+        for entry in instrumentTable {
             let exactProgram = intValue(entry.extras, .midiProgram)
             let derivedProgram = GM1Instrument(name: entry.instrument.stringValue).map { Int($0.program.uintValue) }
             let midi = (exactProgram ?? derivedProgram).map { $0 - 1 }
@@ -301,11 +301,11 @@ extension Guido.Exporter {
             // `\instrument`'s `name` is Guido's only per-voice identity
             // carrier — `determinePartName(_:)` reads the *first* one found
             // in the voice — so a non-empty part name always gets one, ahead
-            // of any real instrument-map-driven tag below. When both land at
+            // of any real instrument-table-driven tag below. When both land at
             // the same time the real tag's later `insert` simply overwrites
-            // this one's entry in the recovered `InstrumentMap`, so neither
+            // this one's entry in the recovered `InstrumentTable`, so neither
             // clobbers the other on round trip. A part with no name and no
-            // instrument map entries emits nothing here, so it costs nothing
+            // instrument table entries emits nothing here, so it costs nothing
             // when there's nothing to preserve. Neither does a positional
             // "Voice N" fallback name: re-import regenerates it from
             // position, whereas writing it would come back as a spurious
@@ -403,7 +403,7 @@ extension Guido.Exporter {
                                       measureCount: UInt,
                                       tempoMap: TempoMap) throws(Guido.Error) -> [GMNSymbol] {
         let events = _events(part.noteTable)
-        let directives = _instrumentDirectives(part.instrumentMap)
+        let directives = _instrumentDirectives(part.instrumentTable)
         let tempos = _tempoDirectives(tempoMap)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let barTimes = _barTimes(measureCount: measureCount)

@@ -122,13 +122,13 @@ extension MIDIFunctionsTests {
     @Test
     func determineTimeCode_ignoresMapEntries() {
         var tempoMap = TempoMap()
-        var instrumentMap = InstrumentMap<WallTime>()
+        var instrumentTable = InstrumentTable<WallTime>()
 
         tempoMap.insert(beatTime: .zero, tempo: 120, extras: timeCodeExtras("25", 40))
-        instrumentMap.insert(time: .zero, instrument: .vanilla, extras: timeCodeExtras("25", 40))
+        instrumentTable.insert(time: .zero, instrument: .vanilla, extras: timeCodeExtras("25", 40))
 
         #expect(determineTimeCode(Work(content: .keyboardBeat([], tempoMap))) == nil)
-        #expect(determineTimeCode(Work(content: .keyboardWall([Part(name: "Piano", instrumentMap: instrumentMap)]))) == nil)
+        #expect(determineTimeCode(Work(content: .keyboardWall([Part(name: "Piano", instrumentTable: instrumentTable)]))) == nil)
     }
 
     @Test

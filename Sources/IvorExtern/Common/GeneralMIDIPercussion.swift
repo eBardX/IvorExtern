@@ -5,7 +5,7 @@ private import IvorMIDI
 
 // MARK: Internal Functions
 
-// Returns the General MIDI 1 percussion key-map name for a 0–127 raw MIDI
+// Returns the General MIDI Level 1 percussion key-map name for a 0–127 raw MIDI
 // note number — the "Standard Kit" mapping every GM2 kit variation (Room,
 // Power, Electronic, …) derives from and shares most of its voices with —
 // or a synthesized "Percussion N" fallback for a note the key map leaves

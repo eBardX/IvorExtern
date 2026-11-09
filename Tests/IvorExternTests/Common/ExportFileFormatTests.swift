@@ -7,6 +7,7 @@ import IvorTiming
 import IvorTuning
 import Testing
 import XestiNumbers
+import XestiTools
 
 // Cross-format tests the per-format round-trip suites cannot cover on their
 // own: import in one format, export in another, and confirm the model
@@ -166,11 +167,11 @@ extension ExportFileFormatTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
 
-        let part = Part(name: "Solo", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Solo", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Program", content: .standardBeat([part], TempoMap()))
 
         let viaABC = try roundTrip(work,
@@ -188,10 +189,10 @@ extension ExportFileFormatTests {
         var abcProgram: Int?
         var guidoProgram: Int?
 
-        for entry in abcPart.instrumentMap {
+        for entry in abcPart.instrumentTable {
             abcProgram = intValue(entry.extras, .midiProgram)
         }
-        for entry in guidoPart.instrumentMap {
+        for entry in guidoPart.instrumentTable {
             guidoProgram = intValue(entry.extras, .midiProgram)
         }
 
@@ -336,5 +337,37 @@ extension ExportFileFormatTests {
     @Test
     func supportedMIMETypes_notEmpty() {
         #expect(!ExportFileFormat.supportedMIMETypes.isEmpty)
+    }
+
+    @Test
+    func supportedPitchNotations_notEmpty() {
+        #expect(!ExportFileFormat.supportedPitchNotations.isEmpty)
+    }
+
+    @Test
+    func supportedTimeBases_notEmpty() {
+        #expect(!ExportFileFormat.supportedTimeBases.isEmpty)
+    }
+
+    @Test
+    func write_noWorks_throwsWriteFailure() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "abc"))
+
+        let error = #expect(throws: ExportFileFormat.Error.self) {
+            try fmt.write(works: [])
+        }
+
+        #expect(error?.message == "Unable to write works to file")
+        #expect(error?.cause?.message == "No works to export")
+    }
+
+    @Test
+    func write_validWork() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "abc"))
+        let work = try readABC("X:1\nT:Tune\nK:C\nCDE|\n")
+
+        let file = try fmt.write(works: [work])
+
+        #expect(file.regularFileContents?.isEmpty == false)
     }
 }

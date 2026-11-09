@@ -47,7 +47,7 @@ extension GuidoImporterTests {
     }
 
     @Test
-    func convert_instrumentTag_populatesInstrumentMap() throws {
+    func convert_instrumentTag_populatesInstrumentTable() throws {
         let data = Data("[ \\instr<\"Piano\"> c ]".utf8)
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
@@ -55,7 +55,7 @@ extension GuidoImporterTests {
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Piano"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Piano"))
     }
 
     @Test
@@ -71,8 +71,8 @@ extension GuidoImporterTests {
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap.map(\.time) == [.zero])
-        #expect(parts.first?.instrumentMap.instruments == [Instrument("Piano")])
+        #expect(parts.first?.instrumentTable.map(\.time) == [.zero])
+        #expect(parts.first?.instrumentTable.instruments == [Instrument("Piano")])
     }
 
     @Test
@@ -88,11 +88,11 @@ extension GuidoImporterTests {
         guard case let .standardBeat(parts, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        let instrumentMap = try #require(parts.first?.instrumentMap)
+        let instrumentTable = try #require(parts.first?.instrumentTable)
 
-        #expect(instrumentMap.map(\.time) == [BeatTime(1)])
-        #expect(instrumentMap[.zero] == instrumentMap.defaultInstrument)
-        #expect(instrumentMap[BeatTime(1)] == Instrument("Piano"))
+        #expect(instrumentTable.map(\.time) == [BeatTime(1)])
+        #expect(instrumentTable[.zero] == instrumentTable.defaultInstrument)
+        #expect(instrumentTable[BeatTime(1)] == Instrument("Piano"))
     }
 
     @Test
@@ -105,7 +105,7 @@ extension GuidoImporterTests {
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Flute"])
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Flute"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Flute"))
     }
 
     @Test
@@ -202,7 +202,7 @@ extension GuidoImporterTests {
     func read_instrument_isInstrumentNameExtra() throws {
         let work = try readGuido(#"[ \instr<"Flauto 1"> c ]"#)
         let part = try #require(standardBeatParts(of: work)?.first)
-        let entry = try #require(part.instrumentMap.first)
+        let entry = try #require(part.instrumentTable.first)
 
         #expect(stringValue(entry.extras, .instrumentName) == "Flauto 1")
     }

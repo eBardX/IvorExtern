@@ -1,7 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
+import Foundation
 import IvorExtern
+import IvorModel
 import Testing
+import XestiTools
 
 struct ImportFileFormatTests {
 }
@@ -73,6 +76,13 @@ extension ImportFileFormatTests {
     }
 
     @Test
+    func pitchNotations_notEmpty() throws {
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
+
+        #expect(!fmt.pitchNotations.isEmpty)
+    }
+
+    @Test
     func preferredFilenameExtension_notNil() throws {
         let fmt = try #require(ImportFileFormat.importFileFormat(for: "midi"))
 
@@ -97,6 +107,30 @@ extension ImportFileFormatTests {
     }
 
     @Test
+    func read_invalidFile_throwsReadFailure() throws {
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "midi"))
+        let file = FileWrapper(regularFileWithContents: Data("not a MIDI file".utf8))
+
+        let error = #expect(throws: ImportFileFormat.Error.self) {
+            try fmt.read(from: file)
+        }
+
+        #expect(error?.message == "Unable to read works from file")
+        #expect(error?.cause != nil)
+    }
+
+    @Test
+    func read_validFile() throws {
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
+        let file = FileWrapper(regularFileWithContents: Data("X:1\nT:Tune\nK:C\nCDE|\n".utf8))
+
+        let works = try fmt.read(from: file)
+
+        #expect(works.count == 1)
+        #expect(works.first?.name == "Tune")
+    }
+
+    @Test
     func supportedFilenameExtensions_notEmpty() {
         #expect(!ImportFileFormat.supportedFilenameExtensions.isEmpty)
     }
@@ -104,5 +138,22 @@ extension ImportFileFormatTests {
     @Test
     func supportedMIMETypes_notEmpty() {
         #expect(!ImportFileFormat.supportedMIMETypes.isEmpty)
+    }
+
+    @Test
+    func supportedPitchNotations_notEmpty() {
+        #expect(!ImportFileFormat.supportedPitchNotations.isEmpty)
+    }
+
+    @Test
+    func supportedTimeBases_notEmpty() {
+        #expect(!ImportFileFormat.supportedTimeBases.isEmpty)
+    }
+
+    @Test
+    func timeBases_notEmpty() throws {
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
+
+        #expect(!fmt.timeBases.isEmpty)
     }
 }

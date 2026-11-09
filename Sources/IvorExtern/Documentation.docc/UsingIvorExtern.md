@@ -112,8 +112,8 @@ channel, in the form a MIDI router such as IvorConnect’s `MIDIRouter` takes.
 IvorExtern also extends a few IvorModel and IvorMIDI types with the General MIDI
 knowledge its formats need:
 
-- `Instrument.generalMIDIInstrument` gives the General MIDI 1 instrument whose
-  name an instrument’s name matches, if any.
+- `Instrument.generalMIDIInstrument` gives the General MIDI Level 1 instrument
+  whose name an instrument’s name matches, if any.
 - `Patch.generalMIDIName` gives the General MIDI name of a patch’s sound.
 - `MIDIPatch(instrument:)` and `MIDIPatch(patch:)` give the bank and program
   that select an instrument or a patch.

@@ -14,6 +14,30 @@ struct ABCErrorTests {
 
 extension ABCErrorTests {
     @Test
+    func category() {
+        #expect(ABC.Error.noWorksToExport.category?.stringValue == "IvorExtern")
+    }
+
+    @Test
+    func cause_otherCase() {
+        #expect(ABC.Error.noWorksToExport.cause == nil)
+    }
+
+    @Test
+    func cause_withoutUnderlyingError() {
+        #expect(ABC.Error.parseFailure(nil).cause == nil)
+    }
+
+    @Test
+    func cause_wrapsUnderlyingError() {
+        let underlying = ABC.Error.noWorksToExport
+
+        #expect(ABC.Error.convertFailure(underlying).cause?.message == underlying.message)
+        #expect(ABC.Error.formatFailure(underlying).cause?.message == underlying.message)
+        #expect(ABC.Error.parseFailure(underlying).cause?.message == underlying.message)
+    }
+
+    @Test
     func convertFailure_message() {
         let error = ABC.Error.convertFailure(nil)
 
@@ -39,6 +63,20 @@ extension ABCErrorTests {
         let error = ABC.Error.parseFailure(nil)
 
         #expect(error.message == "Unable to parse ABC file")
+    }
+
+    @Test
+    func unbalancedRepeat_message() {
+        let error = ABC.Error.unbalancedRepeat(":|")
+
+        #expect(error.message == "Unbalanced repeat: \u{2018}:|\u{2019}")
+    }
+
+    @Test
+    func undefinedPart_message() {
+        let error = ABC.Error.undefinedPart("B")
+
+        #expect(error.message == "Undefined part: \u{2018}B\u{2019}")
     }
 
     @Test

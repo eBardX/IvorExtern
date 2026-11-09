@@ -51,8 +51,8 @@ extension Guido.Importer {
             Part(name: normalizeName(context.instrumentName ?? determinePartName(voice)),
                  noteTable: context.noteTable,
                  dynamicMap: _makeDynamicMap(context.dynamicEvents),
-                 instrumentMap: _makeInstrumentMap(context.instrumentEvents,
-                                                   firstAttack: context.noteTable.timeRange?.lowerBound))
+                 instrumentTable: _makeInstrumentTable(context.instrumentEvents,
+                                                       firstAttack: context.noteTable.timeRange?.lowerBound))
         }
 
         return Work(name: determineWorkName(validated),
@@ -100,20 +100,20 @@ extension Guido.Importer {
     }
 
     // Unlike `_makeDynamicMap`/`_makeTempoMap`, no reassert-then-insert step
-    // is needed: `InstrumentMap`'s own subscript already reads as a step
+    // is needed: `InstrumentTable`'s own subscript already reads as a step
     // function — the entry in effect at or before a queried time, with no
     // interpolation — so one plain insert per `\instrument` tag is enough.
     // The tag's name is the instrument's display name as well as its
     // playback designation, so it's also kept as an `instrumentName` extra.
     //
-    // Before its first entry, an `InstrumentMap` gives its default
+    // Before its first entry, an `InstrumentTable` gives its default
     // instrument. Notes before the first tag genuinely have no instrument,
     // so they keep the default. But a first tag that no note precedes (one
     // after a leading rest, say) is moved to zero, so that the default
     // doesn't sound, or show up among the part's instruments, for a rest.
-    private static func _makeInstrumentMap(_ events: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)],
-                                           firstAttack: BeatTime?) -> InstrumentMap<BeatTime> {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    private static func _makeInstrumentTable(_ events: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)],
+                                             firstAttack: BeatTime?) -> InstrumentTable<BeatTime> {
+        var instrumentTable = InstrumentTable<BeatTime>()
 
         for (idx, event) in events.sorted(by: { $0.beatTime < $1.beatTime }).enumerated() {
             var elements: [Extra] = []
@@ -128,12 +128,12 @@ extension Guido.Importer {
 
             let isUnpreceded = idx == 0 && firstAttack.map { $0 >= event.beatTime } ?? true
 
-            instrumentMap.insert(time: isUnpreceded ? .zero : event.beatTime,
-                                 instrument: event.instrument,
-                                 extras: elements.isEmpty ? nil : Extras(elements: elements))
+            instrumentTable.insert(time: isUnpreceded ? .zero : event.beatTime,
+                                   instrument: event.instrument,
+                                   extras: elements.isEmpty ? nil : Extras(elements: elements))
         }
 
-        return instrumentMap
+        return instrumentTable
     }
 
     // Mirrors `MIDI.Importer`'s own `TempoMap` builder: inserting both the

@@ -94,20 +94,20 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_changesMidPart_emitTwoProgramChanges() throws {
+    func convert_instrumentTable_changesMidPart_emitTwoProgramChanges() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
         table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: NoteNumber(62))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
-        try instrumentMap.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Vibraphone")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Vibraphone")))
 
         let part = Part(name: "Piano",
                         noteTable: table,
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -122,16 +122,16 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_nameUnmatchedByProgram_emitsInstrumentNameEvent() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    func convert_instrumentTable_nameUnmatchedByProgram_emitsInstrumentNameEvent() throws {
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Fiddle")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Fiddle")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
         let events = sequence.tracks[1].events
@@ -152,14 +152,14 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_present_emitsProgramChange() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    func convert_instrumentTable_present_emitsProgramChange() throws {
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Vibraphone")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Vibraphone")))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -174,14 +174,14 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func convert_instrumentMap_unrecognizedName_omitsDirective() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+    func convert_instrumentTable_unrecognizedName_omitsDirective() throws {
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Not A Real Instrument")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Not A Real Instrument")))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -308,15 +308,15 @@ extension MIDIExporterTests {
 
     @Test
     func convert_midiBankExtra_emitsBankSelectBeforeProgramChange() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Vibraphone")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(130)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Vibraphone")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiBank.name, values: [.int(130)])]))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
         let sequence = try MIDI.Exporter().convert(work)
         let events = sequence.tracks[1].events
@@ -422,15 +422,15 @@ extension MIDIExporterTests {
 
     @Test
     func convert_negativeMidiVolume_writesNoChannelVolume() throws {
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: .zero,
-                                 instrument: #require(Instrument(stringValue: "Vibraphone")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(-5)])]))
+        try instrumentTable.insert(time: .zero,
+                                   instrument: #require(Instrument(stringValue: "Vibraphone")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(-5)])]))
 
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
-                        instrumentMap: instrumentMap)
+                        instrumentTable: instrumentTable)
         let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
 
         #expect(!sequence.tracks[1].events.contains {
@@ -948,7 +948,7 @@ extension MIDIExporterTests {
                                       fileFormat: .midi)
         let info = recovered.info
         let part = try #require(keyboardBeatParts(of: recovered)?.first)
-        let entry = try #require(part.instrumentMap.first)
+        let entry = try #require(part.instrumentTable.first)
 
         #expect(recovered.name == "Aubade")
         #expect(info.title == "Aubade")
@@ -968,12 +968,12 @@ extension MIDIExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
         table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: NoteNumber(64))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
-        try instrumentMap.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Violin")))
+        try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
+        try instrumentTable.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Violin")))
 
-        let part = Part(name: "Lead", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -982,7 +982,7 @@ extension MIDIExporterTests {
                                       fileFormat: .midi)
         let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
 
-        expectInstrumentMapsMatch(recoveredPart.instrumentMap, instrumentMap)
+        expectInstrumentTablesMatch(recoveredPart.instrumentTable, instrumentTable)
     }
 
     @Test
@@ -991,13 +991,13 @@ extension MIDIExporterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Fiddle")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Fiddle")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
 
-        let part = Part(name: "Lead", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Instrument", content: .keyboardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -1008,7 +1008,7 @@ extension MIDIExporterTests {
 
         // Program 41 is General MIDI's "Violin" — without the Instrument
         // Name meta event, this would round-trip back as "Violin" instead.
-        #expect(recoveredPart.instrumentMap[.zero] == Instrument("Fiddle"))
+        #expect(recoveredPart.instrumentTable[.zero] == Instrument("Fiddle"))
     }
 
     @Test
@@ -1072,13 +1072,13 @@ extension MIDIExporterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
-        var instrumentMap = InstrumentMap<BeatTime>()
+        var instrumentTable = InstrumentTable<BeatTime>()
 
-        try instrumentMap.insert(time: BeatTime(0),
-                                 instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
-                                 extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(90)])]))
+        try instrumentTable.insert(time: BeatTime(0),
+                                   instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")),
+                                   extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(90)])]))
 
-        let part = Part(name: "Piano", noteTable: table, instrumentMap: instrumentMap)
+        let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
         let work = Work(name: "Volume", content: .keyboardBeat([part], TempoMap()))
 
         let recovered = try roundTrip(work,
@@ -1089,7 +1089,7 @@ extension MIDIExporterTests {
 
         var volume: Double?
 
-        for entry in recoveredPart.instrumentMap {
+        for entry in recoveredPart.instrumentTable {
             volume = doubleValue(entry.extras, .midiVolume)
         }
 

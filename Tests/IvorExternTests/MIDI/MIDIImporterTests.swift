@@ -40,7 +40,7 @@ extension MIDIImporterTests {
 
         var foundBank: Int?
 
-        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+        for entry in parts.first?.instrumentTable ?? InstrumentTable() {
             foundBank = intValue(entry.extras, .midiBank)
         }
 
@@ -63,7 +63,7 @@ extension MIDIImporterTests {
         guard case let .keyboardBeat(parts, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
     }
 
     @Test
@@ -81,7 +81,7 @@ extension MIDIImporterTests {
         guard case let .keyboardBeat(parts, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Fiddle"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Fiddle"))
     }
 
     @Test
@@ -107,7 +107,7 @@ extension MIDIImporterTests {
                                                            tracks: [conductor, melody]))
         let info = work.info
         let part = try #require(keyboardBeatParts(of: work)?.first)
-        let entry = try #require(part.instrumentMap.first)
+        let entry = try #require(part.instrumentTable.first)
 
         #expect(info.title == "Aubade")
         #expect(info.subtitles == ["Dawn Song"])
@@ -243,7 +243,7 @@ extension MIDIImporterTests {
     }
 
     @Test
-    func convert_programChangeEvent_populatesInstrumentMap() throws {
+    func convert_programChangeEvent_populatesInstrumentTable() throws {
         let programChange = MIDIChannelMessage.programChange(MIDIChannel(1), MIDIProgram(41))
         let track = SMFTrack(events: [.midi(.zero, programChange),
                                       .meta(.zero, .endOfTrack)])
@@ -255,7 +255,7 @@ extension MIDIImporterTests {
         guard case let .keyboardBeat(parts, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
-        #expect(parts.first?.instrumentMap[.zero] == Instrument("Violin"))
+        #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
     }
 
     @Test
@@ -274,7 +274,7 @@ extension MIDIImporterTests {
 
         var entryChannels: [Int?] = []
 
-        for entry in parts.first?.instrumentMap ?? InstrumentMap() {
+        for entry in parts.first?.instrumentTable ?? InstrumentTable() {
             entryChannels.append(intValue(entry.extras, .midiChannel))
         }
 
@@ -489,11 +489,11 @@ extension MIDIImporterTests {
 
         var entryCount = 0
 
-        for _ in parts[0].instrumentMap {
+        for _ in parts[0].instrumentTable {
             entryCount += 1
         }
 
-        // No Program Change, so no instrument map entry; the channel is on the part itself.
+        // No Program Change, so no instrument table entry; the channel is on the part itself.
         #expect(parts[0].name == "Channel 3")
         #expect(entryCount == 0)
         #expect(intValue(parts[0].extras, .midiChannel) == 3)
@@ -518,11 +518,11 @@ extension MIDIImporterTests {
         let parts = try #require(keyboardWallParts(of: work))
         var entryCount = 0
 
-        for _ in parts[0].instrumentMap {
+        for _ in parts[0].instrumentTable {
             entryCount += 1
         }
 
-        let startExtras = try #require(instrumentMapExtras(parts[0], at: .zero))
+        let startExtras = try #require(instrumentTableExtras(parts[0], at: .zero))
 
         #expect(entryCount == 1)
         #expect(intValue(startExtras, .midiProgram) == 41)

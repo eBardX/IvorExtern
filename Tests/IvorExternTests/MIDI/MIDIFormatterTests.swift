@@ -17,6 +17,23 @@ struct MIDIFormatterTests {
 
 extension MIDIFormatterTests {
     @Test
+    func format_invalidSequence_throwsFormatFailure() throws {
+        let text = try #require(SMFText(stringValue: "\u{1F3B5}"))     // not encodable as Latin-1
+        let track = SMFTrack(events: [.meta(.zero, .text(text)),
+                                      .meta(.zero, .endOfTrack)])
+        let sequence = SMFSequence(format: .format1,
+                                   division: .metrical(SMFTickRate(480)),
+                                   tracks: [track])
+
+        let error = #expect(throws: MIDI.Error.self) {
+            try MIDI.Formatter().format(sequence)
+        }
+
+        #expect(error?.message == "Unable to format SMF sequence")
+        #expect(error?.cause != nil)
+    }
+
+    @Test
     func format_minimalSequence_nonEmpty() throws {
         let track = SMFTrack(events: [.meta(.zero, .endOfTrack)])
         let sequence = SMFSequence(format: .format1,
