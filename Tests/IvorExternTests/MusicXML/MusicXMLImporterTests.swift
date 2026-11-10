@@ -25,7 +25,7 @@ extension MusicXMLImporterTests {
                                                  "<pedal type=\"stop\"/>"])
 
         #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
-        #expect(pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
+        #expect(pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
     }
 
     @Test
@@ -35,7 +35,7 @@ extension MusicXMLImporterTests {
                                                  "<pedal type=\"resume\"/>",
                                                  "<pedal type=\"continue\"/>"])
 
-        #expect(pedals[.sustain]?.map(\.level) == [.on])
+        #expect(pedals[.sustain]?.map(\.level) == [.down])
     }
 
     @Test
@@ -143,9 +143,9 @@ extension MusicXMLImporterTests {
                                                  "<pedal type=\"stop\" number=\"2\"/>"])
 
         #expect(pedals[.sustain]?.map(\.time) == [0, 2])
-        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sustain]?.map(\.level) == [.down, .up])
         #expect(pedals[.sostenuto]?.map(\.time) == [1, 3])
-        #expect(pedals[.sostenuto]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sostenuto]?.map(\.level) == [.down, .up])
     }
 
     @Test
@@ -570,7 +570,7 @@ extension MusicXMLImporterTests {
                                                 sounds: ["<sound damper-pedal=\"yes\" soft-pedal=\"50\"/>",
                                                          "<sound damper-pedal=\"no\" sostenuto-pedal=\"yes\"/>"])
 
-        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sustain]?.map(\.level) == [.down, .up])
         #expect(pedals[.soft]?.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 2))])
         #expect(pedals[.sostenuto]?.map(\.time) == [1])
     }
@@ -701,7 +701,7 @@ extension MusicXMLImporterTests {
     func read_stopWithNoOpener_letsUpTheDamper() throws {
         let pedals = try musicXMLImportedPedals(["<pedal type=\"stop\"/>"])
 
-        #expect(pedals[.sustain]?.map(\.level) == [.off])
+        #expect(pedals[.sustain]?.map(\.level) == [.up])
     }
 
     @Test
@@ -815,7 +815,7 @@ extension MusicXMLImporterTests {
 
         for part in parts {
             #expect(part.pedals[.sustain]?.map(\.time) == [0, 1])
-            #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
+            #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
         }
     }
 

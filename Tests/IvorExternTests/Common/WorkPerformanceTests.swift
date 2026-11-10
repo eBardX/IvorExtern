@@ -144,7 +144,7 @@ extension WorkPerformanceTests {
     func events_durationIncludesAPedalUpAfterTheLastNote() throws {
         var parts = makeKeyboardWallParts([[(0, 1, 60)]])
 
-        parts[0].pedals[.sustain] = wallSustainTable([(0, .on), (3, .off)])
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .down), (3, .up)])
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
 
@@ -465,7 +465,7 @@ extension WorkPerformanceTests {
     func events_pedalDownAtAnAttack_precedesTheNoteOn() throws {
         var parts = makeKeyboardWallParts([[(1, 1, 60)]])
 
-        parts[0].pedals[.sustain] = wallSustainTable([(1, .on)])
+        parts[0].pedals[.sustain] = wallSustainTable([(1, .down)])
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
         let messages = performance.events.filter { $0.time == makeWallTime(1) }.map(\.message)
@@ -491,7 +491,7 @@ extension WorkPerformanceTests {
     func events_percussionChannel_getsPedals() throws {
         var parts = makeKeyboardWallParts([[(0, 1, 36)]])
 
-        parts[0].pedals[.sustain] = wallSustainTable([(0, .on)])
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .down)])
 
         let work = Work(content: .keyboardWall(parts))
         let realization = try Realization(defaults: PatchTable([parts[0].instrumentTable[.zero]: patchAssignment(.generalMIDI1Percussion)]))
@@ -506,7 +506,7 @@ extension WorkPerformanceTests {
         var parts = makeKeyboardWallParts([[(0, 1, 60)]])
         var portamento = PedalTable<WallTime>()
 
-        portamento.insert(time: .zero, level: .on)
+        portamento.insert(time: .zero, level: .down)
         parts[0].pedals[.portamento] = portamento
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
@@ -518,7 +518,7 @@ extension WorkPerformanceTests {
     func events_repedal_sendsOffThenOnAtOneTime() throws {
         var parts = makeKeyboardWallParts([[(0, 1, 60), (1, 1, 62)]])
 
-        parts[0].pedals[.sustain] = wallSustainTable([(0, .on), (1, .off), (1, .on), (2, .off)])
+        parts[0].pedals[.sustain] = wallSustainTable([(0, .down), (1, .up), (1, .down), (2, .up)])
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
         let atOne = performance.events.filter { $0.time == makeWallTime(1) }.map(\.message)
@@ -539,7 +539,7 @@ extension WorkPerformanceTests {
     func events_sharedChannel_firstPartWins() throws {
         var parts = makeKeyboardWallParts(Array(repeating: [(0, 1, 60)], count: 16))
 
-        parts[15].pedals[.sustain] = wallSustainTable([(0, .on)])
+        parts[15].pedals[.sustain] = wallSustainTable([(0, .down)])
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
 
@@ -551,7 +551,7 @@ extension WorkPerformanceTests {
     func events_sustainEntries_becomeCC64OnEachOwnedChannel() throws {
         var parts = makeKeyboardWallParts([[(0, 1, 60)], [(0, 1, 64)]])
 
-        parts[1].pedals[.sustain] = wallSustainTable([(0, .on), (2, .off)])
+        parts[1].pedals[.sustain] = wallSustainTable([(0, .down), (2, .up)])
 
         let performance = try #require(WorkPerformance(work: Work(content: .keyboardWall(parts))))
 

@@ -557,6 +557,10 @@ extension MIDI.Importer: ImporterProtocol {
         [.midi]
     }
 
+    internal var supportedOptions: Set<ImportOptions.Key> {
+        [.pedalSimplification]
+    }
+
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,

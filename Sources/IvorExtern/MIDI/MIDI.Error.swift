@@ -2,6 +2,7 @@
 
 internal import IvorMIDI
 internal import IvorSMF
+internal import IvorSMPTE
 internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
@@ -19,6 +20,8 @@ extension MIDI {
         case invalidEventTime(EventTime)
         case invalidNoteNumber(IvorTuning.NoteNumber)
         case invalidTempo(UInt)
+        case invalidTickRate(UInt)
+        case invalidTimeCode(SMPTEFrameRate, UInt)
         case invalidWallDuration(WallDuration)
         case multipleWorksNotSupported
         case noWorksToExport
@@ -79,6 +82,12 @@ extension MIDI.Error: EnhancedError {
 
         case let .invalidTempo(tempo):
             "Invalid SMF tempo: \(tempo) microseconds per quarter note"
+
+        case let .invalidTickRate(tickRate):
+            "Invalid SMF tick rate: \(tickRate) ticks per quarter note"
+
+        case let .invalidTimeCode(frameRate, ticksPerFrame):
+            "Invalid SMF time code: \(ticksPerFrame) ticks per frame at \(frameRate)"
 
         case let .invalidWallDuration(wallDuration):
             "Invalid wall duration: \(wallDuration)"

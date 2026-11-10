@@ -18,7 +18,7 @@ extension Fixtures {
 
     // MARK: Internal Type Properties
 
-    // Damper pedal only: on, off and a re-pedal on the third beat.
+    // Damper pedal only: down, up and a re-pedal on the third beat.
     static let pedalABC = """
         X:1
         T:Pedals
@@ -28,7 +28,7 @@ extension Fixtures {
         !ped!C D !ped-up!!ped!E !ped-up!F|]
         """
 
-    // Damper pedal only: on, off and a re-pedal on the third beat.
+    // Damper pedal only: down, up and a re-pedal on the third beat.
     static let pedalGuido = "[ \\pedalOn c d \\pedalOff \\pedalOn e \\pedalOff f ]"
 
     // Every `<pedal>` type and every `<sound>` pedal attribute: the damper

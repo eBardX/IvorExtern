@@ -440,11 +440,11 @@ extension ABC.Importer.Walker {
         // pedal goes down or up at the note they decorate.
         case "ped":
             context.sustainTable.insert(time: context.currentBeatTime,
-                                        level: .on)
+                                        level: .down)
 
         case "ped-up":
             context.sustainTable.insert(time: context.currentBeatTime,
-                                        level: .off)
+                                        level: .up)
 
         default:
             if Self.dynamicMarkWords.contains(decoration.name.stringValue.lowercased()) {

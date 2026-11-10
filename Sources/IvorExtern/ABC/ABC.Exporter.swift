@@ -627,7 +627,7 @@ extension ABC.Exporter {
     // so is a change after the last note, since there is no note to carry it.
     private static func _pedalDecorations(_ table: PedalTable<BeatTime>?) -> [(BeatTime, ABCDecoration)] {
         var decorations: [(BeatTime, ABCDecoration)] = []
-        var previous: Pedal.Level = .off
+        var previous: Pedal.Level = .up
 
         for (time, levels) in groupedByTime(table ?? PedalTable()) {
             for isDown in pedalSwitches(after: previous, levels) {
@@ -711,6 +711,10 @@ extension ABC.Exporter: ExporterProtocol {
 
     // MARK: Internal Instance Properties
 
+    internal var supportedOptions: Set<ExportOptions.Key> {
+        []
+    }
+
     internal var writableFileFormats: [FileFormat] {
         [.abc]
     }
@@ -721,7 +725,8 @@ extension ABC.Exporter: ExporterProtocol {
     // every other exporter in this module, `works` is never restricted to
     // exactly one.
     internal func write(works: [Work],
-                        as fileFormat: FileFormat) throws(ABC.Error) -> FileWrapper {
+                        as fileFormat: FileFormat,
+                        options: ExportOptions = .default) throws(ABC.Error) -> FileWrapper {
         switch fileFormat {
         case .abc:
             guard !works.isEmpty

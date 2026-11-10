@@ -29,7 +29,7 @@ extension MusicXMLImporterWalkerWalkResultTests {
         let result = MusicXML.Importer.Walker.WalkResult(directionDynamicEvents: [dynamicEvent],
                                                          panEvents: [(beatTime: .zero, pan: .center)],
                                                          part: part,
-                                                         pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .on)],
+                                                         pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .down)],
                                                          tempoEvents: [(beatTime: .zero, tempo: .default)])
 
         #expect(result.directionDynamicEvents.map(\.kind) == [.step])

@@ -51,7 +51,7 @@ private import IvorTuning
 /// owns, percussion included, and a later part sharing a channel sends none,
 /// so a shared channel’s pedals hold every part’s notes on it. Each
 /// pedal-table entry is sent exactly as stored, in table order, never
-/// sampled, so a re-pedal (an Off then an On at one time) lets the pedal up
+/// sampled, so a re-pedal (an Up then a Down at one time) lets the pedal up
 /// and puts it down again. Muting mutes notes only, so a muted part’s
 /// pedals are still sent. Portamento (CC 65) isn’t sent yet: a future
 /// gliding-notes feature will send it, and decide who owns it.
@@ -120,7 +120,7 @@ public struct WorkPerformance {
         self.duration = events.map(\.time).max() ?? .zero
         //
         // Events that `Event`'s order ranks equal keep the order they were
-        // added in — a re-pedal's Off before its On — explicitly, since
+        // added in — a re-pedal's Up before its Down — explicitly, since
         // `sorted()` doesn't promise stability.
         //
         self.events = events.enumerated()

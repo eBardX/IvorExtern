@@ -3,6 +3,7 @@
 internal import IvorMIDI
 internal import IvorModel
 internal import IvorTiming
+internal import IvorTuning
 
 private import XestiNumbers
 
@@ -39,7 +40,7 @@ internal func convertToPedal(_ controller: MIDIController) -> Pedal? {
 }
 
 // Exact, with no snapping: a half-pedaling device's 64 imports as 64/127, and
-// a switch's 0 and 127 as exactly `.off` and `.on`.
+// a switch's 0 and 127 as exactly `.up` and `.down`.
 internal func convertToPedalLevel(midiValue: MIDIData1Value) -> Pedal.Level {
     Pedal.Level(Number(numerator: Int(midiValue.uintValue),
                        denominator: 127))
@@ -91,5 +92,53 @@ internal func pedalSwitches(after previous: Pedal.Level,
 
     default:
         return []
+    }
+}
+
+// `work` with every part's pedal tables simplified by `mode` (see
+// `PedalTable.simplify(_:)`), for the `pedalSimplification` import option.
+internal func simplifyingPedals(of work: Work,
+                                _ mode: Pedal.SimplifyMode) throws -> Work {
+    var work = work
+
+    switch work.content {
+    case let .absoluteBeat(parts, tempoMap):
+        try work.replaceContent(with: .absoluteBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+
+    case let .absoluteWall(parts):
+        try work.replaceContent(with: .absoluteWall(_simplifyingPedals(of: parts, mode)))
+
+    case let .keyboardBeat(parts, tempoMap):
+        try work.replaceContent(with: .keyboardBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+
+    case let .keyboardWall(parts):
+        try work.replaceContent(with: .keyboardWall(_simplifyingPedals(of: parts, mode)))
+
+    case let .standardBeat(parts, tempoMap):
+        try work.replaceContent(with: .standardBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+
+    case let .standardWall(parts):
+        try work.replaceContent(with: .standardWall(_simplifyingPedals(of: parts, mode)))
+    }
+
+    return work
+}
+
+// MARK: Private Functions
+
+private func _simplifyingPedals<T: TimeProtocol, P: PitchProtocol>(of parts: [Part<T, P>],
+                                                                   _ mode: Pedal.SimplifyMode) -> [Part<T, P>] {
+    parts.map { part in
+        var part = part
+
+        part.pedals = part.pedals.mapValues { table in
+            var table = table
+
+            table.simplify(mode)
+
+            return table
+        }
+
+        return part
     }
 }

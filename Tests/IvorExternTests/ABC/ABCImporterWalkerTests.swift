@@ -235,7 +235,7 @@ extension ABCImporterWalkerTests {
         let sustain = results[0].context.sustainTable
 
         #expect(sustain.map(\.time) == [1, 2])
-        #expect(sustain.map(\.level) == [.on, .off])
+        #expect(sustain.map(\.level) == [.down, .up])
     }
 
     @Test

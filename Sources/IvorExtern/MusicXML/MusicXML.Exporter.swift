@@ -155,6 +155,7 @@ extension MusicXML.Exporter {
         let measureCount = _measureCount(work: work)
         let divisions = _divisions(parts: parts, tempoMap: tempoMap)
 
+        let hiddenPedals = repeatedPedals(parts.map(\.pedals))
         var scoreParts: [MusicXML.ScorePart] = []
         var xmlParts: [MusicXML.Score.Part] = []
 
@@ -165,6 +166,7 @@ extension MusicXML.Exporter {
             try xmlParts.append(MusicXML.Score.Part(id: id,
                                                     measures: _makePartBody(part: part,
                                                                             index: index,
+                                                                            hiddenPedals: hiddenPedals[index],
                                                                             measureCount: measureCount,
                                                                             divisions: divisions,
                                                                             tempoMap: tempoMap)))
@@ -509,15 +511,18 @@ extension MusicXML.Exporter {
     // segments and gaps rest-filled. Tempo is score-wide, not per-part, but
     // `MusicXML.Importer` flattens every part's tempo events into one
     // `TempoMap` (`results.flatMap(\.tempoEvents)`), so only the first part
-    // carries it; pan, like the model's own `PanMap`, is per-part.
+    // carries it; pan, like the model's own `PanMap`, is per-part, and so are
+    // pedals, though those in `hiddenPedals` are written without marks (see
+    // `makeMusicXMLPedalDirections(_:hidden:)`).
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       index: Int,
+                                      hiddenPedals: Set<Pedal>,
                                       measureCount: UInt,
                                       divisions: Int,
                                       tempoMap: TempoMap) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
-        let directions = _playbackDirections(part)
+        let directions = _playbackDirections(part, hiddenPedals: hiddenPedals)
         let tempos = index == 0 ? _tempoDirectives(tempoMap) : []
         let barTimes = _barTimes(measureCount: measureCount)
         let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
@@ -682,10 +687,13 @@ extension MusicXML.Exporter {
 
     // A part's pan and pedal `<direction>`s, in time order — pan first at
     // any one time.
-    private static func _playbackDirections(_ part: Part<BeatTime, Pitch>) -> [(BeatTime, MXLDirection)] {
+    private static func _playbackDirections(_ part: Part<BeatTime, Pitch>,
+                                            hiddenPedals: Set<Pedal>) -> [(BeatTime, MXLDirection)] {
         let pans = _panDirectives(part.panMap).map { ($0.0, _makeSoundDirection(convertToMusicXMLSound(pan: $0.1))) }
+        let pedals = makeMusicXMLPedalDirections(part.pedals,
+                                                 hidden: hiddenPedals)
 
-        return (pans + makeMusicXMLPedalDirections(part.pedals))
+        return (pans + pedals)
             .enumerated()
             .sorted { ($0.element.0, $0.offset) < ($1.element.0, $1.offset) }
             .map(\.element)
@@ -708,6 +716,10 @@ extension MusicXML.Exporter: ExporterProtocol {
 
     // MARK: Internal Instance Properties
 
+    internal var supportedOptions: Set<ExportOptions.Key> {
+        []
+    }
+
     internal var writableFileFormats: [FileFormat] {
         [.musicXML,
          .mxl]
@@ -716,7 +728,8 @@ extension MusicXML.Exporter: ExporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: FileFormat) throws(MusicXML.Error) -> FileWrapper {
+                        as fileFormat: FileFormat,
+                        options: ExportOptions = .default) throws(MusicXML.Error) -> FileWrapper {
         switch fileFormat {
         case .musicXML,
              .mxl:

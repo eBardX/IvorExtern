@@ -104,8 +104,8 @@ extension MusicXML.Importer.Context {
     // `<pedal>` mark for the same pedal, and come first. Each `<pedal>` mark
     // is tracked by its `number` (default 1), so a `stop` lets up whichever
     // pedal the matching opener put down — the damper if none is open — and
-    // `change` lets it up and puts it down again at one instant (Off then
-    // On). Per the MusicXML 4.0 `pedal-type` definitions, `continue`,
+    // `change` lets it up and puts it down again at one instant (Up then
+    // Down). Per the MusicXML 4.0 `pedal-type` definitions, `continue`,
     // `discontinue` and `resume` only shape the drawn pedal line:
     // `discontinue` ends a line *without* the lift `stop` represents, and
     // `resume` starts one *without* the downstroke `start` represents, so
@@ -125,7 +125,7 @@ extension MusicXML.Importer.Context {
             switch mark.kind {
             case .change:
                 pedal = openPedals[number] ?? .sustain
-                levels = [.off, .on]
+                levels = [.up, .down]
 
                 openPedals[number] = pedal
 
@@ -136,19 +136,19 @@ extension MusicXML.Importer.Context {
 
             case .sostenuto:
                 pedal = .sostenuto
-                levels = [.on]
+                levels = [.down]
 
                 openPedals[number] = pedal
 
             case .start:
                 pedal = .sustain
-                levels = [.on]
+                levels = [.down]
 
                 openPedals[number] = pedal
 
             case .stop:
                 pedal = openPedals.removeValue(forKey: number) ?? .sustain
-                levels = [.off]
+                levels = [.up]
             }
 
             guard !soundPedals.contains(pedal)
@@ -187,13 +187,13 @@ extension MusicXML.Importer.Context {
     private static func _pedalLevel(_ value: MXLYesNoNumber) -> Pedal.Level {
         switch value {
         case .no:
-            .off
+            .up
 
         case let .number(percent):
             convertToPedalLevel(percent: percent)
 
         case .yes:
-            .on
+            .down
         }
     }
 }

@@ -7,10 +7,12 @@ internal protocol ExporterProtocol: Sendable {
 
     // MARK: Internal Instance Properties
 
+    var supportedOptions: Set<ExportOptions.Key> { get }
     var writableFileFormats: [FileFormat] { get }
 
     // MARK: Internal Instance Methods
 
     func write(works: [Work],
-               as fileFormat: FileFormat) throws -> FileWrapper
+               as fileFormat: FileFormat,
+               options: ExportOptions) throws -> FileWrapper
 }

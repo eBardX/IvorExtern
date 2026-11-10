@@ -16,7 +16,8 @@ extension ExporterProtocolTests {
     func write_supportedFileFormat_writesFile() throws {
         let exporter: any ExporterProtocol = ABC.Exporter()
         let file = try exporter.write(works: [standardBeatWork(parts: [])],
-                                      as: .abc)
+                                      as: .abc,
+                                      options: .default)
 
         #expect(file.regularFileContents?.isEmpty == false)
     }
@@ -27,7 +28,8 @@ extension ExporterProtocolTests {
 
         #expect(throws: (any Error).self) {
             try exporter.write(works: [standardBeatWork(parts: [])],
-                               as: .gmn)
+                               as: .gmn,
+                               options: .default)
         }
     }
 }

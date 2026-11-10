@@ -83,6 +83,11 @@ extension ExportFileFormat {
         fileFormat.preferredMIMEType
     }
 
+    /// The export options that this format uses. It ignores any others.
+    public var supportedOptions: Set<ExportOptions.Key> {
+        exporter.supportedOptions
+    }
+
     /// The sorted array of time bases for this export format.
     public var timeBases: [TimeBasis] {
         fileFormat.timeBases.sorted()
@@ -113,16 +118,20 @@ extension ExportFileFormat {
 
     /// Writes the provided works to a file wrapper in this export format.
     ///
-    /// - Parameter works:  The array of works to export.
+    /// - Parameter works:      The array of works to export.
+    /// - Parameter options:    The options to write with. Any this format doesn’t use (see
+    ///                         ``supportedOptions``) are ignored.
     ///
     /// - Returns:  A `FileWrapper` containing the exported data.
     ///
     /// - Throws:   ``Error/writeFailure(_:)`` if the works cannot be written
-    ///             to a file.
-    public func write(works: [Work]) throws(Error) -> FileWrapper {
+    ///             to a file, including when an option this format uses is out of range.
+    public func write(works: [Work],
+                      options: ExportOptions = .default) throws(Error) -> FileWrapper {
         do {
             return try exporter.write(works: works,
-                                      as: fileFormat)
+                                      as: fileFormat,
+                                      options: options)
         } catch let error as any EnhancedError {
             throw Error.writeFailure(error)
         } catch {

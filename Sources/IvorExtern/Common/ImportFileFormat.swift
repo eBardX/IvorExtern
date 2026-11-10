@@ -83,6 +83,11 @@ extension ImportFileFormat {
         fileFormat.preferredMIMEType
     }
 
+    /// The import options that this format uses. It ignores any others.
+    public var supportedOptions: Set<ImportOptions.Key> {
+        importer.supportedOptions
+    }
+
     /// The sorted array of time bases for this import format.
     public var timeBases: [TimeBasis] {
         fileFormat.timeBases.sorted()
@@ -101,16 +106,25 @@ extension ImportFileFormat {
 
     /// Reads works from the given file wrapper in this import format.
     ///
-    /// - Parameter file:   The file wrapper to read from.
+    /// - Parameter file:       The file wrapper to read from.
+    /// - Parameter options:    The options to read with. Any this format doesn’t use (see
+    ///                         ``supportedOptions``) are ignored.
     ///
     /// - Returns:  The array of works decoded from the file.
     ///
     /// - Throws:   ``Error/readFailure(_:)`` if the works cannot be read from
     ///             the file.
-    public func read(from file: FileWrapper) throws(Error) -> [Work] {
+    public func read(from file: FileWrapper,
+                     options: ImportOptions = .default) throws(Error) -> [Work] {
         do {
-            return try importer.read(from: file,
-                                     as: fileFormat)
+            let works = try importer.read(from: file,
+                                          as: fileFormat)
+
+            guard let mode = options.pedalSimplification,
+                  importer.supportedOptions.contains(.pedalSimplification)
+            else { return works }
+
+            return try works.map { try simplifyingPedals(of: $0, mode) }
         } catch let error as any EnhancedError {
             throw Error.readFailure(error)
         } catch {

@@ -340,6 +340,19 @@ extension ExportFileFormatTests {
     }
 
     @Test
+    func supportedOptions_midiOnly() throws {
+        let midi = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+
+        #expect(midi.supportedOptions == [.midiTicksPerQuarterNote, .midiTimeCode])
+
+        for tag in ["abc", "gmn", "musicxml"] {
+            let fmt = try #require(ExportFileFormat.exportFileFormat(for: tag))
+
+            #expect(fmt.supportedOptions.isEmpty)
+        }
+    }
+
+    @Test
     func supportedPitchNotations_notEmpty() {
         #expect(!ExportFileFormat.supportedPitchNotations.isEmpty)
     }
@@ -347,6 +360,20 @@ extension ExportFileFormatTests {
     @Test
     func supportedTimeBases_notEmpty() {
         #expect(!ExportFileFormat.supportedTimeBases.isEmpty)
+    }
+
+    @Test
+    func write_invalidMIDIOptions_throwsWriteFailure() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+        let work = Work(name: "Test",
+                        content: .keyboardBeat([], TempoMap()))
+
+        let error = #expect(throws: ExportFileFormat.Error.self) {
+            try fmt.write(works: [work],
+                          options: ExportOptions(midi: MIDIExportOptions(ticksPerQuarterNote: 0)))
+        }
+
+        #expect(error?.cause?.message == "Invalid SMF tick rate: 0 ticks per quarter note")
     }
 
     @Test

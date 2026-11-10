@@ -612,7 +612,7 @@ extension Guido.Importer.Walker {
         // as for any other wrapping tag.
         case let .pedal(pedal):
             context.sustainTable.insert(time: context.currentBeatTime,
-                                        level: pedal.kind == .on ? .on : .off)
+                                        level: pedal.kind == .on ? .down : .up)
 
             try _walk(pedal.body, &context, &inProgressVariableNames)
 

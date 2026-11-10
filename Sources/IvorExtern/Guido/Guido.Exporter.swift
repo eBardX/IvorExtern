@@ -488,7 +488,7 @@ extension Guido.Exporter {
     // time, after any instrument change there.
     private static func _pedalDirectives(_ table: PedalTable<BeatTime>?) -> [(BeatTime, GMNTag)] {
         var directives: [(BeatTime, GMNTag)] = []
-        var previous: Pedal.Level = .off
+        var previous: Pedal.Level = .up
 
         for (time, levels) in groupedByTime(table ?? PedalTable()) {
             for isDown in pedalSwitches(after: previous, levels) {
@@ -634,6 +634,10 @@ extension Guido.Exporter: ExporterProtocol {
 
     // MARK: Internal Instance Properties
 
+    internal var supportedOptions: Set<ExportOptions.Key> {
+        []
+    }
+
     internal var writableFileFormats: [FileFormat] {
         [.gmn]
     }
@@ -641,7 +645,8 @@ extension Guido.Exporter: ExporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: FileFormat) throws(Guido.Error) -> FileWrapper {
+                        as fileFormat: FileFormat,
+                        options: ExportOptions = .default) throws(Guido.Error) -> FileWrapper {
         switch fileFormat {
         case .gmn:
             guard !works.isEmpty

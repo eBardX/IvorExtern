@@ -286,6 +286,10 @@ extension JohnnySonic.Exporter: ExporterProtocol {
 
     // MARK: Internal Instance Properties
 
+    internal var supportedOptions: Set<ExportOptions.Key> {
+        []
+    }
+
     internal var writableFileFormats: [FileFormat] {
         [.dkm]
     }
@@ -293,7 +297,8 @@ extension JohnnySonic.Exporter: ExporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: FileFormat) throws(JohnnySonic.Error) -> FileWrapper {
+                        as fileFormat: FileFormat,
+                        options: ExportOptions = .default) throws(JohnnySonic.Error) -> FileWrapper {
         switch fileFormat {
         case .dkm:
             guard !works.isEmpty

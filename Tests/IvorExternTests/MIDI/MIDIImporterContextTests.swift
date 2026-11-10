@@ -54,8 +54,8 @@ extension MIDIImporterContextTests {
         context.handlePedal(SMFEventTime(480), .soft, MIDI.PedalValue(127))
 
         #expect(context.pedals[.sustain]?.map(\.time) == [BeatTime(0), BeatTime(1), BeatTime(1)])
-        #expect(context.pedals[.sustain]?.map(\.level) == [.on, .off, Pedal.Level(Number(numerator: 64, denominator: 127))])
-        #expect(context.pedals[.soft]?.map(\.level) == [.on])
+        #expect(context.pedals[.sustain]?.map(\.level) == [.down, .up, Pedal.Level(Number(numerator: 64, denominator: 127))])
+        #expect(context.pedals[.soft]?.map(\.level) == [.down])
     }
 
     @Test

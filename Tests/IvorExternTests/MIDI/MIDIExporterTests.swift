@@ -98,7 +98,7 @@ extension MIDIExporterTests {
         var pedals: [Pedal: PedalTable<BeatTime>] = [:]
 
         for pedal in Pedal.allCases {
-            pedals[pedal, default: PedalTable()].insert(time: 0, level: .on)
+            pedals[pedal, default: PedalTable()].insert(time: 0, level: .down)
         }
 
         let controllers = try midiExportedPedalEvents(pedals).map(\.controller.uintValue)
@@ -467,13 +467,56 @@ extension MIDIExporterTests {
     }
 
     @Test
-    func convert_repedal_keepsOffThenOnAtOneTick() throws {
+    func convert_options_invalidTickRate_throws() {
+        let work = Work(name: "Test",
+                        content: .keyboardBeat([], TempoMap()))
+
+        #expect(throws: MIDI.Error.self) {
+            try MIDI.Exporter().convert(work,
+                                        options: MIDIExportOptions(ticksPerQuarterNote: 0))
+        }
+    }
+
+    @Test
+    func convert_options_invalidTimeCode_throws() {
+        let work = Work(name: "Test",
+                        content: .keyboardWall([]))
+
+        #expect(throws: MIDI.Error.self) {
+            try MIDI.Exporter().convert(work,
+                                        options: MIDIExportOptions(timeCodeFrameRate: .fps50))
+        }
+    }
+
+    @Test
+    func convert_options_tickRate_setsMetricalDivision() throws {
+        let work = Work(name: "Test",
+                        content: .keyboardBeat([], TempoMap()))
+        let sequence = try MIDI.Exporter().convert(work,
+                                                   options: MIDIExportOptions(ticksPerQuarterNote: 960))
+
+        #expect(sequence.division == .metrical(SMFTickRate(960)))
+    }
+
+    @Test
+    func convert_options_timeCode_setsWallTimeDivision() throws {
+        let work = Work(name: "Test",
+                        content: .keyboardWall([]))
+        let sequence = try MIDI.Exporter().convert(work,
+                                                   options: MIDIExportOptions(timeCodeFrameRate: .fps30,
+                                                                              ticksPerFrame: 80))
+
+        #expect(try sequence.division == .timeCode(#require(SMFTimeCode(frameRate: .fps30, ticksPerFrame: 80))))
+    }
+
+    @Test
+    func convert_repedal_keepsUpThenDownAtOneTick() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sustain.insert(time: 1, level: .off)
-        sustain.insert(time: 1, level: .on)
-        sustain.insert(time: 2, level: .off)
+        sustain.insert(time: 0, level: .down)
+        sustain.insert(time: 1, level: .up)
+        sustain.insert(time: 1, level: .down)
+        sustain.insert(time: 2, level: .up)
 
         let events = try midiExportedPedalEvents([.sustain: sustain])
 
@@ -1266,18 +1309,18 @@ extension MIDIExporterTests {
         let work = try #require(works.first)
         let pedals = try pedalSummary(keyboardBeatParts(of: work))
 
-        #expect(pedals == [.legato: ["on @ 0", "off @ 2"],
-                           .soft: ["on @ 1", "off @ 1 3/4"],
-                           .sostenuto: ["on @ 0", "off @ 1 1/2"],
-                           .sustain: ["off @ 0",
+        #expect(pedals == [.legato: ["down @ 0", "up @ 2"],
+                           .soft: ["down @ 1", "up @ 1 3/4"],
+                           .sostenuto: ["down @ 0", "up @ 1 1/2"],
+                           .sustain: ["up @ 0",
                                       "40/127 @ 0 1/4",
                                       "64/127 @ 0 1/2",
                                       "100/127 @ 0 3/4",
-                                      "on @ 1",
+                                      "down @ 1",
                                       "64/127 @ 1 1/4",
-                                      "off @ 1 1/2",
-                                      "on @ 1 1/2",
-                                      "off @ 2"]])
+                                      "up @ 1 1/2",
+                                      "down @ 1 1/2",
+                                      "up @ 2"]])
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),

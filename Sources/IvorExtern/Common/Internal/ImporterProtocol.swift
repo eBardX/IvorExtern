@@ -8,6 +8,7 @@ internal protocol ImporterProtocol: Sendable {
     // MARK: Internal Instance Properties
 
     var readableFileFormats: [FileFormat] { get }
+    var supportedOptions: Set<ImportOptions.Key> { get }
 
     // MARK: Internal Instance Methods
 

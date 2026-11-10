@@ -25,9 +25,19 @@ extension MIDI.Exporter {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ work: Work) throws(MIDI.Error) -> MIDI.Sequence {
+    internal func convert(_ work: Work,
+                          options: MIDIExportOptions = MIDIExportOptions()) throws(MIDI.Error) -> MIDI.Sequence {
+        guard let tickRate = MIDI.TickRate(uintValue: options.ticksPerQuarterNote)
+        else { throw MIDI.Error.invalidTickRate(options.ticksPerQuarterNote) }
+
+        guard let exportTimeCode = MIDI.TimeCode(frameRate: options.timeCodeFrameRate,
+                                                 ticksPerFrame: options.ticksPerFrame)
+        else { throw MIDI.Error.invalidTimeCode(options.timeCodeFrameRate, options.ticksPerFrame) }
+
         do {
-            return try Self._convert(work: work)
+            return try Self._convert(work: work,
+                                     tickRate: tickRate,
+                                     exportTimeCode: exportTimeCode)
         } catch let error as any EnhancedError {
             throw MIDI.Error.convertFailure(error)
         } catch {
@@ -38,9 +48,6 @@ extension MIDI.Exporter {
     // MARK: Private Type Properties
 
     private static let defaultKeyVelocity = MIDI.KeyVelocity(64)
-    private static let exportTickRate     = MIDI.TickRate(480)
-    private static let exportTimeCode     = MIDI.TimeCode(frameRate: .fps25,
-                                                          ticksPerFrame: 40)!   // swiftlint:disable:this force_unwrapping
 
     // MARK: Private Type Methods
 
@@ -102,7 +109,7 @@ extension MIDI.Exporter {
 
     // A beat-time work imported from a file with a timecode division (see
     // `determineTimeCode`) is written back with the same division; every
-    // other beat-time work gets a metrical division.
+    // other beat-time work gets a metrical division at `tickRate`.
     // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
     // meta event (see `_smpteOffset`).
     private static func _convert(name: String,
@@ -110,10 +117,11 @@ extension MIDI.Exporter {
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
                                  timeCode: MIDI.TimeCode?,
+                                 tickRate: MIDI.TickRate,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
-        let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(exportTickRate)
+        let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(tickRate)
         let tempoChanges = _tempoChanges(from: tempoMap)
-        let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: exportTickRate)
+        let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: tickRate)
         var tracks: [MIDI.Track] = []
 
         try tracks.append(_convert(name: name,
@@ -133,14 +141,15 @@ extension MIDI.Exporter {
     // A wall-time work is always written with a timecode division, since a
     // metrical one would need a tempo to measure wall time by: the one it
     // was imported with (see `determineTimeCode`), if any, otherwise
-    // 25 frames per second at 40 ticks per frame — one tick per
-    // millisecond. Its first track carries the work's name and SMPTE
+    // `exportTimeCode` (by default 25 frames per second at 40 ticks per
+    // frame — one tick per millisecond). Its first track carries the work's name and SMPTE
     // Offset (see `_smpteOffset`), but neither tempo nor time signature
     // events.
     private static func _convert(name: String,
                                  info: Work.Info,
                                  parts: [Part<WallTime, NoteNumber>],
                                  timeCode: MIDI.TimeCode?,
+                                 exportTimeCode: MIDI.TimeCode,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = timeCode ?? exportTimeCode
         let tickMap = MIDI.WallTickMap(timeCode: timeCode)
@@ -252,7 +261,9 @@ extension MIDI.Exporter {
         return tracks
     }
 
-    private static func _convert(work: Work) throws(MIDI.Error) -> MIDI.Sequence {
+    private static func _convert(work: Work,
+                                 tickRate: MIDI.TickRate,
+                                 exportTimeCode: MIDI.TimeCode) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = determineTimeCode(work)
 
         switch work.content {
@@ -262,6 +273,7 @@ extension MIDI.Exporter {
                                 parts: parts,
                                 tempoMap: tempoMap,
                                 timeCode: timeCode,
+                                tickRate: tickRate,
                                 smpteStartTime: work.smpteStartTime)
 
         case let .keyboardWall(parts):
@@ -269,6 +281,7 @@ extension MIDI.Exporter {
                                 info: work.info,
                                 parts: parts,
                                 timeCode: timeCode,
+                                exportTimeCode: exportTimeCode,
                                 smpteStartTime: work.smpteStartTime)
 
         default:
@@ -424,8 +437,8 @@ extension MIDI.Exporter {
     }
 
     // Each entry becomes a control change (CC 64–68) at its time, rounded to
-    // MIDI's 0–127 scale, in table order — so a re-pedal's Off stays ahead of
-    // its On. Portamento is exported too: only playback holds it back.
+    // MIDI's 0–127 scale, in table order — so a re-pedal's Up stays ahead of
+    // its Down. Portamento is exported too: only playback holds it back.
     private static func _pedalEvents<TickMap: MIDI.ExportTimeMap>(_ pedals: [Pedal: PedalTable<TickMap.TimeType>],
                                                                   channel: MIDI.Channel,
                                                                   tickMap: TickMap) -> [MIDI.Event] {
@@ -549,6 +562,10 @@ extension MIDI.Exporter: ExporterProtocol {
 
     // MARK: Internal Instance Properties
 
+    internal var supportedOptions: Set<ExportOptions.Key> {
+        [.midiTicksPerQuarterNote, .midiTimeCode]
+    }
+
     internal var writableFileFormats: [FileFormat] {
         [.midi]
     }
@@ -556,7 +573,8 @@ extension MIDI.Exporter: ExporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func write(works: [Work],
-                        as fileFormat: FileFormat) throws(MIDI.Error) -> FileWrapper {
+                        as fileFormat: FileFormat,
+                        options: ExportOptions = .default) throws(MIDI.Error) -> FileWrapper {
         switch fileFormat {
         case .midi:
             guard !works.isEmpty
@@ -566,7 +584,8 @@ extension MIDI.Exporter: ExporterProtocol {
                   works.count == 1
             else { throw MIDI.Error.multipleWorksNotSupported }
 
-            let sequence = try convert(work)
+            let sequence = try convert(work,
+                                       options: options.midi)
             let data = try MIDI.Formatter().format(sequence)
 
             return FileWrapper(regularFileWithContents: data)

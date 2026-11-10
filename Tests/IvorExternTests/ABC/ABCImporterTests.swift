@@ -531,7 +531,7 @@ extension ABCImporterTests {
 
         #expect(Array(part.pedals.keys) == [.sustain])
         #expect(part.pedals[.sustain]?.map(\.time) == [1, 2])
-        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
         #expect(part.noteCount == 4)
     }
 

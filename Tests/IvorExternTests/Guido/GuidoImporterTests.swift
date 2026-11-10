@@ -149,7 +149,7 @@ extension GuidoImporterTests {
 
         #expect(Array(part.pedals.keys) == [.sustain])
         #expect(part.pedals[.sustain]?.map(\.time) == [0, 2])
-        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
     }
 
     @Test
@@ -161,11 +161,11 @@ extension GuidoImporterTests {
     }
 
     @Test
-    func convert_repedal_keepsOffThenOn() throws {
+    func convert_repedal_keepsUpThenDown() throws {
         let part = try guidoPedalPart("[ \\pedalOn c d \\pedalOff \\pedalOn e \\pedalOff ]")
 
         #expect(part.pedals[.sustain]?.map(\.time) == [0, 2, 2, 3])
-        #expect(part.pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
+        #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
     }
 
     @Test

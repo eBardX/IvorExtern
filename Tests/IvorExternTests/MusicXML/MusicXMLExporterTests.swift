@@ -179,7 +179,7 @@ extension MusicXMLExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 1, denominator: 2)))
-        sustain.insert(time: 2, level: .off)
+        sustain.insert(time: 2, level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
 
@@ -287,7 +287,7 @@ extension MusicXMLExporterTests {
     func convert_legatoAndPortamento_areDropped() throws {
         var table = PedalTable<BeatTime>()
 
-        table.insert(time: 0, level: .on)
+        table.insert(time: 0, level: .down)
 
         #expect(try musicXMLExportedPedalDirections([.legato: table, .portamento: table]).isEmpty)
     }
@@ -434,10 +434,10 @@ extension MusicXMLExporterTests {
     func convert_repedal_writesChange() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sustain.insert(time: 1, level: .off)
-        sustain.insert(time: 1, level: .on)
-        sustain.insert(time: 2, level: .off)
+        sustain.insert(time: 0, level: .down)
+        sustain.insert(time: 1, level: .up)
+        sustain.insert(time: 1, level: .down)
+        sustain.insert(time: 2, level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
 
@@ -482,8 +482,8 @@ extension MusicXMLExporterTests {
     func convert_softPedal_writesSoundOnly() throws {
         var soft = PedalTable<BeatTime>()
 
-        soft.insert(time: 0, level: .on)
-        soft.insert(time: 2, level: .off)
+        soft.insert(time: 0, level: .down)
+        soft.insert(time: 2, level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.soft: soft])
 
@@ -496,10 +496,10 @@ extension MusicXMLExporterTests {
         var sustain = PedalTable<BeatTime>()
         var sostenuto = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sostenuto.insert(time: 1, level: .on)
-        sustain.insert(time: 2, level: .off)
-        sostenuto.insert(time: 3, level: .off)
+        sustain.insert(time: 0, level: .down)
+        sostenuto.insert(time: 1, level: .down)
+        sustain.insert(time: 2, level: .up)
+        sostenuto.insert(time: 3, level: .up)
 
         let pedals = try musicXMLExportedPedalDirections([.sostenuto: sostenuto, .sustain: sustain]).flatMap(\.pedals)
 
@@ -894,9 +894,9 @@ extension MusicXMLExporterTests {
         let work = try #require(works.first)
         let pedals = try pedalSummary(standardBeatParts(of: work))
 
-        #expect(pedals == [.soft: ["on @ 0", "off @ 2"],
-                           .sostenuto: ["on @ 1", "off @ 3"],
-                           .sustain: ["on @ 0", "off @ 1", "on @ 1", "1/2 @ 2", "off @ 3"]])
+        #expect(pedals == [.soft: ["down @ 0", "up @ 2"],
+                           .sostenuto: ["down @ 1", "up @ 3"],
+                           .sustain: ["down @ 0", "up @ 1", "down @ 1", "1/2 @ 2", "up @ 3"]])
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -931,6 +931,39 @@ extension MusicXMLExporterTests {
         }
 
         #expect(recoveredVelocities == [velocity])
+    }
+
+    @Test
+    func roundTrip_repeatedPedals_markedOnceButKeptInEveryPart() throws {
+        let sustain = beatSustainTable([(0, .down), (1, .up), (1, .down), (2, .up)])
+        let parts = ["C4", "E4"].map { pitch in
+            var noteTable = NoteTable<BeatTime, Pitch>()
+
+            noteTable.insert(attack: BeatTime(0),
+                             duration: BeatDuration(2),
+                             pitch: Pitch(stringLiteral: pitch))
+
+            return Part<BeatTime, Pitch>(name: "Piano",
+                                         noteTable: noteTable,
+                                         pedals: [.sustain: sustain])
+        }
+        let work = standardBeatWork(parts: parts)
+        let file = try MusicXML.Exporter().write(works: [work],
+                                                 as: .musicXML)
+        let data = try #require(file.regularFileContents)
+        let xml = try #require(String(bytes: data, encoding: .utf8))
+
+        #expect(xml.components(separatedBy: "<pedal ").count - 1 == 3)
+        #expect(xml.components(separatedBy: "damper-pedal=").count - 1 == 4)
+
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let recoveredParts = try #require(standardBeatParts(of: recovered))
+
+        #expect(recoveredParts.map { $0.pedals[.sustain]?.map(\.level) } == [[.down, .up, .down, .up],
+                                                                             [.down, .up, .down, .up]])
     }
 
     @Test

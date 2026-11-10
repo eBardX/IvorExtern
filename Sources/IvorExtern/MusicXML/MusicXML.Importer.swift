@@ -355,8 +355,8 @@ extension MusicXML.Importer {
         return "\(partName), Voice \(index + 1)"
     }
 
-    // Inserted in walk order, so same-time entries — a `change`'s Off then
-    // On — keep their order.
+    // Inserted in walk order, so same-time entries — a `change`'s Up then
+    // Down — keep their order.
     private static func _makePedals(_ events: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)]) -> [Pedal: PedalTable<BeatTime>] {
         var pedals: [Pedal: PedalTable<BeatTime>] = [:]
 
@@ -417,6 +417,10 @@ extension MusicXML.Importer: ImporterProtocol {
     internal var readableFileFormats: [FileFormat] {
         [.musicXML,
          .mxl]
+    }
+
+    internal var supportedOptions: Set<ImportOptions.Key> {
+        [.pedalSimplification]
     }
 
     // MARK: Internal Instance Methods

@@ -56,10 +56,10 @@ extension MIDIImporterTests {
                                              (360, .sustain, 0)])
         let levels = try #require(pedals[.sustain]?.map(\.level))
 
-        #expect(levels == [.off,
+        #expect(levels == [.up,
                            Pedal.Level(Number(numerator: 64, denominator: 127)),
                            Pedal.Level(Number(numerator: 100, denominator: 127)),
-                           .off])
+                           .up])
     }
 
     @Test
@@ -271,7 +271,7 @@ extension MIDIImporterTests {
                                              (480, .sostenuto, 0)])
 
         #expect(Set(pedals.keys) == Set(Pedal.allCases))
-        #expect(pedals[.sostenuto]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sostenuto]?.map(\.level) == [.down, .up])
         #expect(pedals[.sostenuto]?.map(\.time) == [0, 1])
     }
 
@@ -323,7 +323,7 @@ extension MIDIImporterTests {
                                              (960, .sustain, 0)])
 
         #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
-        #expect(pedals[.sustain]?.map(\.level) == [.on, .off, .on, .off])
+        #expect(pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
     }
 
     @Test
@@ -422,11 +422,11 @@ extension MIDIImporterTests {
     }
 
     @Test
-    func convert_switchValues_importAsOffAndOn() throws {
+    func convert_switchValues_importAsUpAndDown() throws {
         let pedals = try midiImportedPedals([(0, .sustain, 127),
                                              (480, .sustain, 0)])
 
-        #expect(pedals[.sustain]?.map(\.level) == [.on, .off])
+        #expect(pedals[.sustain]?.map(\.level) == [.down, .up])
     }
 
     @Test

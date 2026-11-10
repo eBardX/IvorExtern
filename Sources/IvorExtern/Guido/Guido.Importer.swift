@@ -176,6 +176,10 @@ extension Guido.Importer: ImporterProtocol {
         [.gmn]
     }
 
+    internal var supportedOptions: Set<ImportOptions.Key> {
+        [.pedalSimplification]
+    }
+
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,

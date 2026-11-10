@@ -408,7 +408,7 @@ extension GuidoImporterWalkerTests {
         let context = try walker.walk(voice)
 
         #expect(context.sustainTable.map(\.time) == [0, 1])
-        #expect(context.sustainTable.map(\.level) == [.on, .off])
+        #expect(context.sustainTable.map(\.level) == [.down, .up])
     }
 
     @Test

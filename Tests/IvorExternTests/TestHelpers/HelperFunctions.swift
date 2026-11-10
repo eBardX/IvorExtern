@@ -474,7 +474,7 @@ internal func roundTrip(_ work: Work,
                         importer: some ImporterProtocol,
                         fileFormat: FileFormat,
                         sourceLocation: SourceLocation = #_sourceLocation) throws -> Work {
-    let file = try exporter.write(works: [work], as: fileFormat)
+    let file = try exporter.write(works: [work], as: fileFormat, options: .default)
     let works = try importer.read(from: file, as: fileFormat)
 
     return try #require(works.first,

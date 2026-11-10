@@ -795,7 +795,7 @@ extension ABCExporterTests {
         let work = try readABC(Fixtures.pedalABC)
         let pedals = try pedalSummary(standardBeatParts(of: work))
 
-        #expect(pedals == [.sustain: ["on @ 0", "off @ 2", "on @ 2", "off @ 3"]])
+        #expect(pedals == [.sustain: ["down @ 0", "up @ 2", "down @ 2", "up @ 3"]])
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -940,7 +940,7 @@ extension ABCExporterTests {
     func write_changeBetweenNotes_landsOnTheNextNote() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0.5, level: .on)
+        sustain.insert(time: 0.5, level: .down)
 
         let abc = try abcExportedWithPedals([.sustain: sustain])
 
@@ -1027,7 +1027,7 @@ extension ABCExporterTests {
     func write_onlySustainIsWritten() throws {
         var table = PedalTable<BeatTime>()
 
-        table.insert(time: 0, level: .on)
+        table.insert(time: 0, level: .down)
 
         #expect(try !abcExportedWithPedals([.soft: table]).contains("ped"))
     }
@@ -1036,8 +1036,8 @@ extension ABCExporterTests {
     func write_pedAndPedUp() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sustain.insert(time: 2, level: .off)
+        sustain.insert(time: 0, level: .down)
+        sustain.insert(time: 2, level: .up)
 
         let abc = try abcExportedWithPedals([.sustain: sustain])
 
@@ -1048,9 +1048,9 @@ extension ABCExporterTests {
     func write_repedal_writesPedUpThenPed() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sustain.insert(time: 1, level: .off)
-        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 0, level: .down)
+        sustain.insert(time: 1, level: .up)
+        sustain.insert(time: 1, level: .down)
 
         #expect(try abcExportedWithPedals([.sustain: sustain]).contains("!ped-up!!ped!D"))
     }

@@ -120,6 +120,23 @@ extension ImportFileFormatTests {
     }
 
     @Test
+    func read_pedalSimplification_simplifiesEveryTable() throws {
+        let fmt = try #require(ImportFileFormat.importFileFormat(for: "midi"))
+        let file = try FileWrapper(regularFileWithContents: Fixtures.pedalMIDI())
+        let asReadWork = try #require(fmt.read(from: file).first)
+        let snappedWork = try #require(fmt.read(from: file,
+                                                options: ImportOptions(pedalSimplification: .snap)).first)
+        let asRead = try #require(keyboardBeatParts(of: asReadWork)?.first)
+        let snapped = try #require(keyboardBeatParts(of: snappedWork)?.first)
+        let asReadSustain = try #require(asRead.pedals[.sustain])
+        let snappedSustain = try #require(snapped.pedals[.sustain])
+
+        #expect(snappedSustain.count < asReadSustain.count)
+        #expect(snappedSustain.allSatisfy { $0.level == .down || $0.level == .up })
+        #expect(Set(snapped.pedals.keys) == Set(asRead.pedals.keys))
+    }
+
+    @Test
     func read_validFile() throws {
         let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
         let file = FileWrapper(regularFileWithContents: Data("X:1\nT:Tune\nK:C\nCDE|\n".utf8))
@@ -138,6 +155,15 @@ extension ImportFileFormatTests {
     @Test
     func supportedMIMETypes_notEmpty() {
         #expect(!ImportFileFormat.supportedMIMETypes.isEmpty)
+    }
+
+    @Test
+    func supportedOptions_pedalSimplification() throws {
+        for tag in ["abc", "gmn", "midi", "musicxml"] {
+            let fmt = try #require(ImportFileFormat.importFileFormat(for: tag))
+
+            #expect(fmt.supportedOptions == [.pedalSimplification])
+        }
     }
 
     @Test

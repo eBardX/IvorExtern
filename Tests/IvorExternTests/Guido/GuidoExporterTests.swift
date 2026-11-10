@@ -274,7 +274,7 @@ extension GuidoExporterTests {
     func convert_onlySustainIsWritten() throws {
         var table = PedalTable<BeatTime>()
 
-        table.insert(time: 0, level: .on)
+        table.insert(time: 0, level: .down)
 
         #expect(try guidoExportedPedalKinds([.soft: table, .sostenuto: table]).isEmpty)
     }
@@ -283,10 +283,10 @@ extension GuidoExporterTests {
     func convert_repedal_writesOffThenOn() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0, level: .on)
-        sustain.insert(time: 1, level: .off)
-        sustain.insert(time: 1, level: .on)
-        sustain.insert(time: 2, level: .off)
+        sustain.insert(time: 0, level: .down)
+        sustain.insert(time: 1, level: .up)
+        sustain.insert(time: 1, level: .down)
+        sustain.insert(time: 2, level: .up)
 
         #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off, .on, .off])
     }
@@ -350,7 +350,7 @@ extension GuidoExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 3, denominator: 4)))
-        sustain.insert(time: 1, level: .on)
+        sustain.insert(time: 1, level: .down)
         sustain.insert(time: 2, level: Pedal.Level(Number(numerator: 1, denominator: 4)))
 
         #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off])
@@ -559,7 +559,7 @@ extension GuidoExporterTests {
         let work = try readGuido(Fixtures.pedalGuido)
         let pedals = try pedalSummary(standardBeatParts(of: work))
 
-        #expect(pedals == [.sustain: ["on @ 0", "off @ 2", "on @ 2", "off @ 3"]])
+        #expect(pedals == [.sustain: ["down @ 0", "up @ 2", "down @ 2", "up @ 3"]])
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),

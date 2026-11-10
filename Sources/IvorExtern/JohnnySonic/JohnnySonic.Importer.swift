@@ -365,6 +365,10 @@ extension JohnnySonic.Importer: ImporterProtocol {
         [.dkm]
     }
 
+    internal var supportedOptions: Set<ImportOptions.Key> {
+        []
+    }
+
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,

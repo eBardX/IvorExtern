@@ -105,7 +105,7 @@ extension MusicXMLImporterContextTests {
         context.recordPedals(pedalDirection([MXLPedal(kind: .change)]), at: 3)
 
         #expect(context.pedalEvents.map(\.pedal) == [.sostenuto, .sustain, .sostenuto, .sustain, .sustain])
-        #expect(context.pedalEvents.map(\.level) == [.on, .on, .off, .off, .on])
+        #expect(context.pedalEvents.map(\.level) == [.down, .down, .up, .up, .down])
         #expect(context.openPedals == [1: .sustain])
     }
 
@@ -118,7 +118,7 @@ extension MusicXMLImporterContextTests {
                              at: 0)
 
         #expect(context.pedalEvents.map(\.pedal) == [.sustain, .sostenuto])
-        #expect(context.pedalEvents.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 4)), .on])
+        #expect(context.pedalEvents.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 4)), .down])
     }
 
     @Test
@@ -128,7 +128,7 @@ extension MusicXMLImporterContextTests {
         let pedals = context.recordPedals(MXLSound(softPedal: .yes, sostenutoPedal: .no), at: 1)
 
         #expect(pedals == [.soft, .sostenuto])
-        #expect(context.pedalEvents.map(\.level) == [.off, .on])
+        #expect(context.pedalEvents.map(\.level) == [.up, .down])
         #expect(context.pedalEvents.map(\.pedal) == [.sostenuto, .soft])
     }
 }
