@@ -159,6 +159,14 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_freeMeter_writesMeterNone() throws {
+        let table = try meterTable(summary: ["0 free"])
+        let text = try writeABC(meteredStandardWork(table, length: dur(3)))
+
+        #expect(text.contains("M:none"))
+    }
+
+    @Test
     func convert_glissandoNote_exportsAtStartPitch() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -310,6 +318,22 @@ extension ABCExporterTests {
     }
 
     @Test
+    func convert_meterChange_writesAnInlineMeterField() throws {
+        let table = try meterTable(summary: ["0 4/4", "1 3/4", "3/2 3/4"])
+        let text = try writeABC(meteredStandardWork(table, length: dur(9, 4)))
+
+        #expect(text.contains("M:4/4"))
+        #expect(text.components(separatedBy: "[M:3/4]").count == 2)
+    }
+
+    @Test
+    func convert_meterless_writesCommonTime() throws {
+        let text = try writeABC(meteredStandardWork(MeterTable(), length: dur(2)))
+
+        #expect(text.contains("M:4/4"))
+    }
+
+    @Test
     func convert_midiChannelExtraWithoutInstrumentTable_emitsStandaloneChannelDirective() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -373,7 +397,7 @@ extension ABCExporterTests {
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: dur(1, 4), pitch: "C4")
 
         let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
         let tune = try ABC.Exporter().convert(work)
@@ -460,7 +484,7 @@ extension ABCExporterTests {
 
         tempoMap.insert(beatTime: BeatTime(0), tempo: Tempo(144))
 
-        let work = Work(name: "Test", content: .standardBeat([], tempoMap))
+        let work = Work(name: "Test", content: .standardBeat([], tempoMap, MeterTable()))
         let tune = try ABC.Exporter().convert(work)
         let tempo = try #require(tune.header.compactMap { entry -> ABCTempo? in
             guard case let .field(.tempo(tempo)) = entry
@@ -521,7 +545,7 @@ extension ABCExporterTests {
 
     @Test
     func convert_wrongPitchNotation_throwsUnsupportedPitchNotation() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: ABC.Error.self) {
             try ABC.Exporter().convert(work)
@@ -543,7 +567,7 @@ extension ABCExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -572,7 +596,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -609,7 +633,7 @@ extension ABCExporterTests {
         let part = Part<BeatTime, Pitch>(name: "Flute",
                                          noteTable: NoteTable())
         let work = Work(name: "Aubade",
-                        content: .standardBeat([part], TempoMap()),
+                        content: .standardBeat([part], TempoMap(), MeterTable()),
                         info: sampleABCInfo())
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -643,7 +667,7 @@ extension ABCExporterTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -658,6 +682,63 @@ extension ABCExporterTests {
         }
 
         #expect(instruments.first?.stringValue == "Acoustic Grand Piano")
+    }
+
+    // ABC can't write a denominator that isn't a power of two: 6/12 is
+    // written as 2/4, which has the same bar length, and 4/3, which has no
+    // such stand-in, as `M:none` with its bar lines, so it comes back as
+    // free bars of the same lengths.
+    @Test(arguments: [(["0 6/12"], ["0 2/4"]),
+                      (["0 3/6"], ["0 2/4"]),
+                      (["0 4/3"], ["0 free", "4/3 free", "8/3 free"])])
+    func roundTrip_irrationalMeter_isWrittenAsAStandIn(_ summary: [String],
+                                                       _ expected: [String]) throws {
+        let table = try meterTable(summary: summary)
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(4)),
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        #expect(meterSummary(recovered.meterTable) == expected)
+    }
+
+    @Test(arguments: [("4/4", "common", "M:C\n"),
+                      ("2/2", "cut", "M:C|")])
+    func roundTrip_meterSymbol_isKept(_ plain: String,
+                                      _ symbol: String,
+                                      _ field: String) throws {
+        let extras = Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                                             values: [.string(symbol)])])
+        let table = try meterTable([(.zero, plain)], extras: extras)
+        let work = meteredStandardWork(table, length: dur(2))
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        #expect(try writeABC(work).contains(field))
+        #expect(meterSummary(recovered.meterTable) == ["0 \(plain)"])
+        #expect(recovered.meterTable?.first?.extras == extras)
+    }
+
+    @Test(arguments: [["0 6/8"],
+                      ["0 2+2+3/8"],
+                      ["0 5/8"],
+                      ["0 4/4", "1 3/4"],
+                      ["pickup 1/4", "0 3/4"],
+                      ["pickup 1/4", "0 4/4", "1/4 3/4"],
+                      ["0 4/4", "7/4 4/4"],
+                      ["0 4/4", "1 3/4", "3/2 3/4"],
+                      ["0 4/4", "1 free", "3 3/4"],
+                      ["0 free"]])
+    func roundTrip_meterTable_isKept(_ summary: [String]) throws {
+        let table = try meterTable(summary: summary)
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(4)),
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        #expect(meterSummary(recovered.meterTable) == summary)
     }
 
     @Test
@@ -682,7 +763,7 @@ extension ABCExporterTests {
 
         let parts = [Part(name: "Organ", noteTable: table, instrumentTable: organMap),
                      Part(name: "Flute", noteTable: table, instrumentTable: fluteMap)]
-        let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap()))
+        let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -716,7 +797,7 @@ extension ABCExporterTests {
             parts.append(Part(name: name, noteTable: table, instrumentTable: instrumentTable))
         }
 
-        let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap()))
+        let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -738,7 +819,7 @@ extension ABCExporterTests {
         table2.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "G3")
 
         let parts = [Part(name: "Lead", noteTable: table1), Part(name: "Bass", noteTable: table2)]
-        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap()))
+        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -756,7 +837,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(2), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -779,7 +860,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -788,6 +869,20 @@ extension ABCExporterTests {
         let recoveredPart = try namedStandardPart(recovered, "Piano")
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_notesAcrossShortBarsAndMeterChanges_keepTheirTimes() throws {
+        let table = try meterTable(summary: ["pickup 1/4", "0 3/4", "5/4 4/4", "2 3/4"])
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(5, 2)),
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let notes = try notes(in: #require(standardBeatParts(of: recovered)?.first))
+
+        #expect(meterSummary(recovered.meterTable) == ["pickup 1/4", "0 3/4", "5/4 4/4", "2 3/4"])
+        #expect(notes.map(\.attack) == [.zero])
+        #expect(notes.map(\.duration) == [dur(5, 2)])
     }
 
     @Test
@@ -812,7 +907,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "", noteTable: table)
-        let work = Work(name: "Untitled", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Untitled", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -834,7 +929,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap))
+        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -858,7 +953,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap))
+        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -888,7 +983,7 @@ extension ABCExporterTests {
                      pitch: "E4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -940,11 +1035,36 @@ extension ABCExporterTests {
     func write_changeBetweenNotes_landsOnTheNextNote() throws {
         var sustain = PedalTable<BeatTime>()
 
-        sustain.insert(time: 0.5, level: .down)
+        sustain.insert(time: beat(1, 8), level: .down)
 
         let abc = try abcExportedWithPedals([.sustain: sustain])
 
         #expect(abc.contains("C!ped!D"))
+    }
+
+    @Test
+    func write_compoundTempoUnit_writesACompoundBeat() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: tempo("5/8=40"))
+
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+
+        #expect(abc.contains("Q:1/4 3/8=40"))
+    }
+
+    @Test
+    func write_dottedQuarterTempo_writesItsOwnUnit() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/8
+            Q:3/8=67
+            K:C
+            C D E F
+            """)
+
+        #expect(try writeABC(work).contains("Q:3/8=67"))
     }
 
     @Test
@@ -954,7 +1074,7 @@ extension ABCExporterTests {
         info.credits = [Credit(name: "J. Editor", role: .editor)].compactMap(\.self)
 
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap()),
+                                     content: .standardBeat([], TempoMap(), MeterTable()),
                                      info: info))
 
         #expect(text.split(separator: "\n").contains("Z:abc-edited-by J. Editor"))
@@ -968,9 +1088,20 @@ extension ABCExporterTests {
     }
 
     @Test
+    func write_fractionalRate_roundsHalvesUp() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: tempo("3/8=133/2"))
+
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+
+        #expect(abc.contains("Q:3/8=67"))
+    }
+
+    @Test
     func write_info_writesStringFields() throws {
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap()),
+                                     content: .standardBeat([], TempoMap(), MeterTable()),
                                      info: sampleABCInfo()))
         let lines = text.split(separator: "\n").map(String.init)
 
@@ -1002,7 +1133,7 @@ extension ABCExporterTests {
         info.remarks = [Remark(text: "Some text", label: label)].compactMap(\.self)
 
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap()),
+                                     content: .standardBeat([], TempoMap(), MeterTable()),
                                      info: info))
 
         #expect(text.split(separator: "\n").contains("\(field):Some text"[...]))
@@ -1018,7 +1149,7 @@ extension ABCExporterTests {
 
     @Test
     func write_noTitle_writesWorkNameAsTitle() throws {
-        let text = try writeABC(Work(name: "Sketch 3", content: .standardBeat([], TempoMap())))
+        let text = try writeABC(Work(name: "Sketch 3", content: .standardBeat([], TempoMap(), MeterTable())))
 
         #expect(text.contains("T:Sketch 3\n"))
     }
@@ -1037,7 +1168,7 @@ extension ABCExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sustain.insert(time: 2, level: .up)
+        sustain.insert(time: beat(1, 2), level: .up)
 
         let abc = try abcExportedWithPedals([.sustain: sustain])
 
@@ -1049,8 +1180,8 @@ extension ABCExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sustain.insert(time: 1, level: .up)
-        sustain.insert(time: 1, level: .down)
+        sustain.insert(time: beat(1, 4), level: .up)
+        sustain.insert(time: beat(1, 4), level: .down)
 
         #expect(try abcExportedWithPedals([.sustain: sustain]).contains("!ped-up!!ped!D"))
     }
@@ -1065,6 +1196,18 @@ extension ABCExporterTests {
         let file = try ABC.Exporter().write(works: [work], as: .abc)
 
         #expect(file.regularFileContents != nil)
+    }
+
+    @Test
+    func write_tripletTempoUnit_restatesInQuarterNotes() throws {
+        var tempoMap = TempoMap()
+
+        // A triplet quarter note (1/6) at 90 is a quarter note at 60.
+        tempoMap.insert(beatTime: .zero, tempo: tempo("1/6=90"))
+
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+
+        #expect(abc.contains("Q:1/4=60"))
     }
 
     @Test

@@ -87,6 +87,20 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_bareTempoWithEighthNoteUnitLength_isEighthNoteTempo() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/8
+            Q:120
+            K:C
+            C D E F
+            """)
+
+        #expect(work.tempoMap?[.zero] == tempo("1/8=120"))
+    }
+
+    @Test
     func read_chordProducesSimultaneousNotes() throws {
         let abc = """
             X:1
@@ -104,9 +118,9 @@ extension ABCImporterTests {
 
         #expect(notes.count == 4)
         #expect(notes[0].attack == BeatTime(0))
-        #expect(notes[0].duration == BeatDuration(2))
+        #expect(notes[0].duration == dur(1, 2))
         #expect(Set(notes[0..<3].map(\.pitch)) == ["C4", "E4", "G4"])
-        #expect(notes[3].attack == BeatTime(2))
+        #expect(notes[3].attack == beat(1, 2))
         #expect(notes[3].pitch == "D4")
     }
 
@@ -131,10 +145,10 @@ extension ABCImporterTests {
         // keep their own individually written lengths, and the chord
         // occupies the position of its first note (here, C2, a half note).
         #expect(notes.count == 4)
-        #expect(byPitch["C4"]?.duration == BeatDuration(2))
-        #expect(byPitch["E4"]?.duration == BeatDuration(4))
-        #expect(byPitch["G4"]?.duration == BeatDuration(1))
-        #expect(byPitch["D4"]?.attack == BeatTime(2))
+        #expect(byPitch["C4"]?.duration == dur(1, 2))
+        #expect(byPitch["E4"]?.duration == dur(1))
+        #expect(byPitch["G4"]?.duration == dur(1, 4))
+        #expect(byPitch["D4"]?.attack == beat(1, 2))
     }
 
     @Test
@@ -156,8 +170,38 @@ extension ABCImporterTests {
         // Per §4.17 of the ABC 2.1 standard, `[C2E2G2]3` means the same as
         // `[CEG]6`.
         #expect(notes.count == 4)
-        #expect(notes[0..<3].allSatisfy { $0.duration == BeatDuration(6) })
-        #expect(notes[3].attack == BeatTime(6))
+        #expect(notes[0..<3].allSatisfy { $0.duration == dur(3, 2) })
+        #expect(notes[3].attack == beat(3, 2))
+    }
+
+    @Test
+    func read_compoundTempo_sumsItsBeatIntoOneUnit() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/8
+            Q:1/4 3/8=40
+            K:C
+            C D E F
+            """)
+
+        #expect(work.tempoMap?[.zero] == tempo("5/8=40"))
+        #expect(work.tempoMap?[.zero].numberValue == 25)
+    }
+
+    @Test
+    func read_cutTime_isTwoTwoWithCutSymbol() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:C|
+            L:1/4
+            K:C
+            C D E F|
+            """)
+
+        #expect(meterSummary(work.meterTable) == ["0 2/2"])
+        #expect(stringValue(work.meterTable?.first?.extras, .meterSymbol) == "cut")
     }
 
     @Test
@@ -177,6 +221,21 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_dottedQuarterTempo_isExact() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/8
+            Q:3/8=67
+            K:C
+            C D E F
+            """)
+
+        #expect(work.tempoMap?[.zero] == tempo("3/8=67"))
+        #expect(work.tempoMap?[.zero].numberValue == frac(201, 8))
+    }
+
+    @Test
     func read_dynamicChange_isAStep() throws {
         let part = try #require(standardBeatParts(of: readABC("""
             X:1
@@ -186,7 +245,7 @@ extension ABCImporterTests {
             !p! C D !f! E
             """))?.first)
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2), BeatTime(2)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 2), beat(1, 2)])
         #expect(part.dynamicMap.map(\.dynamic) == [.p, .p, .f])
     }
 
@@ -201,7 +260,7 @@ extension ABCImporterTests {
             """))?.first)
         let marks = part.dynamicMap.map { stringValue($0.extras, .dynamicMark) }
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(1)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 4)])
         #expect(part.dynamicMap.map(\.dynamic) == [.p, .p])
         #expect(marks == [nil, "sfz"])
     }
@@ -252,8 +311,36 @@ extension ABCImporterTests {
             !<(! C D !<)! E
             """))?.first)
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 2)])
         #expect(part.dynamicMap.map(\.dynamic) == [.mp, .mf])
+    }
+
+    @Test
+    func read_inlineMeterChange_isAnEntry() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:4/4
+            L:1/8
+            K:C
+            C2 D2 E2 F2|[M:6/8]G3 A3|[M:(2+2+3)/8]c2 d2 e3|]
+            """)
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "1 6/8", "7/4 2+2+3/8"])
+    }
+
+    @Test
+    func read_meterNone_isFree() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:none
+            L:1/4
+            K:C
+            C D E F G A
+            """)
+
+        #expect(meterSummary(work.meterTable) == ["0 free"])
     }
 
     @Test
@@ -521,8 +608,37 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_noMeterField_hasNoMeter() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            C D E F|
+            """)
+
+        #expect(meterSummary(work.meterTable).isEmpty)
+    }
+
+    @Test
     func read_noPedMarks_hasNoPedals() throws {
         #expect(try abcPedalPart("C D E F").pedals.isEmpty)
+    }
+
+    @Test
+    func read_noteTiedAcrossMeterChange_staysOneNote() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:4/4
+            L:1/4
+            K:C
+            C4-|[M:3/4]C3|]
+            """)
+        let notes = try notes(in: #require(standardBeatParts(of: work)?.first))
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "1 3/4"])
+        #expect(notes.map(\.duration) == [dur(7, 4)])
     }
 
     @Test
@@ -530,7 +646,7 @@ extension ABCImporterTests {
         let part = try abcPedalPart("C !ped!D !ped-up!E F")
 
         #expect(Array(part.pedals.keys) == [.sustain])
-        #expect(part.pedals[.sustain]?.map(\.time) == [1, 2])
+        #expect(part.pedals[.sustain]?.map(\.time) == [beat(1, 4), beat(1, 2)])
         #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
         #expect(part.noteCount == 4)
     }
@@ -561,7 +677,7 @@ extension ABCImporterTests {
             |: C D | E F :|
             """))?.first)
 
-        #expect(part.noteTable.map(\.attack) == (0..<8).map { BeatTime(Number($0)) })
+        #expect(part.noteTable.map(\.attack) == (0..<8).map { beat($0, 4) })
     }
 
     @Test
@@ -583,8 +699,36 @@ extension ABCImporterTests {
         #expect(notes.count == 2)
         #expect(notes[0].attack == BeatTime(0))
         #expect(notes[0].pitch == "C4")
-        #expect(notes[1].attack == BeatTime(2))
+        #expect(notes[1].attack == beat(1, 2))
         #expect(notes[1].pitch == "D4")
+    }
+
+    @Test
+    func read_shortBarMidPiece_isARestart() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:4/4
+            L:1/4
+            K:C
+            C D E F|G A B|c d e f|]
+            """)
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "7/4 4/4"])
+    }
+
+    @Test
+    func read_shortFirstBar_isAPickup() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            M:3/4
+            L:1/4
+            K:C
+            C|D E F|G3|]
+            """)
+
+        #expect(meterSummary(work.meterTable) == ["pickup 1/4", "0 3/4"])
     }
 
     @Test
@@ -611,15 +755,15 @@ extension ABCImporterTests {
 
         let part = try #require(parts.first)
         let notes = notes(in: part)
-        let quarter = BeatDuration(1)
+        let quarter = dur(1, 4)
 
         #expect(notes.count == 4)
         #expect(notes.map(\.pitch) == ["C4", "D4", "E4", "F4"])
         #expect(notes.allSatisfy { $0.duration == quarter })
-        #expect(notes.map(\.attack) == [BeatTime(0),
-                                        BeatTime(1),
-                                        BeatTime(2),
-                                        BeatTime(3)])
+        #expect(notes.map(\.attack) == [beat(0),
+                                        beat(1, 4),
+                                        beat(1, 2),
+                                        beat(3, 4)])
     }
 
     @Test
@@ -681,11 +825,11 @@ extension ABCImporterTests {
             D
             """)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(tempoMap.map(\.beatTime) == [.zero, BeatTime(1), BeatTime(1)])
-        #expect(tempoMap.map(\.tempo.uintValue) == [120, 120, 60])
+        #expect(tempoMap.map(\.beatTime) == [.zero, beat(1, 4), beat(1, 4)])
+        #expect(tempoMap.map(\.tempo) == [Tempo(120), Tempo(120), Tempo(60)])
     }
 
     @Test
@@ -702,7 +846,7 @@ extension ABCImporterTests {
         let works = try ABC.Importer().read(from: wrapper, as: .abc)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)

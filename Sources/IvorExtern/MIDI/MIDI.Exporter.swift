@@ -116,6 +116,7 @@ extension MIDI.Exporter {
                                  info: Work.Info,
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
+                                 meterTable: MeterTable,
                                  timeCode: MIDI.TimeCode?,
                                  tickRate: MIDI.TickRate,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
@@ -128,6 +129,7 @@ extension MIDI.Exporter {
                                    info: info,
                                    smpteOffset: _smpteOffset(smpteStartTime, division),
                                    tempoChanges: tempoChanges,
+                                   meterTable: meterTable,
                                    tickMap: tickMap))
 
         tracks += try _convert(parts: parts,
@@ -170,21 +172,14 @@ extension MIDI.Exporter {
                                  info: Work.Info,
                                  smpteOffset: SMPTETime?,
                                  tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
+                                 meterTable: MeterTable,
                                  tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events = _headerEvents(name: name,
                                    info: info,
                                    smpteOffset: smpteOffset)
 
-        // Always 4/4: a model-level limitation, not an exporter shortcut.
-        // `Work` has no field to store a time signature — the importer
-        // already discards whatever the source SMF carried — so there is
-        // nothing here for the exporter to recover.
-        if let timeSig = MIDI.TimeSignature(numerator: 4,
-                                            denominator: 2,
-                                            clockRate: 24,
-                                            beatRate: 8) {
-            events.append(.meta(.zero, .timeSignature(timeSig)))
-        }
+        events += _meterEvents(meterTable,
+                               tickMap: tickMap)
 
         for (beatTime, tempo) in tempoChanges {
             if let eventTime = tickMap[beatTime] {
@@ -267,11 +262,12 @@ extension MIDI.Exporter {
         let timeCode = determineTimeCode(work)
 
         switch work.content {
-        case let .keyboardBeat(parts, tempoMap):
+        case let .keyboardBeat(parts, tempoMap, meterTable):
             return try _convert(name: work.info.title ?? work.name,
                                 info: work.info,
                                 parts: parts,
                                 tempoMap: tempoMap,
+                                meterTable: meterTable,
                                 timeCode: timeCode,
                                 tickRate: tickRate,
                                 smpteStartTime: work.smpteStartTime)
@@ -403,6 +399,48 @@ extension MIDI.Exporter {
     // LSB by the time it processes the MSB that actually creates the
     // `PanMap` entry. Entries at the same time are a step, so only the last
     // of them is written.
+    // One time signature per meter entry, and a marker where it doesn't
+    // state the meter exactly (see `makeMeterMarker(_:)`); a meter with no
+    // time signature of its own (such as 4/3) repeats the one before it, so
+    // that other readers still see a barline there, and a free meter writes
+    // the marker alone. A pickup is written as a restart of the first meter
+    // where the pickup ends, so that the first bar comes back short. A
+    // meterless work is written in 4/4.
+    private static func _meterEvents(_ meterTable: MeterTable,
+                                     tickMap: MIDI.TickMap) -> [MIDI.Event] {
+        guard !meterTable.isEmpty
+        else { return [.meta(.zero, .timeSignature(.default))] }
+
+        var entries = meterTable.map { (beatTime: $0.beatTime, meter: $0.meter, extras: $0.extras) }
+        var events: [MIDI.Event] = []
+        var previous: MIDI.TimeSignature?
+
+        if !meterTable.pickup.isZero,
+           let first = entries.first {
+            entries.insert((.zero + meterTable.pickup, first.meter, first.extras),
+                           at: 1)
+        }
+
+        for entry in entries {
+            guard let eventTime = tickMap[entry.beatTime]
+            else { continue }
+
+            if !entry.meter.isFree {
+                let timeSignature = convertToMIDITimeSignature(entry.meter, entry.extras) ?? previous ?? .default
+
+                events.append(.meta(eventTime, .timeSignature(timeSignature)))
+
+                previous = timeSignature
+            }
+
+            if let marker = makeMeterMarker(entry.meter) {
+                events.append(.meta(eventTime, .marker(marker)))
+            }
+        }
+
+        return events
+    }
+
     private static func _panEvents<TickMap: MIDI.ExportTimeMap>(_ panMap: PanMap<TickMap.TimeType>,
                                                                 channel: MIDI.Channel,
                                                                 tickMap: TickMap) -> [MIDI.Event] {
@@ -476,21 +514,15 @@ extension MIDI.Exporter {
     }
 
     // The distinct beat times in `tempoMap` (last entry wins at any given
-    // beat time, per the step-change convention), along with the exact
-    // microseconds-per-quarter value (if any) held at each one.
-    private static func _tempoAnchors(_ tempoMap: TempoMap) -> (beatTimes: [BeatTime], exactMicroseconds: [BeatTime: Int]) {
+    // beat time, per the step-change convention).
+    private static func _tempoAnchors(_ tempoMap: TempoMap) -> [BeatTime] {
         var beatTimes: [BeatTime] = []
-        var exactMicroseconds: [BeatTime: Int] = [:]
 
-        for entry in tempoMap {
-            if beatTimes.last != entry.beatTime {
-                beatTimes.append(entry.beatTime)
-            }
-
-            exactMicroseconds[entry.beatTime] = intValue(entry.extras, .midiTempo)
+        for entry in tempoMap where beatTimes.last != entry.beatTime {
+            beatTimes.append(entry.beatTime)
         }
 
-        return (beatTimes, exactMicroseconds)
+        return beatTimes
     }
 
     private static func _tempoChanges(from tempoMap: TempoMap) -> [(beatTime: BeatTime, tempo: MIDI.Tempo)] {
@@ -505,11 +537,11 @@ extension MIDI.Exporter {
             return changes
         }
 
-        let (anchorBeatTimes, exactMicrosecondsByBeatTime) = _tempoAnchors(tempoMap)
+        let anchorBeatTimes = _tempoAnchors(tempoMap)
 
         // Build the ordered list of beat times to sample: the anchors
-        // plus every integer beat in the open interval between
-        // consecutive anchors.  The integer beats capture the shape of
+        // plus every quarter note in the open interval between
+        // consecutive anchors.  The quarter notes capture the shape of
         // any smooth accelerando or ritardando between anchors.
         var sampleBeatTimes: [BeatTime] = []
 
@@ -518,12 +550,13 @@ extension MIDI.Exporter {
 
             if index + 1 < anchorBeatTimes.count {
                 let nextBeatTime = anchorBeatTimes[index + 1]
-                let first = Int(beatTime.doubleValue.rounded(.down)) + 1
-                let last = Int(nextBeatTime.doubleValue.rounded(.up)) - 1
+                let first = Int((beatTime.doubleValue * 4).rounded(.down)) + 1
+                let last = Int((nextBeatTime.doubleValue * 4).rounded(.up)) - 1
 
                 if first <= last {
-                    for beat in first...last {
-                        sampleBeatTimes.append(BeatTime(Number(beat)))
+                    for quarter in first...last {
+                        sampleBeatTimes.append(BeatTime(Number(numerator: quarter,
+                                                               denominator: 4)))
                     }
                 }
             }
@@ -539,9 +572,7 @@ extension MIDI.Exporter {
             guard tempo != lastEmittedTempo
             else { continue }
 
-            let exactMidiTempo = exactMicrosecondsByBeatTime[sampleBeatTime].flatMap(UInt.init(exactly:)).flatMap(MIDI.Tempo.init(uintValue:))
-
-            if let midiTempo = exactMidiTempo ?? convertToMIDITempo(tempo) {
+            if let midiTempo = convertToMIDITempo(tempo) {
                 changes.append((sampleBeatTime, midiTempo))
 
                 lastEmittedTempo = tempo

@@ -17,7 +17,7 @@ extension MIDIPatch {
     /// the first program (Acoustic Grand Piano) if its name matches none. No
     /// bank is selected.
     ///
-    /// - Parameter instrument: The instrument.
+    /// - Parameter instrument:  The instrument.
     public init(instrument: Instrument) {
         self.init(program: instrument.generalMIDIInstrument?.program ?? MIDIProgram(clamping: 1))
     }

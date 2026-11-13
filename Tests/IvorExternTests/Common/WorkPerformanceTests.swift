@@ -574,8 +574,8 @@ extension WorkPerformanceTests {
 
     @Test
     func init_otherWork_isNil() {
-        #expect(WorkPerformance(work: Work(content: .standardBeat([], TempoMap()))) == nil)
-        #expect(WorkPerformance(work: Work(content: .keyboardBeat([], TempoMap()))) == nil)
+        #expect(WorkPerformance(work: Work(content: .standardBeat([], TempoMap(), MeterTable()))) == nil)
+        #expect(WorkPerformance(work: Work(content: .keyboardBeat([], TempoMap(), MeterTable()))) == nil)
     }
 
     @Test

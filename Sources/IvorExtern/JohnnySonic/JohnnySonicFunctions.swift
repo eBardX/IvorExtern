@@ -11,12 +11,14 @@ private import XestiTools
 
 // MARK: Internal Functions
 
+// A JohnnySonic beat is a quarter note, and beat times and durations count
+// whole notes, so every conversion between them is a factor of 4.
 internal func convertToBeatDuration(_ duration: Double) -> BeatDuration {
-    BeatDuration(Number(duration))
+    BeatDuration(Number(duration) / 4)
 }
 
 internal func convertToBeatTime(_ beat: Double) -> BeatTime {
-    BeatTime(Number(beat))
+    BeatTime(Number(beat) / 4)
 }
 
 internal func convertToDynamic(_ volume: Double) -> Dynamic? {
@@ -35,7 +37,7 @@ internal func convertToInstrument(_ name: String) -> Instrument? {
 }
 
 internal func convertToJohnnySonicBeat(_ beatTime: BeatTime) -> JohnnySonic.Beat {
-    beatTime.doubleValue
+    beatTime.doubleValue * 4
 }
 
 // DKM defines no metadata at all — only comments — so the work's info
@@ -93,7 +95,7 @@ internal func convertToJohnnySonicComments(_ info: Work.Info) -> [String] {
 }
 
 internal func convertToJohnnySonicDuration(_ beatDuration: BeatDuration) -> JohnnySonic.Duration {
-    beatDuration.doubleValue
+    beatDuration.doubleValue * 4
 }
 
 internal func convertToJohnnySonicLocation(_ pan: Pan) -> JohnnySonic.Location {
@@ -108,8 +110,10 @@ internal func convertToJohnnySonicPitch(_ noteNumber: NoteNumber) -> JohnnySonic
     noteNumber.doubleValue
 }
 
+// JohnnySonic tempos are quarter notes per minute, whatever unit the tempo
+// is stated in.
 internal func convertToJohnnySonicTempo(_ tempo: Tempo) -> JohnnySonic.Tempo {
-    tempo.doubleValue
+    tempo.doubleValue * 4
 }
 
 internal func convertToJohnnySonicVolume(_ dynamic: Dynamic) -> JohnnySonic.Volume {
@@ -131,7 +135,12 @@ internal func convertToTempo(_ bpm: Double) -> Tempo {
     guard bpm.isFinite, bpm > 0
     else { return .default }
 
-    return Tempo(uintValue: UInt(bpm.rounded())) ?? .default
+    let rate = UInt(bpm.rounded())
+
+    guard rate > 0
+    else { return .default }
+
+    return Tempo(rate)
 }
 
 // A JohnnySonic volume (0–10) as the exact key velocity (0–127) kept on a

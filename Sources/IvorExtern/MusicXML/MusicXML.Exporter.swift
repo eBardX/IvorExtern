@@ -82,21 +82,6 @@ extension MusicXML.Exporter {
 
     // MARK: Private Type Methods
 
-    // Every 4-beat measure boundary strictly between the start and the end of
-    // the work — `.zero` and the final bound are supplied separately by
-    // `_boundaries(events:tempos:directions:annotations:barTimes:endTime:)`.
-    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
-        var barTimes: [BeatTime] = []
-        var barBeat: UInt = 4
-
-        while barBeat < measureCount * 4 {
-            barTimes.append(BeatTime(Number(numerator: barBeat, denominator: 1)))
-            barBeat += 4
-        }
-
-        return barTimes
-    }
-
     // The sorted union of every time this part's body needs to notice:
     // `.zero` and the work's end, every bar line, every note's attack and
     // end, and every tempo/pan/pedal/dynamic annotation's own time. Splitting a
@@ -144,7 +129,7 @@ extension MusicXML.Exporter {
     }
 
     private static func _convert(work: Work) throws(MusicXML.Error) -> MusicXML.Score {
-        guard case let .standardBeat(parts, tempoMap) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw MusicXML.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -152,8 +137,9 @@ extension MusicXML.Exporter {
             throw MusicXML.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
-        let measureCount = _measureCount(work: work)
-        let divisions = _divisions(parts: parts, tempoMap: tempoMap)
+        let bars = exportBars(meterTable,
+                              through: work.beatTimeRange?.upperBound ?? .zero)
+        let divisions = _divisions(parts: parts, tempoMap: tempoMap, bars: bars)
 
         let hiddenPedals = repeatedPedals(parts.map(\.pedals))
         var scoreParts: [MusicXML.ScorePart] = []
@@ -167,7 +153,7 @@ extension MusicXML.Exporter {
                                                     measures: _makePartBody(part: part,
                                                                             index: index,
                                                                             hiddenPedals: hiddenPedals[index],
-                                                                            measureCount: measureCount,
+                                                                            bars: bars,
                                                                             divisions: divisions,
                                                                             tempoMap: tempoMap)))
         }
@@ -195,19 +181,22 @@ extension MusicXML.Exporter {
     }
 
     // Computes the finest resolution (divisions per quarter note) needed to
-    // land every attack, duration, and tempo-change time in the work exactly
-    // on an integer division, as the least common multiple of their rational
-    // denominators — capped at `maxDivisions`, past which
+    // land every attack, duration, tempo-change time, and barline in the
+    // work exactly on an integer division, as the least common multiple of
+    // their rational denominators — capped at `maxDivisions`, past which
     // `convertToMusicXMLDivisions(_:_:)` rounds instead.
     private static func _divisions(parts: [Part<BeatTime, Pitch>],
-                                   tempoMap: TempoMap) -> Int {
+                                   tempoMap: TempoMap,
+                                   bars: [ExportBar]) -> Int {
         var result = Number(1)
 
+        // Each value is in whole notes, so four times it is in quarter
+        // notes.
         func fold(_ value: Number) {
             guard value.isRational
             else { return }
 
-            result = lcm(result, value.denominator)
+            result = lcm(result, (value * 4).denominator)
         }
 
         for part in parts {
@@ -219,6 +208,11 @@ extension MusicXML.Exporter {
 
         for entry in tempoMap {
             fold(entry.beatTime.numberValue)
+        }
+
+        for bar in bars {
+            fold(bar.start.numberValue)
+            fold(bar.length.numberValue)
         }
 
         return max(1, min(result.intValue, maxDivisions))
@@ -302,40 +296,48 @@ extension MusicXML.Exporter {
     }
 
     // Bins the flat, boundary-ordered stream of music items into one
-    // `Measure` per 4-beat span, prepending `<attributes>` (divisions, a
-    // fixed 4/4 time signature, and a fixed C-major key signature — the model
-    // has no field for either) to the first measure only, per
-    // `MXLValidator`'s `durationBeforeDivisions` check.
+    // `Measure` per bar (see `exportBars(_:through:)`). The first measure
+    // opens with `<attributes>` (divisions, the time signature, and a fixed
+    // C-major key signature — the model has no field for one), per
+    // `MXLValidator`'s `durationBeforeDivisions` check; any later measure
+    // where the meter is written opens with a `<time>` of its own. A pickup
+    // is an implicit measure numbered 0, and short measures are simply
+    // short.
     private static func _groupIntoMeasures(chunks: [(start: BeatTime, items: [MXLMusicItem])],
-                                           measureCount: UInt,
+                                           bars: [ExportBar],
                                            divisions: Int) -> [MusicXML.Score.Part.Measure] {
         var itemsByMeasure: [Int: [MXLMusicItem]] = [:]
 
         for chunk in chunks {
-            let index = Int(chunk.start.doubleValue / 4)
-
-            itemsByMeasure[index, default: []] += chunk.items
+            itemsByMeasure[bars.lastIndex { $0.start <= chunk.start } ?? 0, default: []] += chunk.items
         }
 
         var measures: [MusicXML.Score.Part.Measure] = []
+        let firstNumber = bars.first?.isPickup == true ? 0 : 1
 
-        for index in 0..<Int(measureCount) {
+        for (index, bar) in bars.enumerated() {
             var items = itemsByMeasure[index] ?? []
 
             if index == 0 {
-                items = [.attributes(_makeAttributes(divisions: divisions))] + items
+                items = [.attributes(_makeAttributes(divisions: divisions, bar: bar))] + items
+            } else if bar.isMeterWritten {
+                items = [.attributes(MXLAttributes(time: [convertToMusicXMLTime(bar.meter, bar.extras)],
+                                                   content: .transpose([])))] + items
             }
 
-            measures.append(MusicXML.Score.Part.Measure(number: String(index + 1), items: items))
+            measures.append(MusicXML.Score.Part.Measure(number: String(firstNumber + index),
+                                                        isImplicit: bar.isPickup ? true : nil,
+                                                        items: items))
         }
 
         return measures
     }
 
-    private static func _makeAttributes(divisions: Int) -> MXLAttributes {
+    private static func _makeAttributes(divisions: Int,
+                                        bar: ExportBar) -> MXLAttributes {
         MXLAttributes(divisions: MXLPositiveDivisions(intValue: divisions).require(),
                       key: [MXLKey(content: .traditionalKey(MXLTraditionalKey(fifths: MXLFifths(intValue: 0).require())))],
-                      time: [MXLTime(content: .timeSignature([MXLTimeSignature(beats: "4", beatType: "4")], interchangeable: nil))],
+                      time: [convertToMusicXMLTime(bar.meter, bar.extras)],
                       content: .transpose([]))
     }
 
@@ -401,7 +403,7 @@ extension MusicXML.Exporter {
         var items: [MXLMusicItem] = []
 
         while tempoIndex < tempos.count, tempos[tempoIndex].0 <= start {
-            items.append(.direction(_makeSoundDirection(convertToMusicXMLSound(tempo: tempos[tempoIndex].1))))
+            items.append(.direction(makeMusicXMLTempoDirection(tempos[tempoIndex].1)))
             tempoIndex += 1
         }
 
@@ -505,10 +507,9 @@ extension MusicXML.Exporter {
         return items
     }
 
-    // Lays one part's notes onto the fixed 4/4 grid synthesized across all
-    // of this module's exporters — the model carries no time
-    // signature — with a note crossing a measure boundary split into tied
-    // segments and gaps rest-filled. Tempo is score-wide, not per-part, but
+    // Lays one part's notes onto the work's bars (see
+    // `exportBars(_:through:)`), with a note crossing a measure boundary
+    // split into tied segments and gaps rest-filled. Tempo is score-wide, not per-part, but
     // `MusicXML.Importer` flattens every part's tempo events into one
     // `TempoMap` (`results.flatMap(\.tempoEvents)`), so only the first part
     // carries it; pan, like the model's own `PanMap`, is per-part, and so are
@@ -517,15 +518,15 @@ extension MusicXML.Exporter {
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       index: Int,
                                       hiddenPedals: Set<Pedal>,
-                                      measureCount: UInt,
+                                      bars: [ExportBar],
                                       divisions: Int,
                                       tempoMap: TempoMap) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directions = _playbackDirections(part, hiddenPedals: hiddenPedals)
         let tempos = index == 0 ? _tempoDirectives(tempoMap) : []
-        let barTimes = _barTimes(measureCount: measureCount)
-        let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
+        let barTimes = bars.dropFirst().map(\.start)
+        let endTime = bars.last?.end ?? .zero
         let sortedBoundaries = _boundaries(events: events,
                                            tempos: tempos,
                                            directions: directions,
@@ -539,7 +540,7 @@ extension MusicXML.Exporter {
                                      sortedBoundaries: sortedBoundaries,
                                      divisions: divisions)
 
-        return _groupIntoMeasures(chunks: chunks, measureCount: measureCount, divisions: divisions)
+        return _groupIntoMeasures(chunks: chunks, bars: bars, divisions: divisions)
     }
 
     // A part's own name is its `<part-name>` — `determinePartName(_:)` reads
@@ -660,15 +661,6 @@ extension MusicXML.Exporter {
     // A work with nothing in it has no `beatTimeRange` to derive a measure
     // count from — treated as one (empty, rest-filled) measure rather than
     // force-unwrapped away.
-    private static func _measureCount(work: Work) -> UInt {
-        guard let range = work.beatTimeRange
-        else { return 1 }
-
-        let measures = (range.upperBound.doubleValue / 4).rounded(.up)
-
-        return max(1, UInt(measures))
-    }
-
     // Entries at the same time are a step, so only the last of them is the
     // pan from then on.
     private static func _panDirectives(_ panMap: PanMap<BeatTime>) -> [(BeatTime, Pan)] {

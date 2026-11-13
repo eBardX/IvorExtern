@@ -102,20 +102,20 @@ internal func simplifyingPedals(of work: Work,
     var work = work
 
     switch work.content {
-    case let .absoluteBeat(parts, tempoMap):
-        try work.replaceContent(with: .absoluteBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+    case let .absoluteBeat(parts, tempoMap, meterTable):
+        try work.replaceContent(with: .absoluteBeat(_simplifyingPedals(of: parts, mode), tempoMap, meterTable))
 
     case let .absoluteWall(parts):
         try work.replaceContent(with: .absoluteWall(_simplifyingPedals(of: parts, mode)))
 
-    case let .keyboardBeat(parts, tempoMap):
-        try work.replaceContent(with: .keyboardBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+    case let .keyboardBeat(parts, tempoMap, meterTable):
+        try work.replaceContent(with: .keyboardBeat(_simplifyingPedals(of: parts, mode), tempoMap, meterTable))
 
     case let .keyboardWall(parts):
         try work.replaceContent(with: .keyboardWall(_simplifyingPedals(of: parts, mode)))
 
-    case let .standardBeat(parts, tempoMap):
-        try work.replaceContent(with: .standardBeat(_simplifyingPedals(of: parts, mode), tempoMap))
+    case let .standardBeat(parts, tempoMap, meterTable):
+        try work.replaceContent(with: .standardBeat(_simplifyingPedals(of: parts, mode), tempoMap, meterTable))
 
     case let .standardWall(parts):
         try work.replaceContent(with: .standardWall(_simplifyingPedals(of: parts, mode)))

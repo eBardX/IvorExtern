@@ -28,7 +28,7 @@ extension MIDIExporterTests {
 
         let parts = [Part(name: "Violin", noteTable: table, extras: channelExtras(3)),
                      Part(name: "Viola", noteTable: table, extras: channelExtras(3))]
-        let work = Work(name: "Dup", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "Dup", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let channels = sequence.tracks[1...].map { track in
@@ -53,12 +53,12 @@ extension MIDIExporterTests {
         let parts = [Part(name: "Flute", noteTable: table, extras: channelExtras(1)),
                      Part(name: "Oboe", noteTable: table, extras: channelExtras(5)),
                      Part(name: "Clarinet", noteTable: table, extras: channelExtras(9))]
-        let work = Work(name: "NonContiguous", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "NonContiguous", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
 
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(recoveredParts, _) = recovered.content
+        guard case let .keyboardBeat(recoveredParts, _, _) = recovered.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         let recoveredChannels = recoveredParts.map { intValue($0.extras, .midiChannel) }
@@ -74,7 +74,7 @@ extension MIDIExporterTests {
 
         let parts = [Part(name: "Channel 5", noteTable: table),
                      Part(name: "Flute", noteTable: table, extras: channelExtras(1))]
-        let work = Work(name: "Renamed", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "Renamed", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let channels = sequence.tracks[1...].map { track in
@@ -94,6 +94,25 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_dottedQuarterTempo_writesMicrosecondsPerQuarter() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero,
+                        tempo: tempo("3/8=80"))
+
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([], tempoMap, MeterTable())))
+        let tempos = sequence.tracks[0].events.compactMap { event -> UInt? in
+            guard case let .meta(_, .tempo(tempo)) = event
+            else { return nil }
+
+            return tempo.uintValue
+        }
+
+        // ♩. = 80 is ♩ = 120.
+        #expect(tempos == [500_000])
+    }
+
+    @Test
     func convert_everyPedalExported_portamentoIncluded() throws {
         var pedals: [Pedal: PedalTable<BeatTime>] = [:]
 
@@ -107,11 +126,25 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_freeMeter_writesAMarkerAlone() throws {
+        let events = try midiExportedMeterEvents(["0 4/4", "1 free"])
+
+        #expect(events == ["0 4/4", "1920 Ivor meter free"])
+    }
+
+    @Test
+    func convert_groupedMeter_writesItsSumAndAMarker() throws {
+        let events = try midiExportedMeterEvents(["0 2+2+3/8"])
+
+        #expect(events == ["0 7/8", "0 Ivor meter 2+2+3/8"])
+    }
+
+    @Test
     func convert_halfLevel_roundsToNearestValue() throws {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 64, denominator: 127)))
-        sustain.insert(time: 1, level: Pedal.Level(Number(numerator: 1, denominator: 2)))
+        sustain.insert(time: beat(1, 4), level: Pedal.Level(Number(numerator: 1, denominator: 2)))
 
         #expect(try midiExportedPedalEvents([.sustain: sustain]).map(\.value) == [64, 64])
     }
@@ -131,7 +164,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: table,
                         instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.Program? in
@@ -155,7 +188,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
         let events = sequence.tracks[1].events
 
@@ -183,7 +216,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let programChanges = sequence.tracks[1].events.compactMap { event -> MIDI.Program? in
@@ -205,7 +238,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let hasProgramChange = sequence.tracks[1].events.contains {
@@ -219,10 +252,25 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_irrationalMeterWithAStandIn_writesTheStandInAlone() throws {
+        let events = try midiExportedMeterEvents(["0 6/12"])
+
+        #expect(events == ["0 2/4"])
+    }
+
+    @Test
+    func convert_irrationalMeterWithNoStandIn_repeatsTheTimeSignatureAndWritesAMarker() throws {
+        let events = try midiExportedMeterEvents(["0 3/4", "3/2 4/3"])
+
+        #expect(events == ["0 3/4", "2880 3/4", "2880 Ivor meter 4/3"])
+    }
+
+    @Test
     func convert_keyboardBeat_empty() throws {
         let work = Work(name: "Test",
                         content: .keyboardBeat([],
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.format == .format1)
@@ -234,14 +282,15 @@ extension MIDIExporterTests {
         var table = NoteTable<BeatTime, NoteNumber>()
 
         table.insert(attack: BeatTime(0),
-                     duration: BeatDuration(1),
+                     duration: dur(1, 4),
                      pitch: NoteNumber(60))
 
         let part = Part(name: "Piano",
                         noteTable: table)
         let work = Work(name: "Test",
                         content: .keyboardBeat([part],
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.tracks.count == 2)
@@ -281,7 +330,8 @@ extension MIDIExporterTests {
 
         let work = Work(name: "Tempo",
                         content: .keyboardBeat([],
-                                               tempoMap))
+                                               tempoMap,
+                                               MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         let track0 = sequence.tracks[0]
@@ -312,7 +362,8 @@ extension MIDIExporterTests {
                      Part(name: "P2", noteTable: table2)]
         let work = Work(name: "TwoParts",
                         content: .keyboardBeat(parts,
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.tracks.count == 3)
@@ -330,6 +381,13 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_meterless_writesCommonTime() throws {
+        let events = try midiExportedMeterEvents([])
+
+        #expect(events == ["0 4/4"])
+    }
+
+    @Test
     func convert_midiBankExtra_emitsBankSelectBeforeProgramChange() throws {
         var instrumentTable = InstrumentTable<BeatTime>()
 
@@ -340,7 +398,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
         let events = sequence.tracks[1].events
 
@@ -378,7 +436,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         dynamicMap: dynamicMap)
-        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
 
         #expect(!sequence.tracks[1].events.contains {
             if case .midi(_, .controlChange(_, .expressionControllerMSB, _)) = $0 { true } else { false }
@@ -395,7 +453,7 @@ extension MIDIExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.midiKeyPressure.name, values: [.int(-1)])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
 
         #expect(!sequence.tracks[1].events.contains {
             if case .midi(_, .polyphonicPressure) = $0 { true } else { false }
@@ -413,7 +471,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         panMap: panMap)
-        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
         let events = sequence.tracks[1].events
 
         #expect(events.contains {
@@ -422,25 +480,6 @@ extension MIDIExporterTests {
         #expect(!events.contains {
             if case .midi(_, .controlChange(_, .panLSB, _)) = $0 { true } else { false }
         })
-    }
-
-    @Test
-    func convert_negativeMidiTempo_fallsBackToTheTempo() throws {
-        var tempoMap = TempoMap()
-
-        try tempoMap.insert(beatTime: .zero,
-                            tempo: #require(Tempo(uintValue: 120)),
-                            extras: Extras(elements: [Extra(name: Extra.midiTempo.name, values: [.int(-1)])]))
-
-        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([], tempoMap)))
-        let tempos = sequence.tracks[0].events.compactMap { event -> UInt? in
-            guard case let .meta(_, .tempo(tempo)) = event
-            else { return nil }
-
-            return tempo.uintValue
-        }
-
-        #expect(tempos == [500_000])
     }
 
     @Test
@@ -454,7 +493,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         instrumentTable: instrumentTable)
-        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+        let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
 
         #expect(!sequence.tracks[1].events.contains {
             if case .midi(_, .controlChange(_, .channelVolumeMSB, _)) = $0 { true } else { false }
@@ -469,7 +508,7 @@ extension MIDIExporterTests {
     @Test
     func convert_options_invalidTickRate_throws() {
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: MIDI.Error.self) {
             try MIDI.Exporter().convert(work,
@@ -491,7 +530,7 @@ extension MIDIExporterTests {
     @Test
     func convert_options_tickRate_setsMetricalDivision() throws {
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work,
                                                    options: MIDIExportOptions(ticksPerQuarterNote: 960))
 
@@ -510,13 +549,20 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_pickup_writesARestartWhereThePickupEnds() throws {
+        let events = try midiExportedMeterEvents(["pickup 1/4", "0 3/4"])
+
+        #expect(events == ["0 3/4", "480 3/4"])
+    }
+
+    @Test
     func convert_repedal_keepsUpThenDownAtOneTick() throws {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sustain.insert(time: 1, level: .up)
-        sustain.insert(time: 1, level: .down)
-        sustain.insert(time: 2, level: .up)
+        sustain.insert(time: beat(1, 4), level: .up)
+        sustain.insert(time: beat(1, 4), level: .down)
+        sustain.insert(time: beat(1, 2), level: .up)
 
         let events = try midiExportedPedalEvents([.sustain: sustain])
 
@@ -529,7 +575,7 @@ extension MIDIExporterTests {
         let parts = (1...16).map {
             Part(name: "P\($0)", noteTable: NoteTable<BeatTime, NoteNumber>())
         }
-        let work = Work(name: "Sixteen", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "Sixteen", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.tracks.count == 17)
@@ -537,7 +583,7 @@ extension MIDIExporterTests {
 
     @Test
     func convert_smpteOffset_impliedByMetricalDivision_omitted() throws {
-        let work = Work(name: "Offset", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Offset", content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(try smpteOffsets(in: MIDI.Exporter().convert(work)).isEmpty)
     }
@@ -555,7 +601,7 @@ extension MIDIExporterTests {
     func convert_smpteOffset_unimpliedZero_written() throws {
         let startTime = try #require(SMPTETime(string: "00:00:00:00", frameRate: .fps30))
         let work = Work(name: "Offset",
-                        content: .keyboardBeat([], TempoMap()),
+                        content: .keyboardBeat([], TempoMap(), MeterTable()),
                         smpteStartTime: startTime)
 
         #expect(try smpteOffsets(in: MIDI.Exporter().convert(work)) == [startTime])
@@ -564,7 +610,7 @@ extension MIDIExporterTests {
     @Test
     func convert_smpteOffset_unsupportedFrameRate_omitted() throws {
         let work = try Work(name: "Offset",
-                            content: .keyboardBeat([], TempoMap()),
+                            content: .keyboardBeat([], TempoMap(), MeterTable()),
                             smpteStartTime: #require(SMPTETime(string: "01:00:00:00", frameRate: .fps50)))
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -593,7 +639,7 @@ extension MIDIExporterTests {
     func convert_smpteOffset_writesMetaEvent() throws {
         let startTime = try #require(SMPTETime(string: "01:00:00:00", frameRate: .fps25))
         let work = Work(name: "Offset",
-                        content: .keyboardBeat([], TempoMap()),
+                        content: .keyboardBeat([], TempoMap(), MeterTable()),
                         smpteStartTime: startTime)
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -606,10 +652,10 @@ extension MIDIExporterTests {
         var tempoMap = TempoMap()
 
         tempoMap.insert(beatTime: .zero,
-                        tempo: 120,
+                        tempo: Tempo(120),
                         extras: timeCodeExtras("25", 40))
 
-        let work = Work(name: "TimeCode", content: .keyboardBeat([], tempoMap))
+        let work = Work(name: "TimeCode", content: .keyboardBeat([], tempoMap, MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
 
         #expect(sequence.division == .metrical(SMFTickRate(480)))
@@ -684,7 +730,7 @@ extension MIDIExporterTests {
     func convert_timeCode_unencodable_fallsBackToMetrical(frameRate: String,
                                                           ticksPerFrame: Int) throws {
         let work = Work(name: "TimeCode",
-                        content: .keyboardBeat([], TempoMap()),
+                        content: .keyboardBeat([], TempoMap(), MeterTable()),
                         extras: timeCodeExtras(frameRate, ticksPerFrame))
         let sequence = try MIDI.Exporter().convert(work)
 
@@ -695,16 +741,16 @@ extension MIDIExporterTests {
     func convert_timeCode_writesTimeCodeDivision() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
-        table.insert(attack: BeatTime(2), duration: BeatDuration(3), pitch: NoteNumber(60))
+        table.insert(attack: beat(1, 2), duration: dur(3, 4), pitch: NoteNumber(60))
 
         var tempoMap = TempoMap()
 
-        tempoMap.insert(beatTime: .zero, tempo: 120)
-        tempoMap.insert(beatTime: BeatTime(4), tempo: 120)
-        tempoMap.insert(beatTime: BeatTime(4), tempo: 60)
+        tempoMap.insert(beatTime: .zero, tempo: Tempo(120))
+        tempoMap.insert(beatTime: beat(1), tempo: Tempo(120))
+        tempoMap.insert(beatTime: beat(1), tempo: Tempo(60))
 
         let work = Work(name: "TimeCode",
-                        content: .keyboardBeat([Part(name: "Piano", noteTable: table)], tempoMap),
+                        content: .keyboardBeat([Part(name: "Piano", noteTable: table)], tempoMap, MeterTable()),
                         extras: timeCodeExtras("25", 40))
         let sequence = try MIDI.Exporter().convert(work)
         let noteTimes = sequence.tracks[1].events.compactMap { event -> UInt? in
@@ -733,7 +779,8 @@ extension MIDIExporterTests {
         }
         let work = Work(name: "TooMany",
                         content: .keyboardBeat(parts,
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
 
         #expect(throws: (any Error).self) {
             try MIDI.Exporter().convert(work)
@@ -744,7 +791,8 @@ extension MIDIExporterTests {
     func convert_track0_hasTimeSignature() throws {
         let work = Work(name: "",
                         content: .keyboardBeat([],
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
         let sequence = try MIDI.Exporter().convert(work)
         let track0 = sequence.tracks[0]
         let tsigEvents = track0.events.filter {
@@ -876,7 +924,7 @@ extension MIDIExporterTests {
                      pitch: NoteNumber(62),
                      extras: Extras(elements: [Extra(name: Extra.attackVelocity.name, values: [.int(50)])]))
 
-        var work = Work(name: "Legato", content: .keyboardBeat([Part(name: "Piano", noteTable: table)], TempoMap()))
+        var work = Work(name: "Legato", content: .keyboardBeat([Part(name: "Piano", noteTable: table)], TempoMap(), MeterTable()))
 
         try work.reverse(within: nil as ClosedRange<BeatTime>?)
 
@@ -908,7 +956,7 @@ extension MIDIExporterTests {
         dynamicMap.insert(time: BeatTime(0), dynamic: .mf)
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Velocity", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Velocity", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -917,6 +965,58 @@ extension MIDIExporterTests {
         let recoveredPart = try #require(keyboardBeatParts(of: recovered)?.first)
 
         #expect(intValue(recoveredPart.noteTable.first?.extras, .attackVelocity) == 77)
+    }
+
+    @Test
+    func roundTrip_clocksPerClick36_keepsTheMIDITimeSignatureExtra() throws {
+        let extras = Extras(elements: [Extra(name: Extra.midiTimeSignature.name,
+                                             values: [.int(36), .int(8)])])
+        let table = try meterTable([(.zero, "6/8")], extras: extras)
+        let recovered = try roundTrip(meteredKeyboardWork(table, length: dur(3, 2)),
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+
+        #expect(meterSummary(recovered.meterTable) == ["0 6/8"])
+        #expect(recovered.meterTable?.first?.extras == extras)
+    }
+
+    @Test
+    func roundTrip_clocksPerClick36_preservesWallTimes() throws {
+        // A 6/8 file whose metronome clicks every dotted quarter (36 MIDI
+        // clocks), at 500,000 µs per quarter note.
+        let key = MIDIData1Value(60)
+        let noteTicks: [UInt] = [0, 480, 960, 1_440, 2_160]
+        let timeSig = try #require(SMFTimeSignature(numerator: 6,
+                                                    denominator: 3,
+                                                    clockRate: 36,
+                                                    beatRate: 8))
+        var events: [SMFEvent] = [.meta(.zero, .timeSignature(timeSig)),
+                                  .meta(.zero, .tempo(SMFTempo(500_000)))]
+
+        for tick in noteTicks {
+            events.append(.midi(SMFEventTime(tick), .noteOn(MIDIChannel(1), key, MIDIData1Value(100))))
+            events.append(.midi(SMFEventTime(tick + 240), .noteOff(MIDIChannel(1), key, MIDIData1Value(64))))
+        }
+
+        events.append(.meta(SMFEventTime(2_400), .endOfTrack))
+
+        let original = try MIDI.Importer().convert(SMFSequence(format: .format0,
+                                                               division: .metrical(SMFTickRate(480)),
+                                                               tracks: [SMFTrack(events: events)]))
+        let recovered = try MIDI.Importer().convert(MIDI.Exporter().convert(original))
+        let originalTimes = try attackWallTimes(of: original)
+
+        // Tick 1,440 is three quarter notes in: 1.5 s.
+        #expect(originalTimes.map { ($0 * 1_000).rounded() } == noteTicks.map { Double($0) * 500 / 480 })
+
+        let recoveredTimes = try attackWallTimes(of: recovered)
+
+        try #require(recoveredTimes.count == originalTimes.count)
+
+        for (recoveredTime, originalTime) in zip(recoveredTimes, originalTimes) {
+            #expect(abs(recoveredTime - originalTime) < 0.001)
+        }
     }
 
     @Test
@@ -931,12 +1031,12 @@ extension MIDIExporterTests {
         try dynamicMap.insert(time: BeatTime(4), dynamic: #require(Dynamic(numberValue: Number(0.9))))
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Ramp", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Ramp", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = recovered.content,
+        guard case let .keyboardBeat(parts, _, _) = recovered.content,
               let recoveredPart = parts.first
         else { Issue.record("Expected a recovered part"); return }
 
@@ -955,7 +1055,7 @@ extension MIDIExporterTests {
         try dynamicMap.insert(time: BeatTime(4), dynamic: #require(Dynamic(numberValue: Number(1.0))))
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Dynamics", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Dynamics", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -973,12 +1073,11 @@ extension MIDIExporterTests {
     func roundTrip_exactMicrosecondsPerQuarter_preservesSubBPMPrecision() throws {
         var tempoMap = TempoMap()
 
+        // 408,163 µs per quarter: ♩ = 60,000,000/408,163, about 147.0001.
         tempoMap.insert(beatTime: BeatTime(0),
-                        tempo: Tempo(147),
-                        extras: Extras(elements: [Extra(name: Extra.midiTempo.name,
-                                                        values: [.int(408_163)])]))
+                        tempo: convertToTempo(SMFTempo(408_163)))
 
-        let work = Work(name: "ExactTempo", content: .keyboardBeat([], tempoMap))
+        let work = Work(name: "ExactTempo", content: .keyboardBeat([], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -986,13 +1085,7 @@ extension MIDIExporterTests {
                                       fileFormat: .midi)
         let recoveredTempoMap = try #require(recovered.tempoMap)
 
-        var found: Int?
-
-        for entry in recoveredTempoMap where entry.beatTime == BeatTime(0) {
-            found = intValue(entry.extras, .midiTempo)
-        }
-
-        #expect(found == 408_163)
+        #expect(recoveredTempoMap[BeatTime(0)] == tempo("1/4=60000000/408163"))
     }
 
     @Test
@@ -1008,7 +1101,7 @@ extension MIDIExporterTests {
                           extras: Extras(elements: [Extra(name: Extra.expressionValue.name, values: [.int(100)])]))
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Expression", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Expression", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1061,7 +1154,7 @@ extension MIDIExporterTests {
         try instrumentTable.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Violin")))
 
         let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1085,7 +1178,7 @@ extension MIDIExporterTests {
                                    extras: Extras(elements: [Extra(name: Extra.midiProgram.name, values: [.int(41)])]))
 
         let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instrument", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Instrument", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1099,6 +1192,38 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func roundTrip_meterless_comesBackInCommonTime() throws {
+        let recovered = try roundTrip(meteredKeyboardWork(MeterTable(), length: dur(2)),
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+
+        #expect(meterSummary(recovered.meterTable) == ["0 4/4"])
+    }
+
+    @Test(arguments: [["0 6/8"],
+                      ["0 2+2+3/8"],
+                      ["0 5/8"],
+                      ["0 4/3"],
+                      ["0 4/4", "1 4/3", "7/3 3/4"],
+                      ["pickup 1/4", "0 3/4"],
+                      ["pickup 1/4", "0 4/4", "1/4 3/4"],
+                      ["0 4/4", "7/4 4/4"],
+                      ["0 4/4", "1 3/4", "3/2 3/4"],
+                      ["0 4/4", "1 free", "3 3/4"],
+                      ["0 free"]])
+    func roundTrip_meterTable_isKept(_ summary: [String]) throws {
+        let table = try meterTable(summary: summary)
+        let recovered = try roundTrip(meteredKeyboardWork(table, length: dur(4)),
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+
+        #expect(meterSummary(recovered.meterTable) == summary)
+        #expect(recovered.meterTable?.allSatisfy { $0.extras == nil } == true)
+    }
+
+    @Test
     func roundTrip_midiKeyPressure_preservesPeakValue() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
@@ -1108,7 +1233,7 @@ extension MIDIExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.midiKeyPressure.name, values: [.int(90)])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "KeyPressure", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "KeyPressure", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1136,7 +1261,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         panMap: panMap)
-        let work = Work(name: "MidiPan", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "MidiPan", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1166,7 +1291,7 @@ extension MIDIExporterTests {
                                    extras: Extras(elements: [Extra(name: Extra.midiVolume.name, values: [.double(90)])]))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Volume", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Volume", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1198,7 +1323,7 @@ extension MIDIExporterTests {
 
         let parts = [Part(name: "P1", noteTable: table1),
                      Part(name: "P2", noteTable: table2)]
-        let work = Work(name: "MultiPart", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "MultiPart", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1221,7 +1346,7 @@ extension MIDIExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: NoteNumber(67))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1242,7 +1367,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         panMap: panMap)
-        let work = Work(name: "Pan", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Pan", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1269,12 +1394,12 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         panMap: panMap)
-        let work = Work(name: "PanRamp", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "PanRamp", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = recovered.content,
+        guard case let .keyboardBeat(parts, _, _) = recovered.content,
               let recoveredPart = parts.first
         else { Issue.record("Expected a recovered part"); return }
 
@@ -1292,7 +1417,7 @@ extension MIDIExporterTests {
         let part = Part(name: "Piano",
                         noteTable: NoteTable<BeatTime, NoteNumber>(),
                         panMap: panMap)
-        let work = Work(name: "PanStep", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "PanStep", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
                                       importer: MIDI.Importer(),
@@ -1340,7 +1465,7 @@ extension MIDIExporterTests {
                      extras: velocity.map { Extras(elements: [Extra(name: Extra.releaseVelocity.name, values: [.int($0)])]) })
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "ReleaseVelocity", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "ReleaseVelocity", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1358,6 +1483,17 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func roundTrip_sixTwelve_comesBackAsTwoFour() throws {
+        let table = try meterTable(summary: ["0 6/12"])
+        let recovered = try roundTrip(meteredKeyboardWork(table, length: dur(2)),
+                                      exporter: MIDI.Exporter(),
+                                      importer: MIDI.Importer(),
+                                      fileFormat: .midi)
+
+        #expect(meterSummary(recovered.meterTable) == ["0 2/4"])
+    }
+
+    @Test
     func roundtrip_tempoMap_accelerando_isStableAfterFirstPass() throws {
         var smoothTempoMap = TempoMap()
 
@@ -1365,7 +1501,7 @@ extension MIDIExporterTests {
         smoothTempoMap.insert(beatTime: BeatTime(8), tempo: Tempo(160))
 
         let originalWork = Work(name: "Accel",
-                                content: .keyboardBeat([], smoothTempoMap))
+                                content: .keyboardBeat([], smoothTempoMap, MeterTable()))
 
         let sequence1 = try MIDI.Exporter().convert(originalWork)
         let work1 = try MIDI.Importer().convert(sequence1)
@@ -1403,14 +1539,16 @@ extension MIDIExporterTests {
     func roundtrip_tempoMap_stepChanges_areIdempotent() throws {
         var canonicalTempoMap = TempoMap()
 
+        // 120, 150 and 160 quarter notes per minute are whole numbers of
+        // microseconds per quarter, so they come back exactly.
         canonicalTempoMap.insert(beatTime: BeatTime(0), tempo: Tempo(120))
-        canonicalTempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(120))
-        canonicalTempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(140))
-        canonicalTempoMap.insert(beatTime: BeatTime(8), tempo: Tempo(140))
-        canonicalTempoMap.insert(beatTime: BeatTime(8), tempo: Tempo(160))
+        canonicalTempoMap.insert(beatTime: beat(1), tempo: Tempo(120))
+        canonicalTempoMap.insert(beatTime: beat(1), tempo: Tempo(150))
+        canonicalTempoMap.insert(beatTime: beat(2), tempo: Tempo(150))
+        canonicalTempoMap.insert(beatTime: beat(2), tempo: Tempo(160))
 
         let originalWork = Work(name: "Roundtrip",
-                                content: .keyboardBeat([], canonicalTempoMap))
+                                content: .keyboardBeat([], canonicalTempoMap, MeterTable()))
 
         var originalEntries: [(beatTime: BeatTime, tempo: Tempo)] = []
 
@@ -1447,7 +1585,7 @@ extension MIDIExporterTests {
         tempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(120))
         tempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(160))
 
-        let work = Work(name: "Tempo", content: .keyboardBeat([], tempoMap))
+        let work = Work(name: "Tempo", content: .keyboardBeat([], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
@@ -1470,7 +1608,7 @@ extension MIDIExporterTests {
         }
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Velocities", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Velocities", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let recovered = try roundTrip(work,
                                       exporter: MIDI.Exporter(),
                                       importer: MIDI.Importer(),
@@ -1518,8 +1656,8 @@ extension MIDIExporterTests {
 
     @Test
     func write_multipleWorks_throws() {
-        let works = [Work(name: "A", content: .keyboardBeat([], TempoMap())),
-                     Work(name: "B", content: .keyboardBeat([], TempoMap()))]
+        let works = [Work(name: "A", content: .keyboardBeat([], TempoMap(), MeterTable())),
+                     Work(name: "B", content: .keyboardBeat([], TempoMap(), MeterTable()))]
 
         #expect(throws: (any Error).self) {
             try MIDI.Exporter().write(works: works, as: .midi)
@@ -1528,7 +1666,7 @@ extension MIDIExporterTests {
 
     @Test
     func write_singleWork_returnsRegularFile() throws {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
         let wrapper = try MIDI.Exporter().write(works: [work], as: .midi)
 
         #expect(wrapper.isRegularFile)
@@ -1537,7 +1675,7 @@ extension MIDIExporterTests {
 
     @Test
     func write_unsupportedFormat_throws() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: (any Error).self) {
             try MIDI.Exporter().write(works: [work], as: .abc)

@@ -28,7 +28,7 @@ extension ABCFormatterTests {
 
     @Test
     func format_minimalTunebook_nonEmpty() throws {
-        let work = Work(name: "Test", content: .standardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([], TempoMap(), MeterTable()))
         let tune = try ABC.Exporter().convert(work)
         let tunebook = try #require(ABCTunebook(fileHeader: [], tunes: [tune]))
 
@@ -39,7 +39,7 @@ extension ABCFormatterTests {
 
     @Test
     func format_roundTrip_preservesTuneCount() throws {
-        let work = Work(name: "Test", content: .standardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([], TempoMap(), MeterTable()))
         let tune = try ABC.Exporter().convert(work)
         let tunebook = try #require(ABCTunebook(fileHeader: [], tunes: [tune]))
 

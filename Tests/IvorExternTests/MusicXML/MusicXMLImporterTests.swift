@@ -24,7 +24,7 @@ extension MusicXMLImporterTests {
                                                  "<pedal type=\"change\"/>",
                                                  "<pedal type=\"stop\"/>"])
 
-        #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
+        #expect(pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 4), beat(1, 4), beat(1, 2)])
         #expect(pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
     }
 
@@ -81,7 +81,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.dynamicMap[.zero] == .mf)
@@ -136,16 +136,54 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_implicitPickupMeasure_becomesThePickup() throws {
+        let work = try readMusicXMLMeteredMeasures([(musicXMLTime("3", "4"), musicXMLNote("G", duration: 1)),
+                                                    ("", musicXMLNote("C", duration: 3)),
+                                                    ("", musicXMLNote("D", duration: 3))],
+                                                   isFirstImplicit: true)
+
+        #expect(meterSummary(work.meterTable) == ["pickup 1/4", "0 3/4"])
+    }
+
+    @Test
     func read_interleavedNumbers_pairStopWithItsOpener() throws {
         let pedals = try musicXMLImportedPedals(["<pedal type=\"start\" number=\"1\"/>",
                                                  "<pedal type=\"sostenuto\" number=\"2\"/>",
                                                  "<pedal type=\"stop\" number=\"1\"/>",
                                                  "<pedal type=\"stop\" number=\"2\"/>"])
 
-        #expect(pedals[.sustain]?.map(\.time) == [0, 2])
+        #expect(pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 2)])
         #expect(pedals[.sustain]?.map(\.level) == [.down, .up])
-        #expect(pedals[.sostenuto]?.map(\.time) == [1, 3])
+        #expect(pedals[.sostenuto]?.map(\.time) == [beat(1, 4), beat(3, 4)])
         #expect(pedals[.sostenuto]?.map(\.level) == [.down, .up])
+    }
+
+    @Test
+    func read_meterChangesInLaterParts_areIgnored() throws {
+        let attributes = "<divisions>1</divisions>"
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>A</part-name></score-part>
+                <score-part id="P2"><part-name>B</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes>\(attributes)\(musicXMLTime("2", "4"))</attributes>\(musicXMLNote("C", duration: 2))
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes>\(attributes)\(musicXMLTime("3", "4"))</attributes>\(musicXMLNote("C", duration: 2))
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let works = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(musicXML.utf8)),
+                                                 as: .musicXML)
+
+        #expect(meterSummary(works.first?.meterTable) == ["0 2/4"])
     }
 
     @Test
@@ -184,10 +222,10 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(tempoMap[.zero] == Tempo(uintValue: 96))
+        #expect(tempoMap[.zero] == Tempo(96))
     }
 
     @Test
@@ -214,7 +252,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         let foundChannel = intValue(parts.first?.extras, .midiChannel)
@@ -252,7 +290,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable.isEmpty == true)
@@ -293,7 +331,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Voice 1", "Cello", "Voice 3"])
@@ -362,16 +400,16 @@ extension MusicXMLImporterTests {
 
         #expect(voice1Notes.count == 3)
         #expect(voice1Notes[0].attack == .zero)
-        #expect(voice1Notes[0].duration == BeatDuration(2))
+        #expect(voice1Notes[0].duration == dur(1, 2))
         #expect(Set(voice1Notes[0..<2].map(\.pitch)) == ["C5", "E5"])
-        #expect(voice1Notes[2].attack == BeatTime(2))
+        #expect(voice1Notes[2].attack == beat(1, 2))
         #expect(voice1Notes[2].pitch == "D5")
 
         let voice2Notes = notes(in: parts[1])
 
         #expect(voice2Notes.count == 1)
         #expect(voice2Notes[0].attack == .zero)
-        #expect(voice2Notes[0].duration == BeatDuration(4))
+        #expect(voice2Notes[0].duration == dur(1))
         #expect(voice2Notes[0].pitch == "C3")
     }
 
@@ -405,7 +443,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         //
@@ -415,6 +453,13 @@ extension MusicXMLImporterTests {
         // source.
         //
         #expect(parts.first?.dynamicMap[.zero] == Dynamic(numberValue: Number(numerator: 81, denominator: 127)))
+    }
+
+    @Test
+    func read_noTime_isMeterless() throws {
+        let work = try readMusicXMLMeteredMeasures([("", musicXMLNote("C", duration: 4))])
+
+        #expect(work.meterTable?.isEmpty == true)
     }
 
     @Test
@@ -464,10 +509,20 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Horns in F (1, 2)", "Horns in F (3, 4)", "Tuba"])
+    }
+
+    @Test
+    func read_repeatedTime_keepsTheTableAndSymbol() throws {
+        let time = musicXMLTime("4", "4", symbol: "common")
+        let work = try readMusicXMLMeteredMeasures([(time, musicXMLNote("C", duration: 4)),
+                                                    (time, musicXMLNote("D", duration: 4))])
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4"])
+        #expect(stringValue(work.meterTable?.first?.extras, .meterSymbol) == "common")
     }
 
     @Test
@@ -501,7 +556,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -557,11 +612,29 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!(parts.first?.panMap.isEmpty ?? true))
         #expect(parts.first?.panMap[.zero] == .center)
+    }
+
+    @Test
+    func read_senzaMisura_isFree() throws {
+        let work = try readMusicXMLMeteredMeasures([(musicXMLTime("4", "4"), musicXMLNote("C", duration: 4)),
+                                                    ("<time><senza-misura/></time>", musicXMLNote("D", duration: 6)),
+                                                    (musicXMLTime("3", "4"), musicXMLNote("E", duration: 3))])
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "1 free", "5/2 3/4"])
+    }
+
+    @Test
+    func read_shortMeasureMidPiece_becomesARestart() throws {
+        let work = try readMusicXMLMeteredMeasures([(musicXMLTime("4", "4"), musicXMLNote("C", duration: 4)),
+                                                    ("", musicXMLNote("D", duration: 3)),
+                                                    ("", musicXMLNote("E", duration: 4))])
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "7/4 4/4"])
     }
 
     @Test
@@ -572,7 +645,7 @@ extension MusicXMLImporterTests {
 
         #expect(pedals[.sustain]?.map(\.level) == [.down, .up])
         #expect(pedals[.soft]?.map(\.level) == [Pedal.Level(Number(numerator: 1, denominator: 2))])
-        #expect(pedals[.sostenuto]?.map(\.time) == [1])
+        #expect(pedals[.sostenuto]?.map(\.time) == [beat(1, 4)])
     }
 
     @Test
@@ -648,7 +721,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!(parts.first?.panMap.isEmpty ?? true))
@@ -683,7 +756,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
@@ -814,7 +887,7 @@ extension MusicXMLImporterTests {
         #expect(parts.count == 2)
 
         for part in parts {
-            #expect(part.pedals[.sustain]?.map(\.time) == [0, 1])
+            #expect(part.pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 4)])
             #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
         }
     }
@@ -846,7 +919,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         let dynamicMap = try #require(parts.first?.dynamicMap)
@@ -860,7 +933,7 @@ extension MusicXMLImporterTests {
         #expect(dynamicMap[.zero] == .f)
         #expect(dynamicMap[BeatTime(2)] == .mf)
         #expect(dynamicMap[BeatTime(1)] != .f)
-        #expect(dynamicMap[BeatTime(1)] != .mf)
+        #expect(dynamicMap[beat(1, 4)] != .mf)
     }
 
     @Test

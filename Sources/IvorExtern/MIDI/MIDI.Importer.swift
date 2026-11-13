@@ -102,8 +102,8 @@ extension MIDI.Importer {
             guard case let .meta(eventTime, .tempo(tempo)) = event
             else { continue }
 
-            let (beatTime, factor) = beatMap[eventTime]
-            let currTempo = convertToTempo(tempo, factor)
+            let beatTime = beatMap[eventTime]
+            let currTempo = convertToTempo(tempo)
 
             if beatTime != .zero {
                 tempoMap.insert(beatTime: beatTime,
@@ -111,9 +111,7 @@ extension MIDI.Importer {
             }
 
             tempoMap.insert(beatTime: beatTime,
-                            tempo: currTempo,
-                            extras: Extras(elements: [Extra(name: Extra.midiTempo.name,
-                                                            values: [.int(Int(tempo.uintValue))])]))
+                            tempo: currTempo)
 
             prevTempo = currTempo
         }
@@ -214,7 +212,9 @@ extension MIDI.Importer {
         return .keyboardBeat(_convert(voices,
                                       beatMap),
                              _convert(timeline,
-                                      beatMap))
+                                      beatMap),
+                             _makeMeterTable(timeline,
+                                             beatMap))
     }
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
@@ -231,10 +231,6 @@ extension MIDI.Importer {
             case let .meta(eventTime, .tempo(tempo)):
                 try beatMap.append(eventTime: eventTime,
                                    tempo: tempo.uintValue)
-
-            case let .meta(eventTime, .timeSignature(tsig)):
-                try beatMap.append(eventTime: eventTime,
-                                   clockRate: tsig.clockRate)
 
             default:
                 continue
@@ -375,6 +371,49 @@ extension MIDI.Importer {
         }
 
         return instrumentTable
+    }
+
+    // One barline per tick that has a time signature or an `Ivor meter`
+    // marker (see `makeMeterMarker(_:)`), whose meter replaces the time
+    // signature's there. A time signature's clocks per click and 32nds per
+    // quarter are kept in a `midiTimeSignature` extra unless they're the
+    // defaults. Time signatures never affect timing.
+    private static func _makeMeterTable(_ timeline: [MIDI.Event],
+                                        _ beatMap: MIDI.BeatMap) -> MeterTable {
+        var ticks: [MIDI.EventTime] = []
+        var timeSignatures: [MIDI.EventTime: MIDI.TimeSignature] = [:]
+        var markers: [MIDI.EventTime: Meter] = [:]
+
+        for event in timeline {
+            switch event {
+            case let .meta(eventTime, .marker(text)):
+                guard let meter = parseMeterMarker(text.stringValue)
+                else { continue }
+
+                markers[eventTime] = meter
+
+            case let .meta(eventTime, .timeSignature(timeSignature)):
+                timeSignatures[eventTime] = timeSignature
+
+            default:
+                continue
+            }
+
+            if ticks.last != event.eventTime {
+                ticks.append(event.eventTime)
+            }
+        }
+
+        let barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = ticks.compactMap { tick in
+            let timeSignature = timeSignatures[tick]
+
+            guard let meter = markers[tick] ?? timeSignature.flatMap(convertToMeter)
+            else { return nil }
+
+            return (beatMap[tick], meter, timeSignature.flatMap(convertToMIDITimeSignatureExtras))
+        }
+
+        return makeMeterTable(barlines)
     }
 
     // The work's SMPTE start time is the file's SMPTE Offset, if it has

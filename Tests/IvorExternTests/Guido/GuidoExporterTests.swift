@@ -166,7 +166,7 @@ extension GuidoExporterTests {
         let score = try Guido.Exporter().convert(standardBeatWork(parts: parts))
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(imported, _) = work.content
+        guard case let .standardBeat(imported, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(imported.map(\.name) == ["Voice 1", "Bass"])
@@ -226,6 +226,21 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func convert_meterChange_writesAMeterTagOnlyWhereTheMeterChanges() throws {
+        let table = try meterTable(summary: ["0 4/4", "1 3/4", "3/2 3/4"])
+        let score = try Guido.Exporter().convert(meteredStandardWork(table, length: dur(9, 4)))
+
+        #expect(guidoExportedMeterTypes(score) == ["4/4", "3/4"])
+    }
+
+    @Test
+    func convert_meterless_writesCommonTime() throws {
+        let score = try Guido.Exporter().convert(meteredStandardWork(MeterTable(), length: dur(2)))
+
+        #expect(guidoExportedMeterTypes(score) == ["4/4"])
+    }
+
+    @Test
     func convert_multiPart_emitsOneVoicePerPart() throws {
         var table1 = NoteTable<BeatTime, Pitch>()
 
@@ -271,6 +286,17 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func convert_noteTiedAcrossBarline_writesTheBarline() throws {
+        let table = try meterTable(summary: ["0 3/4"])
+        let score = try Guido.Exporter().convert(meteredStandardWork(table, length: dur(3, 2)))
+        let barLines = flatten(score.voices[0].symbols).filter {
+            if case .tag(.barLine) = $0 { true } else { false }
+        }
+
+        #expect(barLines.count == 2)
+    }
+
+    @Test
     func convert_onlySustainIsWritten() throws {
         var table = PedalTable<BeatTime>()
 
@@ -284,9 +310,9 @@ extension GuidoExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sustain.insert(time: 1, level: .up)
-        sustain.insert(time: 1, level: .down)
-        sustain.insert(time: 2, level: .up)
+        sustain.insert(time: beat(1, 4), level: .up)
+        sustain.insert(time: beat(1, 4), level: .down)
+        sustain.insert(time: beat(1, 2), level: .up)
 
         #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off, .on, .off])
     }
@@ -295,7 +321,7 @@ extension GuidoExporterTests {
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: dur(1, 4), pitch: "C4")
 
         let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
         let score = try Guido.Exporter().convert(work)
@@ -333,7 +359,7 @@ extension GuidoExporterTests {
         // field, a `\tempo` tag has to live in a voice, so at least one part
         // (even an empty one) is required for the tempo to have anywhere to
         // attach.
-        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap))
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap, MeterTable()))
         let score = try Guido.Exporter().convert(work)
         let tempo = try #require(symbols(in: score).compactMap { symbol -> GMNTempo? in
             guard case let .tag(.tempo(tempo)) = symbol
@@ -350,8 +376,8 @@ extension GuidoExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 3, denominator: 4)))
-        sustain.insert(time: 1, level: .down)
-        sustain.insert(time: 2, level: Pedal.Level(Number(numerator: 1, denominator: 4)))
+        sustain.insert(time: beat(1, 4), level: .down)
+        sustain.insert(time: beat(1, 2), level: Pedal.Level(Number(numerator: 1, denominator: 4)))
 
         #expect(try guidoExportedPedalKinds([.sustain: sustain]) == [.on, .off])
     }
@@ -367,7 +393,7 @@ extension GuidoExporterTests {
 
     @Test
     func convert_wrongPitchNotation_throwsUnsupportedPitchNotation() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: Guido.Error.self) {
             try Guido.Exporter().convert(work)
@@ -389,7 +415,7 @@ extension GuidoExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -418,7 +444,7 @@ extension GuidoExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -430,9 +456,20 @@ extension GuidoExporterTests {
     }
 
     @Test
+    func roundTrip_dottedQuarterTempo_writesTheSameTag() throws {
+        let work = try readGuido(#"[ \tempo<"Andante", "3/8=67"> c ]"#)
+        let file = try Guido.Exporter().write(works: [work], as: .gmn)
+        let data = try #require(file.regularFileContents)
+        let gmn = try #require(String(bytes: data, encoding: .utf8))
+
+        #expect(gmn.contains("3/8=67"))
+        #expect(try readGuido(gmn).tempoMap?[.zero] == tempo("3/8=67"))
+    }
+
+    @Test
     func roundTrip_info_preservesWhatGuidoCanHold() throws {
         let work = Work(name: "Aubade: Dawn Song: Morning Piece",
-                        content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap()),
+                        content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap(), MeterTable()),
                         info: sampleGuidoInfo())
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -464,7 +501,7 @@ extension GuidoExporterTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -479,6 +516,47 @@ extension GuidoExporterTests {
         }
 
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
+    }
+
+    @Test(arguments: [("4/4", "common", "C"),
+                      ("2/2", "cut", "C/")])
+    func roundTrip_meterSymbol_isKept(_ plain: String,
+                                      _ symbol: String,
+                                      _ type: String) throws {
+        let extras = Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                                             values: [.string(symbol)])])
+        let table = try meterTable([(.zero, plain)], extras: extras)
+        let work = meteredStandardWork(table, length: dur(2))
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+
+        #expect(try guidoExportedMeterTypes(Guido.Exporter().convert(work)) == [type])
+        #expect(meterSummary(recovered.meterTable) == ["0 \(plain)"])
+        #expect(recovered.meterTable?.first?.extras == extras)
+    }
+
+    @Test(arguments: [["0 6/8"],
+                      ["0 2+2+3/8"],
+                      ["0 5/8"],
+                      ["0 4/3"],
+                      ["0 6/12"],
+                      ["0 4/4", "1 4/3", "7/3 3/4"],
+                      ["pickup 1/4", "0 3/4"],
+                      ["pickup 1/4", "0 4/4", "1/4 3/4"],
+                      ["0 4/4", "7/4 4/4"],
+                      ["0 4/4", "1 3/4", "3/2 3/4"],
+                      ["0 4/4", "1 free", "3 3/4"],
+                      ["0 free"]])
+    func roundTrip_meterTable_isKept(_ summary: [String]) throws {
+        let table = try meterTable(summary: summary)
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(4)),
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+
+        #expect(meterSummary(recovered.meterTable) == summary)
     }
 
     // Each part's own `\instrument`-derived name is voice-scoped, so
@@ -496,7 +574,7 @@ extension GuidoExporterTests {
         table2.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "G3")
 
         let parts = [Part(name: "Lead", noteTable: table1), Part(name: "Bass", noteTable: table2)]
-        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap()))
+        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -520,7 +598,7 @@ extension GuidoExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(2), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -543,7 +621,7 @@ extension GuidoExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -552,6 +630,20 @@ extension GuidoExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_notesAcrossShortBarsAndMeterChanges_keepTheirTimes() throws {
+        let table = try meterTable(summary: ["pickup 1/4", "0 3/4", "5/4 4/4", "2 3/4"])
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(5, 2)),
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let notes = try notes(in: #require(standardBeatParts(of: recovered)?.first))
+
+        #expect(meterSummary(recovered.meterTable) == ["pickup 1/4", "0 3/4", "5/4 4/4", "2 3/4"])
+        #expect(notes.map(\.attack) == [.zero])
+        #expect(notes.map(\.duration) == [dur(5, 2)])
     }
 
     @Test
@@ -587,7 +679,7 @@ extension GuidoExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.articulation.name, values: [.string("bow")])]))
 
         let part = Part(name: "Violin", noteTable: table)
-        let work = Work(name: "Pizzicato", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Pizzicato", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -620,7 +712,7 @@ extension GuidoExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap))
+        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -644,7 +736,7 @@ extension GuidoExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap))
+        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -677,7 +769,7 @@ extension GuidoExporterTests {
                      pitch: "E4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: Guido.Exporter(),
@@ -703,7 +795,7 @@ extension GuidoExporterTests {
     @Test
     func write_info_writesLeadingTagsOfFirstVoice() throws {
         let score = try Guido.Exporter().convert(Work(name: "Sketch",
-                                                      content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap()),
+                                                      content: .standardBeat([Part(name: "", noteTable: NoteTable())], TempoMap(), MeterTable()),
                                                       info: sampleGuidoInfo()))
         let tags = try #require(score.voices.first).symbols.compactMap { symbol -> String? in
             switch symbol {
@@ -737,7 +829,7 @@ extension GuidoExporterTests {
                                extras: Extras(elements: [Extra(name: Extra.instrumentName.name, values: [.string("Flauto 1")])]))
 
         let part = Part<BeatTime, Pitch>(name: "", noteTable: NoteTable(), instrumentTable: instrumentTable)
-        let score = try Guido.Exporter().convert(Work(name: "", content: .standardBeat([part], TempoMap())))
+        let score = try Guido.Exporter().convert(Work(name: "", content: .standardBeat([part], TempoMap(), MeterTable())))
 
         #expect(instruments(in: score).map(\.instrumentName) == ["Flauto 1"])
     }

@@ -19,9 +19,4 @@ extension ExportOptionsTests {
     func equatable_comparesMIDIOptions() {
         #expect(ExportOptions(midi: MIDIExportOptions(ticksPerQuarterNote: 960)) != ExportOptions())
     }
-
-    @Test
-    func key_allCases() {
-        #expect(ExportOptions.Key.allCases == [.midiTicksPerQuarterNote, .midiTimeCode])
-    }
 }

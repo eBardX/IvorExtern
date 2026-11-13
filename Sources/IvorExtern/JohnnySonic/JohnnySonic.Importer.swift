@@ -102,7 +102,8 @@ extension JohnnySonic.Importer {
         guard hasPitchesNotes
         else { return Work(name: workName,
                            content: .keyboardBeat([],
-                                                  tempoMap),
+                                                  tempoMap,
+                                                  MeterTable()),
                            info: info) }
 
         if hasAbsolutePitch {
@@ -111,14 +112,16 @@ extension JohnnySonic.Importer {
 
             return Work(name: workName,
                         content: .absoluteBeat(parts,
-                                               tempoMap),
+                                               tempoMap,
+                                               MeterTable()),
                         info: info)
         } else {
             let parts = try _convertKeyboard(activeCommands)
 
             return Work(name: workName,
                         content: .keyboardBeat(parts,
-                                               tempoMap),
+                                               tempoMap,
+                                               MeterTable()),
                         info: info)
         }
     }
@@ -320,7 +323,7 @@ extension JohnnySonic.Importer {
             if let ramp = rampsByStartBeat[beat] {
                 extras = Extras(elements: [Extra(name: Extra.rampStartTempo.name, values: [.double(ramp.start)]),
                                            Extra(name: Extra.rampEndTempo.name, values: [.double(ramp.end)]),
-                                           Extra(name: Extra.rampDuration.name, values: [.double(ramp.duration)])])
+                                           Extra(name: Extra.rampDuration.name, values: [.double(ramp.duration / 4)])])
             }
 
             tempoMap.insert(beatTime: convertToBeatTime(Double(beat)),

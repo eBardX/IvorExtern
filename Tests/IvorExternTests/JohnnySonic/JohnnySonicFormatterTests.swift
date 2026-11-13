@@ -35,7 +35,7 @@ extension JohnnySonicFormatterTests {
     @Test
     func format_roundTrip_preservesCommandCount() throws {
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
         let data = try JohnnySonic.Formatter().format(score)
 

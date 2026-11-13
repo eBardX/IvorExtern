@@ -37,6 +37,11 @@ internal import XestiTools
 // falls back to `directionDynamicEvents` otherwise — see
 // `MusicXML.Importer._makeDynamicMap`.
 //
+// `barlines` holds one entry per measure visit with a meter in force: where
+// the measure starts, the meter of its `<time>`, and the `meterSymbol` of a
+// `<time>` written in that measure — what `makeMeterTable(_:)` builds the
+// work's meter table from.
+//
 // `lastDirectionDynamic` is the dynamic level in effect as of the most
 // recently recorded `directionDynamicEvents` entry, used as a wedge's
 // implicit starting level and as the level a wedge shifts one step from
@@ -55,6 +60,7 @@ extension MusicXML.Importer {
         // MARK: Internal Instance Properties
 
         internal var activeDivisions: Int?
+        internal var barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = []
         internal var cursor: MusicXML.Duration = .zero
         internal var directionDynamicEvents: [DynamicEvent] = []
         internal var lastDirectionDynamic: Dynamic = .mp

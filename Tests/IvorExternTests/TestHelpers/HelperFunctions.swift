@@ -70,14 +70,14 @@ internal func notes(in part: Part<BeatTime, Pitch>,
 }
 
 internal func absoluteBeatParts(of work: Work) -> [Part<BeatTime, Frequency>]? {
-    guard case let .absoluteBeat(parts, _) = work.content
+    guard case let .absoluteBeat(parts, _, _) = work.content
     else { return nil }
 
     return parts
 }
 
 internal func keyboardBeatParts(of work: Work) -> [Part<BeatTime, NoteNumber>]? {
-    guard case let .keyboardBeat(parts, _) = work.content
+    guard case let .keyboardBeat(parts, _, _) = work.content
     else { return nil }
 
     return parts
@@ -91,7 +91,7 @@ internal func keyboardWallParts(of work: Work) -> [Part<WallTime, NoteNumber>]? 
 }
 
 internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
-    guard case let .standardBeat(parts, _) = work.content
+    guard case let .standardBeat(parts, _, _) = work.content
     else { return nil }
 
     return parts
@@ -102,7 +102,7 @@ internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
 // note-level output, not tempo.
 internal func standardBeatWork(parts: [Part<BeatTime, Pitch>]) -> Work {
     Work(name: "Test",
-         content: .standardBeat(parts, TempoMap()))
+         content: .standardBeat(parts, TempoMap(), MeterTable()))
 }
 
 // Looks a part up by name rather than by index, so an ABC round trip stays
@@ -724,7 +724,7 @@ internal func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
                                tracks: [track])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _) = work.content
+    guard case let .keyboardBeat(parts, _, _) = work.content
     else { Issue.record("Expected keyboardBeat content"); return [] }
 
     return parts.map(\.name)
@@ -766,7 +766,7 @@ internal func sampleMIDIWork() -> Work {
                     instrumentTable: instrumentTable)
 
     return Work(name: "Sketch",
-                content: .keyboardBeat([part], TempoMap()),
+                content: .keyboardBeat([part], TempoMap(), MeterTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 dedication: "To my teacher\nwith thanks",
@@ -774,6 +774,20 @@ internal func sampleMIDIWork() -> Work {
                                 rights: [RightsNotice(text: "© 1998 Acme"),
                                          RightsNotice(text: "℗ 1999 Acme")].compactMap(\.self),
                                 remarks: [Remark(text: "Written at dawn", label: "history")].compactMap(\.self)))
+}
+
+// The wall time, in seconds, of every note attack in a keyboard beat-time
+// work's first part, in attack order.
+internal func attackWallTimes(of work: Work) throws -> [Double] {
+    let parts = try #require(keyboardBeatParts(of: work))
+    let converter = try TimeConverter(tempoMap: #require(work.tempoMap))
+    var wallTimes: [Double] = []
+
+    for note in parts.first?.noteTable ?? NoteTable() {
+        wallTimes.append(converter.wallTime(at: note.attack).doubleValue)
+    }
+
+    return wallTimes
 }
 
 internal func makeNoteTrack() -> SMFTrack {
@@ -823,7 +837,7 @@ internal func sampleMusicXMLWork() -> Work {
                                      instrumentTable: instrumentTable)
 
     return Work(name: "Collected Pieces: Aubade",
-                content: .standardBeat([part], TempoMap()),
+                content: .standardBeat([part], TempoMap(), MeterTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 alternateTitles: ["Morning Piece"],
@@ -1080,7 +1094,8 @@ internal func playedNotes(_ measures: [String]) throws -> [String] {
                                                       order: MusicXML.Importer.Plan(score).order)
 
     return results.flatMap(\.part.voices).flatMap { voice in
-        voice.noteTable.map { "\($0.startPitch.pitchClass.letter)".uppercased() + "@\(Int($0.attack.doubleValue))" }
+        // Attacks are written in quarter notes.
+        voice.noteTable.map { "\($0.startPitch.pitchClass.letter)".uppercased() + "@\(Int($0.attack.doubleValue * 4))" }
     }
 }
 
@@ -1099,7 +1114,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
         \(body)
         """)
 
-    guard case let .standardBeat(parts, _) = work.content
+    guard case let .standardBeat(parts, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1108,7 +1123,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
 internal func guidoPedalPart(_ gmn: String) throws -> Part<BeatTime, Pitch> {
     let work = try Guido.Importer().convert(Guido.Parser().parse(Data(gmn.utf8)))
 
-    guard case let .standardBeat(parts, _) = work.content
+    guard case let .standardBeat(parts, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1134,7 +1149,7 @@ internal func midiImportedPedals(_ events: [(tick: UInt, controller: MIDIControl
                                tracks: [SMFTrack(events: smfEvents)])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _) = work.content
+    guard case let .keyboardBeat(parts, _, _) = work.content
     else { Issue.record("Expected keyboardBeat content"); return [:] }
 
     return try #require(parts.first).pedals
@@ -1185,7 +1200,7 @@ internal func musicXMLImportedParts(_ musicXML: String) throws -> [Part<BeatTime
                                              as: .musicXML)
     let work = try #require(works.first)
 
-    guard case let .standardBeat(parts, _) = work.content
+    guard case let .standardBeat(parts, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); return [] }
 
     return parts
@@ -1196,21 +1211,21 @@ internal func abcExportedWithPedals(_ pedals: [Pedal: PedalTable<BeatTime>]) thr
     var noteTable = NoteTable<BeatTime, Pitch>()
 
     for (index, pitch) in [Pitch.c4, .d4, .e4, .f4].enumerated() {
-        noteTable.insert(attack: BeatTime(Number(index)), duration: 1, pitch: pitch)
+        noteTable.insert(attack: beat(index, 4), duration: dur(1, 4), pitch: pitch)
     }
 
     return try writeABC(standardBeatWork(parts: [Part(name: "Piano", noteTable: noteTable, pedals: pedals)]))
 }
 
 // The CC 64–68 events in the exported track of one keyboard part with a
-// note from 0 to 4 and the given pedals, in file order.
+// whole note from 0 to 1 and the given pedals, in file order.
 internal func midiExportedPedalEvents(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [(tick: UInt, controller: MIDIController, value: UInt)] {
     var noteTable = NoteTable<BeatTime, NoteNumber>()
 
-    noteTable.insert(attack: 0, duration: 4, pitch: NoteNumber(60))
+    noteTable.insert(attack: 0, duration: 1, pitch: NoteNumber(60))
 
     let part = Part<BeatTime, NoteNumber>(name: "Piano", noteTable: noteTable, pedals: pedals)
-    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap())))
+    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
 
     return sequence.tracks.flatMap(\.events).compactMap { event in
         guard case let .midi(eventTime, .controlChange(_, controller, value)) = event,
@@ -1224,7 +1239,7 @@ internal func midiExportedPedalEvents(_ pedals: [Pedal: PedalTable<BeatTime>]) t
 internal func guidoExportedPedalKinds(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [GMNPedal.Kind] {
     var noteTable = NoteTable<BeatTime, Pitch>()
 
-    noteTable.insert(attack: 0, duration: 4, pitch: .c4)
+    noteTable.insert(attack: 0, duration: 1, pitch: .c4)
 
     let part = Part<BeatTime, Pitch>(name: "Piano", noteTable: noteTable, pedals: pedals)
     let score = try Guido.Exporter().convert(standardBeatWork(parts: [part]))
@@ -1240,7 +1255,7 @@ internal func guidoExportedPedalKinds(_ pedals: [Pedal: PedalTable<BeatTime>]) t
 internal func musicXMLExportedPedalDirections(_ pedals: [Pedal: PedalTable<BeatTime>]) throws -> [ExportedPedalDirection] {
     var noteTable = NoteTable<BeatTime, Pitch>()
 
-    noteTable.insert(attack: 0, duration: 4, pitch: .c4)
+    noteTable.insert(attack: 0, duration: 1, pitch: .c4)
 
     let part = Part<BeatTime, Pitch>(name: "Piano", noteTable: noteTable, pedals: pedals)
     let score = try MusicXML.Exporter().convert(standardBeatWork(parts: [part]))
@@ -1281,12 +1296,13 @@ internal func wallSustainTable(_ levels: [(Double, Pedal.Level)]) -> PedalTable<
     return table
 }
 
-// Each pedal's entries as "level @ time" (plain forms), of a work's only part.
+// Each pedal's entries as "level @ time" (plain forms), of a work's only part,
+// with times in quarter notes.
 internal func pedalSummary(_ parts: [Part<BeatTime, some PitchProtocol>]?) throws -> [Pedal: [String]] {
     let part = try #require(parts?.first)
 
     return part.pedals.mapValues { table in
-        table.map { "\($0.level.plain) @ \($0.time.plain)" }
+        table.map { "\($0.level.plain) @ \(BeatTime($0.time.numberValue * 4).plain)" }
     }
 }
 
@@ -1317,6 +1333,321 @@ internal func pedalMarks(_ direction: MXLDirection) -> [MXLPedal] {
 
         return pedal
     }
+}
+
+// A beat time of `numerator`/`denominator` whole notes.
+internal func beat(_ numerator: Int,
+                   _ denominator: Int = 1) -> BeatTime {
+    BeatTime(frac(numerator, denominator))
+}
+
+// A beat duration of `numerator`/`denominator` whole notes.
+internal func dur(_ numerator: Int,
+                  _ denominator: Int = 1) -> BeatDuration {
+    BeatDuration(frac(numerator, denominator))
+}
+
+internal func frac(_ numerator: Int,
+                   _ denominator: Int) -> Number {
+    Number(numerator: numerator,
+           denominator: denominator)
+}
+
+// The tempo of the one `<direction>` (holding `directionType` and `sound`) in
+// a walked one-part, one-measure score, if any.
+internal func walkedTempo(directionType: String,
+                          sound: String) throws -> Tempo? {
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">
+            <measure number="1">
+              <attributes><divisions>1</divisions></attributes>
+              <direction>
+                <direction-type>\(directionType)</direction-type>
+                \(sound)
+              </direction>
+              <note>
+                <pitch><step>C</step><octave>4</octave></pitch>
+                <duration>1</duration>
+              </note>
+            </measure>
+          </part>
+        </score-partwise>
+        """
+    let results = try MusicXML.Importer.Walker().walk(parseMusicXMLScore(musicXML),
+                                                      order: [0])
+
+    return results.first?.tempoEvents.first?.tempo
+}
+
+// A meter from its plain form, such as `"2+2+3/8"` or `"free"`.
+internal func meter(_ plain: String) -> Meter {
+    Meter(plain: plain).require()
+}
+
+// A meter table's entries as `"<beat time> <meter>"`, in order, preceded by
+// `"pickup <length>"` if it has a pickup: `["pickup 1/4", "0 3/4"]`.
+internal func meterSummary(_ table: MeterTable?) -> [String] {
+    guard let table
+    else { return ["no table"] }
+
+    let pickup = table.pickup.isZero ? [] : ["pickup \(simpleFraction(table.pickup.numberValue))"]
+
+    return pickup + table.map { "\(simpleFraction($0.beatTime.numberValue)) \($0.meter.plain)" }
+}
+
+// A meter table with an entry in each plain meter at each beat time, and
+// the given pickup.
+internal func meterTable(_ entries: [(BeatTime, String)],
+                         pickup: BeatDuration = .zero,
+                         extras: Extras? = nil) throws -> MeterTable {
+    var table = MeterTable()
+
+    for (beatTime, plain) in entries {
+        try table.insert(beatTime: beatTime,
+                         meter: meter(plain),
+                         extras: extras)
+    }
+
+    try table.setPickup(pickup)
+
+    return table
+}
+
+// A meter table from its summary (see `meterSummary(_:)`), such as
+// `["pickup 1/4", "0 3/4", "5/2 6/8"]`.
+internal func meterTable(summary: [String]) throws -> MeterTable {
+    var entries: [(BeatTime, String)] = []
+    var pickup = BeatDuration.zero
+
+    for line in summary {
+        let fields = line.split(separator: " ").map(String.init)
+
+        if fields[0] == "pickup" {
+            pickup = try #require(BeatDuration(plain: fields[1]))
+        } else {
+            try entries.append((#require(BeatTime(plain: fields[0])), fields[1]))
+        }
+    }
+
+    return try meterTable(entries, pickup: pickup)
+}
+
+// A one-part keyboard-beat work with the given meter table, whose music is
+// one note `length` long, starting at 0.
+internal func meteredKeyboardWork(_ meterTable: MeterTable,
+                                  length: BeatDuration) -> Work {
+    var noteTable = NoteTable<BeatTime, NoteNumber>()
+
+    noteTable.insert(attack: .zero,
+                     duration: length,
+                     pitch: NoteNumber(60))
+
+    return Work(name: "Metered",
+                content: .keyboardBeat([Part(name: "Piano", noteTable: noteTable)],
+                                       TempoMap(),
+                                       meterTable))
+}
+
+// A one-part standard-beat work with the given meter table, whose music is
+// one note `length` long, starting at 0.
+internal func meteredStandardWork(_ meterTable: MeterTable,
+                                  length: BeatDuration) -> Work {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    noteTable.insert(attack: .zero,
+                     duration: length,
+                     pitch: Pitch(stringLiteral: "C4"))
+
+    return Work(name: "Metered",
+                content: .standardBeat([Part(name: "Piano", noteTable: noteTable)],
+                                       TempoMap(),
+                                       meterTable))
+}
+
+// A rational number as a simple fraction (`3/2`), or a whole number (`2`).
+internal func simpleFraction(_ value: Number) -> String {
+    value.denominator == 1 ? "\(value.numerator)" : "\(value.numerator)/\(value.denominator)"
+}
+
+// A tempo from its plain form, such as `"3/8=90"` for ♩. = 90.
+internal func tempo(_ plain: String) -> Tempo {
+    Tempo(plain: plain).require()
+}
+
+// A `meterSymbol` extra naming `name` (`common` or `cut`).
+internal func meterSymbolExtras(_ name: String) -> Extras {
+    Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                            values: [.string(name)])])
+}
+
+// Each bar as `"<start>+<length>"`, followed by its meter where the
+// meter is written, and by `pickup` for a pickup bar.
+internal func exportBarSummary(_ bars: [ExportBar]) -> [String] {
+    bars.map { bar in
+        var text = "\(simpleFraction(bar.start.numberValue))+\(simpleFraction(bar.length.numberValue))"
+
+        if bar.isMeterWritten {
+            text += " \(bar.meter.plain)"
+        }
+
+        if bar.isPickup {
+            text += " pickup"
+        }
+
+        return text
+    }
+}
+
+// An ABC time signature as the text of its `M:` field.
+internal func abcTimeSignatureText(_ timeSignature: ABCTimeSignature) -> String {
+    switch timeSignature {
+    case .common:
+        "C"
+
+    case let .complex(additive):
+        "(" + additive.numerators.map(String.init).joined(separator: "+") + ")/\(additive.denominator)"
+
+    case .cut:
+        "C|"
+
+    case .empty:
+        "none"
+
+    case let .standard(standard):
+        "\(standard.numerator)/\(standard.denominator)"
+    }
+}
+
+// The `type` of every `\meter` tag in the score's first voice, in order.
+internal func guidoExportedMeterTypes(_ score: Guido.Score) -> [String] {
+    flatten(score.voices[0].symbols).compactMap {
+        if case let .tag(.meter(meter)) = $0 { meter.type } else { nil }
+    }
+}
+
+// The first track's time signatures and markers, at 480 ticks per
+// quarter, as `"<tick> <meter>"` and `"<tick> <marker text>"`.
+internal func midiExportedMeterEvents(_ summary: [String]) throws -> [String] {
+    let work = try meteredKeyboardWork(meterTable(summary: summary), length: dur(4))
+    let sequence = try MIDI.Exporter().convert(work)
+
+    return sequence.tracks[0].events.compactMap { event in
+        switch event {
+        case let .meta(eventTime, .marker(text)):
+            "\(eventTime.uintValue) \(text.stringValue)"
+
+        case let .meta(eventTime, .timeSignature(timeSignature)):
+            "\(eventTime.uintValue) \(timeSignature.numerator)/\(1 << timeSignature.denominator)"
+
+        default:
+            nil
+        }
+    }
+}
+
+// Imports a one-track file at 480 ticks per quarter with a time
+// signature in each power-of-two meter at each tick, each with an
+// optional marker at the same tick, and one note.
+internal func midiImportedMeters(_ meters: [(tick: UInt, meter: String, marker: String?)]) throws -> Work {
+    var events: [SMFEvent] = []
+
+    for entry in meters {
+        let timeMeter = meter(entry.meter)
+        let denominator = try #require(timeMeter.denominator)
+        let timeSignature = try #require(SMFTimeSignature(numerator: timeMeter.numerators[0],
+                                                          denominator: UInt(denominator.trailingZeroBitCount),
+                                                          clockRate: 24,
+                                                          beatRate: 8))
+
+        events.append(.meta(SMFEventTime(entry.tick), .timeSignature(timeSignature)))
+
+        if let marker = entry.marker {
+            try events.append(.meta(SMFEventTime(entry.tick), .marker(#require(SMFText(stringValue: marker)))))
+        }
+    }
+
+    events.append(.midi(.zero, .noteOn(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(100))))
+    events.append(.midi(SMFEventTime(7_680), .noteOff(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(64))))
+    events.append(.meta(SMFEventTime(7_680), .endOfTrack))
+
+    return try MIDI.Importer().convert(SMFSequence(format: .format0,
+                                                   division: .metrical(SMFTickRate(480)),
+                                                   tracks: [SMFTrack(events: events)]))
+}
+
+// Each measure of the exported score's first part as its number,
+// `implicit` if it's implicit, and the meter of any `<time>` it writes.
+internal func musicXMLExportedMeasures(_ meterTable: MeterTable,
+                                       length: BeatDuration) throws -> [String] {
+    let score = try MusicXML.Exporter().convert(meteredStandardWork(meterTable, length: length))
+
+    return score.parts[0].measures.map { measure in
+        var text = measure.number
+
+        if measure.isImplicit {
+            text += " implicit"
+        }
+
+        for case let .attributes(attributes) in measure.items {
+            for time in attributes.time {
+                text += " " + (convertToMeter(time)?.plain ?? "?")
+            }
+        }
+
+        return text
+    }
+}
+
+// A `<time>` of `beats` over `beatType`, with an optional `symbol`.
+internal func musicXMLTime(_ beats: String,
+                           _ beatType: String,
+                           symbol: String? = nil) -> String {
+    let symbolAttribute = symbol.map { " symbol=\"\($0)\"" } ?? ""
+
+    return "<time\(symbolAttribute)><beats>\(beats)</beats><beat-type>\(beatType)</beat-type></time>"
+}
+
+// Reads a one-part score whose measures hold the given `<attributes>`
+// content (after one division per quarter, in the first) and notes.
+internal func readMusicXMLMeteredMeasures(_ measures: [(attributes: String, notes: String)],
+                                          isFirstImplicit: Bool = false) throws -> Work {
+    let items = measures.enumerated().map { index, measure in
+        let number = isFirstImplicit ? index : index + 1
+        let implicit = isFirstImplicit && index == 0 ? #" implicit="yes""# : ""
+        let divisions = index == 0 ? "<divisions>1</divisions>" : ""
+
+        let attributes = "<attributes>\(divisions)\(measure.attributes)</attributes>"
+
+        return #"<measure number="\#(number)"\#(implicit)>\#(attributes)\#(measure.notes)</measure>"#
+    }
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">\(items.joined())</part>
+        </score-partwise>
+        """
+    let works = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(musicXML.utf8)),
+                                             as: .musicXML)
+
+    return try #require(works.first)
+}
+
+// A `<metronome>` mark as `"<beat unit><dots> = <per minute>"` (such as
+// `"quarter. = 80"`), or `nil` for no mark or one in another form.
+internal func metronomeText(_ metronome: MXLMetronome?) -> String? {
+    guard let metronome,
+          case let .beatUnit(beatUnit, _, .perMinute(perMinute)) = metronome.content
+    else { return nil }
+
+    return "\(beatUnit.beatUnit)" + String(repeating: ".", count: beatUnit.dot) + " = \(perMinute.value)"
 }
 
 // swiftlint:enable file_length

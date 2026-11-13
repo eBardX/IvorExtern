@@ -6,7 +6,7 @@ extension ImportOptions {
 
     /// An import option that a format can use (see ``ImportFileFormat/supportedOptions``).
     public enum Key {
-        /// ``ImportOptions/pedalSimplification``.
+        /// The ``ImportOptions/pedalSimplification`` option.
         case pedalSimplification
     }
 }

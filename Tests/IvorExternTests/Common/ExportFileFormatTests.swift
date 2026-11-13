@@ -74,14 +74,14 @@ extension ExportFileFormatTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let viaABC = try roundTrip(work,
                                    exporter: ABC.Exporter(),
                                    importer: ABC.Importer(),
                                    fileFormat: .abc)
         let abcPart = try namedStandardPart(viaABC, "Piano")
-        let intermediate = Work(name: "CrossFormat", content: .standardBeat([abcPart], TempoMap()))
+        let intermediate = Work(name: "CrossFormat", content: .standardBeat([abcPart], TempoMap(), MeterTable()))
 
         let viaMusicXML = try roundTrip(intermediate,
                                         exporter: MusicXML.Exporter(),
@@ -105,7 +105,7 @@ extension ExportFileFormatTests {
         table.insert(attack: BeatTime(7), duration: BeatDuration(1), pitch: "E4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Barring", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Barring", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let viaABC = try roundTrip(work,
                                    exporter: ABC.Exporter(),
@@ -139,14 +139,14 @@ extension ExportFileFormatTests {
         table.insert(attack: BeatTime(2), duration: BeatDuration(2), pitch: "F4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let viaGuido = try roundTrip(work,
                                      exporter: Guido.Exporter(),
                                      importer: Guido.Importer(),
                                      fileFormat: .gmn)
         let guidoPart = try #require(standardBeatParts(of: viaGuido)?.first)
-        let intermediate = Work(name: "CrossFormat", content: .standardBeat([guidoPart], TempoMap()))
+        let intermediate = Work(name: "CrossFormat", content: .standardBeat([guidoPart], TempoMap(), MeterTable()))
 
         let viaABC = try roundTrip(intermediate,
                                    exporter: ABC.Exporter(),
@@ -172,7 +172,7 @@ extension ExportFileFormatTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Violin")))
 
         let part = Part(name: "Solo", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Program", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Program", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let viaABC = try roundTrip(work,
                                    exporter: ABC.Exporter(),
@@ -211,7 +211,7 @@ extension ExportFileFormatTests {
                                        Credit(name: "T. Scribe", role: .transcriber)].compactMap(\.self),
                              remarks: [Remark(text: "Manuscript", label: RemarkLabel.source)].compactMap(\.self))
         let work = Work(name: "Aubade",
-                        content: .standardBeat([Part(name: "Piano", noteTable: NoteTable())], TempoMap()),
+                        content: .standardBeat([Part(name: "Piano", noteTable: NoteTable())], TempoMap(), MeterTable()),
                         info: info)
         let viaMusicXML = try roundTrip(work,
                                         exporter: MusicXML.Exporter(),
@@ -234,7 +234,7 @@ extension ExportFileFormatTests {
         table.insert(attack: BeatTime(2), duration: BeatDuration(2), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "CrossFormat", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let viaMusicXML = try roundTrip(work,
                                         exporter: MusicXML.Exporter(),
@@ -250,7 +250,7 @@ extension ExportFileFormatTests {
         let midiTable = try asNoteNumbers(musicXMLPart.noteTable)
         let expectedTable = try asNoteNumbers(table)
 
-        let intermediate = Work(name: "CrossFormat", content: .keyboardBeat([Part(name: "Piano", noteTable: midiTable)], TempoMap()))
+        let intermediate = Work(name: "CrossFormat", content: .keyboardBeat([Part(name: "Piano", noteTable: midiTable)], TempoMap(), MeterTable()))
 
         let viaMIDI = try roundTrip(intermediate,
                                     exporter: MIDI.Exporter(),
@@ -366,7 +366,7 @@ extension ExportFileFormatTests {
     func write_invalidMIDIOptions_throwsWriteFailure() throws {
         let fmt = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         let error = #expect(throws: ExportFileFormat.Error.self) {
             try fmt.write(works: [work],

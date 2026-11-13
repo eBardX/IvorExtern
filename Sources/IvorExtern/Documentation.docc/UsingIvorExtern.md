@@ -18,9 +18,9 @@ which IvorExtern drives on your behalf:
  MusicXML Document               | `musicxml`, `xml`          | Beat            | Standard              | IvorMXL
  Compressed MusicXML Document    | `mxl`                      | Beat            | Standard              | IvorMXL
 
-There are three public types: ``ImportFileFormat`` and ``ExportFileFormat``,
-which read and write files, and ``WorkPerformance``, which turns a work into
-timed MIDI channel messages.
+The core types are ``ImportFileFormat`` and ``ExportFileFormat``, which read
+and write files, and ``WorkPerformance``, which turns a work into timed MIDI
+channel messages.
 
 ## Finding a format
 
@@ -42,7 +42,7 @@ and pitch notations.
 
 ## Importing
 
-``ImportFileFormat/read(from:)`` reads every work a `FileWrapper` holds — an ABC
+``ImportFileFormat/read(from:options:)`` reads every work a `FileWrapper` holds — an ABC
 file can hold a whole tunebook:
 
 ```swift
@@ -56,6 +56,11 @@ dynamics, instruments, and pan positions, and of its descriptive information —
 titles, credits, rights, and remarks — in the work’s `info`. A work read from a
 Standard MIDI File whose times were measured in SMPTE frames reports
 `Work.hasMIDITimeCode`, so that writing it back keeps the same division.
+
+``ImportOptions`` adjusts how a format reads: its
+``ImportOptions/pedalSimplification`` simplifies each imported pedal table. A
+format ignores any option it doesn’t use, and
+``ImportFileFormat/supportedOptions`` lists the ones it does.
 
 ## Exporting
 
@@ -75,8 +80,14 @@ if !midi.canWrite(work) {
 let file = try midi.write(works: [work])   // a FileWrapper
 ```
 
-``ExportFileFormat/write(works:)`` writes one or more works to a `FileWrapper`,
+``ExportFileFormat/write(works:options:)`` writes one or more works to a `FileWrapper`,
 ready to save or share.
+
+``ExportOptions`` adjusts how a format writes. For now its only options are
+the ``MIDIExportOptions`` of a Standard MIDI File: the ticks per quarter note
+for a beat-time work, and the frame rate and ticks per frame for a wall-time
+one. A format ignores any option it doesn’t use, and
+``ExportFileFormat/supportedOptions`` lists the ones it does.
 
 ## Playing a work
 
@@ -127,8 +138,8 @@ the error of the lower-level package that failed, if any.
 
  Type                         | Thrown by
 :----                         |:---------
- ``ImportFileFormat/Error``   | ``ImportFileFormat/read(from:)``
- ``ExportFileFormat/Error``   | ``ExportFileFormat/write(works:)``
+ ``ImportFileFormat/Error``   | ``ImportFileFormat/read(from:options:)``
+ ``ExportFileFormat/Error``   | ``ExportFileFormat/write(works:options:)``
 
 Looking up a format returns `nil` for an unsupported tag, and
 ``WorkPerformance/init(work:realization:)`` returns `nil` for a work not in

@@ -129,16 +129,28 @@ internal func convertToABCPitch(_ pitch: Pitch) throws(ABC.Error) -> ABCPitch {
                     octave: octave)
 }
 
-// The inverse of `convertToTempo(_:)`. Always anchors the beat to a quarter
-// note (`Q:1/4=rate`), matching the `L:1/4` unit note length this exporter
-// always writes, so the two fields stay mutually consistent and round-trip
-// exactly through `convertToTempo(_:)`'s own quarter-note resolution.
+// The inverse of `convertToTempo(_:)`. The tempo keeps its own unit: a
+// plain or dotted note value is written as one length (`Q:3/8=90`), and
+// any other unit as ABC's compound form (§3.1.8), the summed lengths
+// standing for one beat (`Q:1/4 3/8=40` for a unit of 5/8). See
+// `_abcTempoLengths(_:)` for how the lengths are chosen. A unit with no such
+// spelling (a triplet quarter note, say) is restated in quarter notes. ABC
+// rates are whole numbers, so a fractional rate is rounded (see
+// `roundedTempoRate(_:)`).
 internal func convertToABCTempo(_ tempo: Tempo, text: String? = nil) -> ABCTempo? {
+    if let lengths = _abcTempoLengths(tempo.unit) {
+        return ABCTempo(lengths: lengths,
+                        rate: roundedTempoRate(tempo),
+                        text: text)
+    }
+
+    let restated = tempo.restated(in: .quarter)
+
     guard let quarterLength = ABCLength(numerator: 1, denominator: 4)
     else { return nil }
 
     return ABCTempo(lengths: [quarterLength],
-                    rate: tempo.uintValue,
+                    rate: roundedTempoRate(restated),
                     text: text)
 }
 
@@ -201,8 +213,9 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
     }
 }
 
+// An ABC duration is a fraction of a whole note, as a beat duration is.
 internal func convertToBeatDuration(_ duration: ABC.Duration) throws(ABC.Error) -> BeatDuration {
-    BeatDuration(duration.numberValue * 4)
+    BeatDuration(duration.numberValue)
 }
 
 // A standalone `%%MIDI channel n` directive — no `program` token — sets the
@@ -327,26 +340,26 @@ internal func convertToStandardPitch(_ pitch: ABC.Pitch) throws(ABC.Error) -> Pi
               octave: _convertToStandardPitchOctave(pitch.octave))
 }
 
-// The `Q:` field's rate, resolved to quarter-note beats per minute. Per
-// §3.1.8 of the ABC 2.1 standard, a compound beat (more than one entry in
-// `lengths`, e.g. `Q:1/4 3/8 1/4 3/8=40`) means "play as if the summed
-// length were the beat" — `ABCNormalizer` only resolves the deprecated
-// `Q:Cn=rate`/bare `Q:rate` forms to a single `lengths` entry, not this
-// valid modern compound-beat form, so summing here is still necessary. A
-// `Q:` with no `rate` (text only, e.g. `Q:"Allegro"`) has an empty
-// `lengths` and returns `nil`.
+// The `Q:` field's rate, with its beat as the tempo's unit. Per §3.1.8 of
+// the ABC 2.1 standard, a compound beat (more than one entry in `lengths`,
+// e.g. `Q:1/4 3/8 1/4 3/8=40`) means "play as if the summed length were the
+// beat", so the unit is the sum of the lengths (here, 5/4) —
+// `ABCNormalizer` only resolves the deprecated `Q:Cn=rate`/bare `Q:rate`
+// forms to a single `lengths` entry (the bare form's being the `L:` unit),
+// not this valid modern compound-beat form, so summing here is still
+// necessary. A `Q:` with no `rate` (text only, e.g. `Q:"Allegro"`) has an
+// empty `lengths` and returns `nil`.
 internal func convertToTempo(_ tempo: ABCTempo) -> Tempo? {
     guard let rate = tempo.rate,
           !tempo.lengths.isEmpty
     else { return nil }
 
-    let beatFraction = tempo.lengths.reduce(0.0) { $0 + Double($1.numerator) / Double($1.denominator) }
-    let quarterBPM = (Double(rate) * beatFraction * 4).rounded()
+    let unit = tempo.lengths
+        .map { Number(numerator: $0.numerator, denominator: $0.denominator) }
+        .reduce(Number(0), +)
 
-    guard let uintValue = UInt(exactly: quarterBPM)
-    else { return nil }
-
-    return Tempo(uintValue: uintValue)
+    return Tempo(rate: Number(rate),
+                 unit: BeatDuration(unit))
 }
 
 // ABC 2.1's own `%%MIDI voice [ID] [instrument=n [bank=m]] [mute]`
@@ -430,6 +443,61 @@ internal func determineWorkName(_ tune: ABCTune) -> String {
 }
 
 // MARK: Private Functions
+
+// The lengths of a `Q:` field's beat for a tempo unit: the unit itself if
+// it's a plain or dotted note value, otherwise the fewest plain or dotted
+// lengths (at most four, as ABC allows) that sum to it, preferring the most
+// even split — so 5/8 is `1/4 3/8` rather than `1/2 1/8` — written shortest
+// first. `nil` if no such lengths exist, as for a unit whose denominator
+// isn't a power of two.
+private func _abcTempoLengths(_ unit: BeatDuration) -> [ABCLength]? {
+    let value = unit.numberValue
+
+    guard value.isRational,
+          value.numerator > 0
+    else { return nil }
+
+    let numerator = value.numerator.uintValue
+    let denominator = value.denominator.uintValue
+
+    guard denominator.nonzeroBitCount == 1,
+          denominator <= 512
+    else { return nil }
+
+    if plainOrDottedNoteValue(unit) != nil {
+        return ABCLength(numerator: numerator, denominator: denominator).map { [$0] }
+    }
+
+    // Every plain or dotted length from a breve down, in 512ths of a whole
+    // note, the finest an `ABCLength` can be.
+    let target = numerator * (512 / denominator)
+    var candidates: [UInt] = []
+    var plain: UInt = 1_024
+
+    while plain > 0 {
+        candidates.append(plain)
+
+        if plain > 1 {
+            candidates.append(plain * 3 / 2)
+        }
+
+        plain /= 2
+    }
+
+    candidates.sort()
+
+    for count in 2...4 {
+        var best: [UInt]?
+
+        _searchTempoLengths(candidates, target, count, [], &best)
+
+        if let best {
+            return best.compactMap { ABCLength(numerator: $0, denominator: 512) }
+        }
+    }
+
+    return nil
+}
 
 private func _convertToABCPitchAccidental(_ accidental: Pitch.Accidental) -> ABCPitch.Accidental {
     switch accidental {
@@ -535,4 +603,33 @@ private func _isVoiceNumber(_ id: String) -> Bool {
     let digits = id.hasPrefix("V") || id.hasPrefix("v") ? id.dropFirst() : id[...]
 
     return !digits.isEmpty && digits.allSatisfy { $0.isASCII && $0.isNumber }
+}
+
+// Collects in `best` the nondecreasing run of exactly `pieces` candidates
+// summing to `remaining` whose largest is smallest.
+private func _searchTempoLengths(_ candidates: [UInt],
+                                 _ remaining: UInt,
+                                 _ pieces: Int,
+                                 _ chosen: [UInt],
+                                 _ best: inout [UInt]?) {
+    guard pieces > 0
+    else {
+        if remaining == 0,
+           let last = chosen.last,
+           best.map({ last < ($0.last ?? .max) }) ?? true {
+            best = chosen
+        }
+
+        return
+    }
+
+    let lowest = chosen.last ?? 0
+
+    for candidate in candidates where candidate >= lowest && candidate <= remaining {
+        _searchTempoLengths(candidates,
+                            remaining - candidate,
+                            pieces - 1,
+                            chosen + [candidate],
+                            &best)
+    }
 }

@@ -71,18 +71,6 @@ extension Guido.Exporter {
 
     // MARK: Private Type Methods
 
-    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
-        var barTimes: [BeatTime] = []
-        var barBeat: UInt = 4
-
-        while barBeat < measureCount * 4 {
-            barTimes.append(BeatTime(Number(numerator: barBeat, denominator: 1)))
-            barBeat += 4
-        }
-
-        return barTimes
-    }
-
     // The sorted union of every time this part's body needs to notice: `.zero`
     // and the work's end, every bar line, every note's attack and end, and
     // every tempo/instrument/pedal/dynamic annotation's own time. Splitting a
@@ -93,7 +81,7 @@ extension Guido.Exporter {
                                     directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
-                                    barTimes: [BeatTime],
+                                    barTimes: Set<BeatTime>,
                                     endTime: BeatTime) -> [BeatTime] {
         var boundaries: Set<BeatTime> = [.zero, endTime]
 
@@ -129,7 +117,7 @@ extension Guido.Exporter {
     }
 
     private static func _convert(work: Work) throws(Guido.Error) -> Guido.Score {
-        guard case let .standardBeat(parts, tempoMap) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw Guido.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -137,10 +125,11 @@ extension Guido.Exporter {
             throw Guido.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
-        let measureCount = _measureCount(work: work)
+        let bars = exportBars(meterTable,
+                              through: work.beatTimeRange?.upperBound ?? .zero)
         let voices = try _makeBody(work: work,
                                    parts: parts,
-                                   measureCount: measureCount,
+                                   bars: bars,
                                    tempoMap: tempoMap)
 
         return Guido.Score(variables: [], voices: voices)
@@ -285,14 +274,18 @@ extension Guido.Exporter {
         return [.tag(.slur(slur))]
     }
 
+    // Every voice opens with the first bar's meter (see
+    // `exportBars(_:through:)`), though the importer reads only the first
+    // voice's.
     private static func _makeBody(work: Work,
                                   parts: [Part<BeatTime, Pitch>],
-                                  measureCount: UInt,
+                                  bars: [ExportBar],
                                   tempoMap: TempoMap) throws(Guido.Error) -> [Guido.Voice] {
+        let firstMeter = bars.first.map { convertToGuidoMeter($0.meter, $0.extras) } ?? GMNMeter(type: "4/4")
         var voices: [Guido.Voice] = []
 
         for index in parts.indices {
-            var symbols: [GMNSymbol] = [.tag(.meter(GMNMeter(type: "4/4")))]
+            var symbols: [GMNSymbol] = [.tag(.meter(firstMeter))]
 
             if index == 0 {
                 symbols += _infoTags(work.info, name: work.name)
@@ -321,7 +314,7 @@ extension Guido.Exporter {
             // voice would multiply each entry once per part. Only the first
             // voice carries it.
             symbols += try _makePartBody(part: parts[index],
-                                         measureCount: measureCount,
+                                         bars: bars,
                                          tempoMap: index == 0 ? tempoMap : TempoMap())
 
             voices.append(GMNVoice(symbols: symbols))
@@ -330,23 +323,25 @@ extension Guido.Exporter {
         return voices
     }
 
-    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
-    // crossing a barline splits into segments tied by a bare `\tieEnd`
-    // marker (see `_makeChunks`'s discussion), gaps become rests, and every
-    // measure sums to exactly 4 beats.
+    // Lays one part's notes onto the work's bars (see
+    // `exportBars(_:through:)`): a note or chord crossing a barline splits
+    // into segments tied by a bare `\tieEnd` marker, gaps become rests, and
+    // every bar sums to its actual length, so a pickup or a short bar is
+    // written short. A bar whose meter is written (other than the first,
+    // whose `\meter` opens the voice) starts with a `\meter` tag.
     //
     // `Guido.Importer.Walker._handleTag` flushes the pending note and clears
-    // the tie-armed flag on *every* tag other than `\tieEnd` itself, so a
-    // barline (or any directive/mark) can never appear between two segments
-    // of the same tied note without breaking the tie — the loop below skips
-    // the barline at any boundary a tie continues across instead. Guido
-    // barlines carry no timing information, so deferring one past a tied
-    // note is a purely cosmetic reordering, not a loss.
+    // the tie-armed flag on every tag other than `\tieEnd`, `\bar` and
+    // `\meter`, so a directive or mark can never appear between two segments
+    // of the same tied note without breaking the tie. A segment boundary
+    // with nothing but a barline (and perhaps a meter) is where a tie
+    // continues; any other boundary has no tied note across it.
     private static func _makeChunks(events: [Event],
                                     directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
-                                    barTimes: [BeatTime],
+                                    barTimes: Set<BeatTime>,
+                                    meterTags: [BeatTime: GMNMeter],
                                     sortedBoundaries: [BeatTime]) throws(Guido.Error) -> [(start: BeatTime, symbols: [GMNSymbol])] {
         var chunks: [(start: BeatTime, symbols: [GMNSymbol])] = []
         var directiveIndex = 0
@@ -359,7 +354,7 @@ extension Guido.Exporter {
             guard start < end
             else { continue }
 
-            var symbols: [GMNSymbol] = []
+            var symbols: [GMNSymbol] = meterTags[start].map { [.tag(.meter($0))] } ?? []
 
             while tempoIndex < tempos.count, tempos[tempoIndex].0 <= start {
                 symbols.append(.tag(.tempo(tempos[tempoIndex].1)))
@@ -389,7 +384,9 @@ extension Guido.Exporter {
 
             if tiedToNext {
                 symbols.append(.tag(.tie(GMNTie(span: .end).require())))
-            } else if barTimes.contains(end) {
+            }
+
+            if barTimes.contains(end) {
                 symbols.append(.tag(.barLine(GMNBarLine(kind: .single))))
             }
 
@@ -400,7 +397,7 @@ extension Guido.Exporter {
     }
 
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
-                                      measureCount: UInt,
+                                      bars: [ExportBar],
                                       tempoMap: TempoMap) throws(Guido.Error) -> [GMNSymbol] {
         let events = _events(part.noteTable)
         let directives = (_instrumentDirectives(part.instrumentTable) + _pedalDirectives(part.pedals[.sustain]))
@@ -409,8 +406,14 @@ extension Guido.Exporter {
             .map(\.element)
         let tempos = _tempoDirectives(tempoMap)
         let annotations = _dynamicAnnotations(part.dynamicMap)
-        let barTimes = _barTimes(measureCount: measureCount)
-        let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
+        let barTimes = Set(bars.dropFirst().map(\.start))
+        let endTime = bars.last?.end ?? .zero
+        var meterTags: [BeatTime: GMNMeter] = [:]
+
+        for bar in bars.dropFirst() where bar.isMeterWritten {
+            meterTags[bar.start] = convertToGuidoMeter(bar.meter, bar.extras)
+        }
+
         let sortedBoundaries = _boundaries(events: events,
                                            directives: directives,
                                            tempos: tempos,
@@ -422,6 +425,7 @@ extension Guido.Exporter {
                                      tempos: tempos,
                                      annotations: annotations,
                                      barTimes: barTimes,
+                                     meterTags: meterTags,
                                      sortedBoundaries: sortedBoundaries)
 
         var body = _wrapDynamicRamps(chunks: chunks, annotations: annotations)
@@ -464,18 +468,6 @@ extension Guido.Exporter {
         else { throw Guido.Error.unrepresentableDuration("\(duration)") }
 
         return [.chord(chord)]
-    }
-
-    // Per §3.1.7 of the ABC exporter's own reasoning, `beatTimeRange` is
-    // `nil` for a work with nothing in it, and that's still one (empty,
-    // rest-filled) measure.
-    private static func _measureCount(work: Work) -> UInt {
-        guard let range = work.beatTimeRange
-        else { return 1 }
-
-        let measures = (range.upperBound.doubleValue / 4).rounded(.up)
-
-        return max(1, UInt(measures))
     }
 
     // One event's own segment symbols: articulation-wrapped note/chord

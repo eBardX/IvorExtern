@@ -12,12 +12,15 @@ private import XestiNumbers
 
 // MARK: Internal Functions
 
+// A `MusicXML.Duration` is a fraction of a whole note (see
+// `MusicXML.Importer.Rhythm.resolve(count:activeDivisions:context:)`), as
+// beat times and durations are.
 internal func convertToBeatDuration(_ duration: MusicXML.Duration) -> BeatDuration {
-    BeatDuration(duration.numberValue * 4)
+    BeatDuration(duration.numberValue)
 }
 
 internal func convertToBeatTime(_ duration: MusicXML.Duration) -> BeatTime {
-    BeatTime(duration.numberValue * 4)
+    BeatTime(duration.numberValue)
 }
 
 // A `<direction>`'s notated dynamics mark, expressed as our own `Dynamic`
@@ -151,13 +154,14 @@ internal func convertToInstrument(_ scorePart: MusicXML.ScorePart) -> Instrument
     return Instrument(stringValue: GM1Instrument(program: program).name)
 }
 
-// A quarter-note-based `BeatDuration` expressed in the work's own
-// `<divisions>` resolution, rounded to the nearest whole division and
-// promoted up to `1` division if it would otherwise round to `0`, so a
-// vanishingly short segment never disappears entirely.
+// A `BeatDuration` (in whole notes) expressed in the work's own
+// `<divisions>` resolution (divisions per quarter note), rounded to the
+// nearest whole division and promoted up to `1` division if it would
+// otherwise round to `0`, so a vanishingly short segment never disappears
+// entirely.
 internal func convertToMusicXMLDivisions(_ duration: BeatDuration,
                                          _ divisions: Int) -> MXLPositiveDivisions? {
-    let raw = (duration.numberValue * Number(divisions)).doubleValue
+    let raw = (duration.numberValue * 4 * Number(divisions)).doubleValue
     let rounded = max(1, Int(raw.rounded()))
 
     return MXLPositiveDivisions(intValue: rounded)
@@ -292,13 +296,6 @@ internal func convertToMusicXMLSound(pan: Pan) -> MXLSound {
     MXLSound(pan: pan.horizontal.doubleValue)
 }
 
-// `<sound tempo>` is already expressed directly in quarter notes per minute,
-// the same unit `Tempo` uses, so no scaling is needed beyond the type
-// conversion — the reverse of `convertToTempo(_ sound:)`.
-internal func convertToMusicXMLSound(tempo: Tempo) -> MXLSound {
-    MXLSound(tempo: tempo.doubleValue)
-}
-
 // A `<sound>`'s midi-instrument `<pan>` takes priority over the sound
 // element's own `pan` attribute, which the MusicXML spec deprecated in favor
 // of the midi-instrument element. Degrees run -180...180, with -90 hard left
@@ -326,44 +323,6 @@ internal func convertToStandardPitch(_ pitch: MusicXML.Pitch) throws(MusicXML.Er
     try Pitch(pitchClass: _convertToStandardPitchClass(pitch.step,
                                                        pitch.alter),
               octave: _convertToStandardPitchOctave(pitch.octave))
-}
-
-// A visual metronome mark (`♩ = 120`, or a dotted/other beat unit) converts
-// to quarter notes per minute the same way `<sound tempo>` is already
-// expressed, by scaling the stated per-minute rate by how many quarter
-// notes its beat unit is worth. Only the ordinary "note = number" form
-// (`.beatUnit`/`.perMinute`) names an actual tempo; the metric-modulation
-// forms (`.metronomeArrows`, `.beatUnit`/`.beatUnit` note-equivalence, or a
-// non-numeric `per-minute` text like "ca. 120") describe a *relationship*
-// rather than a rate and are left unrecognized.
-internal func convertToTempo(_ metronome: MXLMetronome) -> Tempo? {
-    guard case let .beatUnit(beatUnit, _, .perMinute(perMinute)) = metronome.content,
-          let perMinuteValue = Double(perMinute.value),
-          perMinuteValue > 0
-    else { return nil }
-
-    let quarterBPM = perMinuteValue * _quarterNoteFactor(beatUnit)
-
-    guard let uintValue = UInt(exactly: quarterBPM.rounded())
-    else { return nil }
-
-    return Tempo(uintValue: uintValue)
-}
-
-// `<sound tempo>` is already expressed directly in quarter notes per minute
-// per the MusicXML spec, so no unit conversion is needed — just rounding to
-// the nearest representable `Tempo`. A tempo of `0` is the MusicXML
-// convention for "prompt the user at the time of compiling a sound file" and
-// is never inserted.
-internal func convertToTempo(_ sound: MXLSound) -> Tempo? {
-    guard let tempo = sound.tempo,
-          tempo > 0
-    else { return nil }
-
-    guard let uintValue = UInt(exactly: tempo.rounded())
-    else { return nil }
-
-    return Tempo(uintValue: uintValue)
 }
 
 // Some notation software (MuseScore, at least) writes the literal string
@@ -723,58 +682,4 @@ private func _convertToStandardPitchOctave(_ mpOctave: MusicXML.Octave) throws(M
     else { throw MusicXML.Error.unrecognizedPitchOctave(Int(mpOctave.uintValue)) }
 
     return octave
-}
-
-// How many quarter notes a metronome mark's beat unit is worth — the same
-// note-value scale `convertToBeatDuration`/`convertToBeatTime` read off a
-// note's own `<type>`, extended with each augmentation dot's usual 1.5×
-// (`2 - 1/2^dots`).
-private func _quarterNoteFactor(_ beatUnit: MXLBeatUnit) -> Double {
-    let base: Double = switch beatUnit.beatUnit {
-    case .breve:
-        8
-
-    case .eighth:
-        0.5
-
-    case .half:
-        2
-
-    case .long:
-        16
-
-    case .maxima:
-        32
-
-    case .n1024th:
-        0.00390625
-
-    case .n128th:
-        0.03125
-
-    case .n16th:
-        0.25
-
-    case .n256th:
-        0.015625
-
-    case .n32nd:
-        0.125
-
-    case .n512th:
-        0.0078125
-
-    case .n64th:
-        0.0625
-
-    case .quarter:
-        1
-
-    case .whole:
-        4
-    }
-
-    let dotFactor = 2 - 1 / Double(1 << beatUnit.dot)
-
-    return base * dotFactor
 }

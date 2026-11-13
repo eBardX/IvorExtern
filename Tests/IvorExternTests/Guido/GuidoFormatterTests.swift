@@ -32,7 +32,7 @@ extension GuidoFormatterTests {
 
     @Test
     func format_minimalScore_nonEmpty() throws {
-        let work = Work(name: "Test", content: .standardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([], TempoMap(), MeterTable()))
         let score = try Guido.Exporter().convert(work)
 
         let data = try Guido.Formatter().format(score)
@@ -46,7 +46,7 @@ extension GuidoFormatterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: table)], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: table)], TempoMap(), MeterTable()))
         let score = try Guido.Exporter().convert(work)
 
         let data = try Guido.Formatter().format(score)

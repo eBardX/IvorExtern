@@ -18,7 +18,7 @@ extension MIDIExportTimeMapTests {
     func eventTime_tickMap_matchesSubscript() {
         let tickMap = MIDI.TickMap(tickRate: SMFTickRate(480))
 
-        #expect(tickMap.eventTime(at: BeatTime(2)) == SMFEventTime(960))
+        #expect(tickMap.eventTime(at: beat(1, 2)) == SMFEventTime(960))
         #expect(tickMap.eventTime(at: BeatTime(2)) == tickMap[BeatTime(2)])
     }
 

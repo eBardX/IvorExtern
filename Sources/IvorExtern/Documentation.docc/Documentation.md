@@ -53,6 +53,12 @@ exporting, playing a work, and error handling.
 - ``ImportFileFormat``
 - ``ExportFileFormat``
 
+### Options
+
+- ``ImportOptions``
+- ``ExportOptions``
+- ``MIDIExportOptions``
+
 ### Playing a work
 
 - ``WorkPerformance``

@@ -18,7 +18,7 @@ extension MIDIImportTimeMapTests {
     func time_beatMap_metrical() {
         let beatMap = MIDI.BeatMap(division: .metrical(SMFTickRate(480)))
 
-        #expect(beatMap.time(at: SMFEventTime(960)) == BeatTime(2))
+        #expect(beatMap.time(at: SMFEventTime(960)) == beat(1, 2))
     }
 
     @Test
@@ -35,8 +35,8 @@ extension MIDIImportTimeMapTests {
         let (attack, duration) = beatMap.timeSpan(at: SMFEventTime(480),
                                                   ticks: 240)
 
-        #expect(attack == BeatTime(1))
-        #expect(duration == BeatDuration(Number(numerator: 1, denominator: 2)))
+        #expect(attack == beat(1, 4))
+        #expect(duration == dur(1, 8))
     }
 
     @Test

@@ -154,7 +154,7 @@ extension JohnnySonic.Exporter {
                                          tmpSeq.dropFirst()).compactMap { elt in
             if let initial = doubleValue(elt.0.2, .rampStartTempo),
                let final = doubleValue(elt.0.2, .rampEndTempo),
-               let duration = doubleValue(elt.0.2, .rampDuration) {
+               let duration = doubleValue(elt.0.2, .rampDuration).map({ $0 * 4 }) {
                 return .tempoLine(DKMTempoLine(startBeat: convertToJohnnySonicBeat(elt.0.0),
                                                duration: duration,
                                                startTempo: initial,
@@ -209,10 +209,10 @@ extension JohnnySonic.Exporter {
         }
 
         switch work.content {
-        case let .absoluteBeat(parts, _):
+        case let .absoluteBeat(parts, _, _):
             commands += try _convert(parts: parts)
 
-        case let .keyboardBeat(parts, _):
+        case let .keyboardBeat(parts, _, _):
             commands += try _convert(parts: parts)
 
         case .standardBeat:

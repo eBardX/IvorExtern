@@ -38,8 +38,8 @@ extension MIDIImporterContextTests {
 
         let times = context.panMap.map(\.time)
 
-        #expect(times == [BeatTime(0), BeatTime(2), BeatTime(2)])
-        #expect(context.panMap[BeatTime(1)] == early)
+        #expect(times == [beat(0), beat(1, 2), beat(1, 2)])
+        #expect(context.panMap[beat(1, 4)] == early)
         #expect(context.panMap[BeatTime(2)] != early)
     }
 
@@ -53,7 +53,7 @@ extension MIDIImporterContextTests {
         context.handlePedal(SMFEventTime(480), .sustain, MIDI.PedalValue(64))
         context.handlePedal(SMFEventTime(480), .soft, MIDI.PedalValue(127))
 
-        #expect(context.pedals[.sustain]?.map(\.time) == [BeatTime(0), BeatTime(1), BeatTime(1)])
+        #expect(context.pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 4), beat(1, 4)])
         #expect(context.pedals[.sustain]?.map(\.level) == [.down, .up, Pedal.Level(Number(numerator: 64, denominator: 127))])
         #expect(context.pedals[.soft]?.map(\.level) == [.down])
     }

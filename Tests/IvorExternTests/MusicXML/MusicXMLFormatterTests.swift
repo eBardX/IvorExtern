@@ -18,7 +18,7 @@ struct MusicXMLFormatterTests {
 extension MusicXMLFormatterTests {
     @Test
     func format_compressed_producesZipArchive() throws {
-        let work = Work(name: "Test", content: .standardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([], TempoMap(), MeterTable()))
         let score = try MusicXML.Exporter().convert(work)
         let document = MusicXML.Document(content: .scorePartwise(score))
 
@@ -44,7 +44,7 @@ extension MusicXMLFormatterTests {
 
     @Test
     func format_minimalScore_nonEmpty() throws {
-        let work = Work(name: "Test", content: .standardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([], TempoMap(), MeterTable()))
         let score = try MusicXML.Exporter().convert(work)
         let document = MusicXML.Document(content: .scorePartwise(score))
 
@@ -59,7 +59,7 @@ extension MusicXMLFormatterTests {
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
-        let work = Work(name: "Test", content: .standardBeat([Part(name: "Piano", noteTable: table)], TempoMap()))
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "Piano", noteTable: table)], TempoMap(), MeterTable()))
         let score = try MusicXML.Exporter().convert(work)
         let document = MusicXML.Document(content: .scorePartwise(score))
 

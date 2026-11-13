@@ -29,7 +29,9 @@ private import XestiTools
 // own tie-coalescing pass ever runs, so a tie legitimately spans a bar line
 // or a non-matching ending's boundary. Every other item — a field, in
 // particular — does flush, since those remain in upstream's stream through
-// its coalescing pass and are only dropped afterward.
+// its coalescing pass and are only dropped afterward. The exception is an
+// `M:` field, which is written just after a bar line, so a tie spans it as
+// it spans the bar line (see `_apply(_:_:)`).
 extension ABC.Importer {
 
     // MARK: Internal Nested Types
@@ -261,8 +263,42 @@ extension ABC.Importer.Walker {
 
     // MARK: Private Instance Methods
 
+    // A bar starts here in the meter in force, if there is one. The note or
+    // chord still in `pendingEvent` has already been written, so the bar
+    // starts where it ends, not at `currentBeatTime` (which it hasn't
+    // advanced yet).
+    private func _addBarline(_ extras: Extras?,
+                             _ context: inout ABC.Importer.Context) throws(ABC.Error) {
+        guard let meter = context.meter.flatMap(convertToMeter)
+        else { return }
+
+        var beatTime = context.currentBeatTime
+
+        if let pending = context.pendingEvent {
+            beatTime = try pending.attack + convertToBeatDuration(rhythm.advanceDuration(pending.event))
+        }
+
+        context.barlines.append((beatTime, meter, extras))
+    }
+
+    // An `M:` field is the one field that doesn't flush `pendingEvent`: it's
+    // written right after a bar line, and a note tied across that bar line
+    // has to stay pending to merge with its continuation. It starts a bar
+    // where it's written (see `_addBarline(_:)`).
     private func _apply(_ field: ABCField,
                         _ context: inout ABC.Importer.Context) throws(ABC.Error) {
+        if case let .meter(meter) = field {
+            context.meter = meter
+
+            if !context.hasExplicitUnitNoteLength {
+                context.unitNoteLength = rhythm.defaultUnitNoteLength(meter)
+            }
+
+            try _addBarline(convertToMeterExtras(meter), &context)
+
+            return
+        }
+
         try _commitPending(&context)
 
         switch field {
@@ -276,13 +312,6 @@ extension ABC.Importer.Walker {
 
         case let .macro(macro):
             context.macros.append(macro)
-
-        case let .meter(meter):
-            context.meter = meter
-
-            if !context.hasExplicitUnitNoteLength {
-                context.unitNoteLength = rhythm.defaultUnitNoteLength(meter)
-            }
 
         case let .tempo(tempo):
             if let converted = convertToTempo(tempo) {
@@ -517,6 +546,8 @@ extension ABC.Importer.Walker {
 
         case .barLine:
             context.barAccidentals = [:]
+
+            try _addBarline(nil, &context)
 
         case let .brokenRhythm(marker):
             if let pending = context.pendingEvent {

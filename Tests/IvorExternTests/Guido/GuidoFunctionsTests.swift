@@ -19,7 +19,7 @@ extension GuidoFunctionsTests {
     func convertToBeatDuration_fractionOfWholeNote_convertsToBeats() {
         let duration = Guido.Duration(numberValue: Number(numerator: 1, denominator: 2))
 
-        #expect(IvorExtern.convertToBeatDuration(duration) == BeatDuration(2))
+        #expect(IvorExtern.convertToBeatDuration(duration) == dur(1, 2))
     }
 
     @Test
@@ -48,6 +48,24 @@ extension GuidoFunctionsTests {
         let dynamic = try #require(Dynamic(numberValue: Number(0.55)))
 
         #expect(convertToGuidoIntensity(dynamic) == nil)
+    }
+
+    @Test(arguments: [("3/4", String?.none, "3/4"),
+                      ("2+2+3/8", nil, "2+2+3/8"),
+                      ("4/3", nil, "4/3"),
+                      ("free", nil, ""),
+                      ("4/4", "common", "C"),
+                      ("2/2", "cut", "C/"),
+                      ("2/2", "common", "2/2")])
+    func convertToGuidoMeter_meter(_ plain: String,
+                                   _ symbol: String?,
+                                   _ expected: String) {
+        let extras = symbol.map {
+            Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                                    values: [.string($0)])])
+        }
+
+        #expect(IvorExtern.convertToGuidoMeter(meter(plain), extras).type == expected)
     }
 
     @Test
@@ -130,6 +148,22 @@ extension GuidoFunctionsTests {
     }
 
     @Test
+    func convertToGuidoTempo_dottedUnit_writesTheUnitAndRate() throws {
+        let gTempo = try #require(convertToGuidoTempo(tempo("3/8=67")))
+        let unit = try #require(GMNTempo.Metronome.BeatUnit(3, 8))
+
+        #expect(gTempo.metronome == .rate(unit: unit, beats: 67))
+    }
+
+    @Test
+    func convertToGuidoTempo_fractionalRate_roundsHalvesUp() throws {
+        let gTempo = try #require(convertToGuidoTempo(tempo("3/8=133/2")))
+        let unit = try #require(GMNTempo.Metronome.BeatUnit(3, 8))
+
+        #expect(gTempo.metronome == .rate(unit: unit, beats: 67))
+    }
+
+    @Test
     func convertToInstrument_midiOnly_looksUpGeneralMIDIName() {
         let instrument = GMNInstrument(name: "", midi: 71)
 
@@ -148,6 +182,26 @@ extension GuidoFunctionsTests {
         let instrument = GMNInstrument(name: "")
 
         #expect(convertToInstrument(instrument) == .vanilla)
+    }
+
+    @Test(arguments: [("C", "4/4", String?("common")),
+                      ("c/", "2/2", "cut"),
+                      ("", "free", nil),
+                      (" 6/8 ", "6/8", nil),
+                      ("2+2+3/8", "2+2+3/8", nil),
+                      ("7/12", "7/12", nil)])
+    func convertToMeter_type(_ type: String,
+                             _ plain: String,
+                             _ symbol: String?) {
+        let tag = GMNMeter(type: type)
+
+        #expect(IvorExtern.convertToMeter(tag)?.plain == plain)
+        #expect(stringValue(IvorExtern.convertToMeterExtras(tag), .meterSymbol) == symbol)
+    }
+
+    @Test
+    func convertToMeter_unreadableType_isNil() {
+        #expect(IvorExtern.convertToMeter(GMNMeter(type: "3/4+3/8")) == nil)
     }
 
     @Test(arguments: [nil, "lefthand", "LeftHand", "pluck"])
@@ -235,15 +289,25 @@ extension GuidoFunctionsTests {
         let unit = try #require(GMNTempo.Metronome.BeatUnit(1, 4))
         let metronome = GMNTempo.Metronome.rate(unit: unit, beats: 120)
 
-        #expect(convertToTempo(metronome) == Tempo(uintValue: 120))
+        #expect(convertToTempo(metronome) == Tempo(120))
     }
 
     @Test
-    func convertToTempo_rateFormWithEighthNoteUnit_scalesToQuarterNoteBPM() throws {
+    func convertToTempo_rateFormWithDottedUnit_keepsTheUnit() throws {
+        let unit = try #require(GMNTempo.Metronome.BeatUnit(3, 8))
+        let metronome = GMNTempo.Metronome.rate(unit: unit, beats: 67)
+
+        #expect(convertToTempo(metronome) == tempo("3/8=67"))
+    }
+
+    @Test
+    func convertToTempo_rateFormWithEighthNoteUnit_keepsTheUnit() throws {
         let unit = try #require(GMNTempo.Metronome.BeatUnit(1, 8))
         let metronome = GMNTempo.Metronome.rate(unit: unit, beats: 120)
+        let converted = try #require(convertToTempo(metronome))
 
-        #expect(convertToTempo(metronome) == Tempo(uintValue: 60))
+        #expect(converted == tempo("1/8=120"))
+        #expect(converted.numberValue == Tempo(60).numberValue)
     }
 
     @Test

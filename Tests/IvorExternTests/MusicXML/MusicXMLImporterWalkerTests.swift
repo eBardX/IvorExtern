@@ -68,7 +68,7 @@ extension MusicXMLImporterWalkerTests {
         // all three legs' durations — the middle leg's own `<accent/>`,
         // written on neither the first nor the last leg, still reaches it.
         #expect(notes.count == 1)
-        #expect(notes[0].duration == BeatDuration(4))
+        #expect(notes[0].duration == dur(1))
         #expect(notes[0].accent)
     }
 
@@ -147,7 +147,7 @@ extension MusicXMLImporterWalkerTests {
             """)
         let voice = try #require(results.first?.part.voices.first)
 
-        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+        #expect(voice.noteTable.map(\.attack) == [.zero, beat(1, 4)])
     }
 
     @Test
@@ -186,7 +186,7 @@ extension MusicXMLImporterWalkerTests {
         }
 
         #expect(notes.count == 2)
-        #expect(notes.allSatisfy { $0.attack == .zero && $0.duration == BeatDuration(2) })
+        #expect(notes.allSatisfy { $0.attack == .zero && $0.duration == dur(1, 2) })
     }
 
     @Test
@@ -228,7 +228,7 @@ extension MusicXMLImporterWalkerTests {
 
         // D4 never appears, but its 2-division duration still shifted C4.
         #expect(notes.count == 1)
-        #expect(notes.first?.attack == BeatTime(2))
+        #expect(notes.first?.attack == beat(1, 2))
         #expect(notes.first?.pitch == "C4")
     }
 
@@ -328,6 +328,35 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
+    func walk_dottedMetronomeWithSoundTempo_keepsTheMetronomeUnit() throws {
+        let tempo = try walkedTempo(directionType: """
+            <metronome>
+              <beat-unit>quarter</beat-unit>
+              <beat-unit-dot/>
+              <per-minute>80</per-minute>
+            </metronome>
+            """,
+                                    sound: #"<sound tempo="120"/>"#)
+
+        // ♩ = 120 is ♩. = 80.
+        #expect(tempo == IvorExternTests.tempo("3/8=80"))
+    }
+
+    @Test
+    func walk_dottedQuarterTempo_isExact() throws {
+        let tempo = try walkedTempo(directionType: """
+            <metronome>
+              <beat-unit>quarter</beat-unit>
+              <beat-unit-dot/>
+              <per-minute>67</per-minute>
+            </metronome>
+            """,
+                                    sound: #"<sound tempo="100.5"/>"#)
+
+        #expect(tempo == IvorExternTests.tempo("3/8=67"))
+    }
+
+    @Test
     func walk_droppedChordTone_registersItsVoiceWithoutANote() throws {
         let results = try walkMusicXMLMeasure("""
             <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice></note>
@@ -381,7 +410,7 @@ extension MusicXMLImporterWalkerTests {
         let voices = try #require(results.first?.part.voices)
 
         #expect(voices.map(\.id) == ["1", "2"])
-        #expect(voices.first?.noteTable.map(\.attack) == [BeatTime(2)])
+        #expect(voices.first?.noteTable.map(\.attack) == [beat(1, 2)])
     }
 
     @Test
@@ -483,10 +512,10 @@ extension MusicXMLImporterWalkerTests {
 
         // The repeated note keeps the divisions it was written in; the
         // change applies from the measure after.
-        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(4), BeatTime(8)])
-        #expect(voice.noteTable.map(\.duration) == [BeatDuration(4),
-                                                    BeatDuration(4),
-                                                    BeatDuration(Number(numerator: 1, denominator: 2))])
+        #expect(voice.noteTable.map(\.attack) == [.zero, beat(1), beat(2)])
+        #expect(voice.noteTable.map(\.duration) == [dur(1),
+                                                    dur(1),
+                                                    dur(1, 8)])
     }
 
     @Test
@@ -523,7 +552,7 @@ extension MusicXMLImporterWalkerTests {
 
         #expect(results.first?.tempoEvents.count == 1)
         #expect(results.first?.tempoEvents.first?.beatTime == .zero)
-        #expect(results.first?.tempoEvents.first?.tempo == Tempo(uintValue: 96))
+        #expect(results.first?.tempoEvents.first?.tempo == Tempo(96))
     }
 
     @Test(arguments: ["inverted-mordent", "mordent"])
@@ -562,8 +591,8 @@ extension MusicXMLImporterWalkerTests {
                                                           order: [0, 1, 2])
         let voice = try #require(results.first?.part.voices.first)
 
-        #expect(voice.noteTable.map(\.attack) == [BeatTime(8)])
-        #expect(voice.noteTable.map(\.duration) == [BeatDuration(Number(numerator: 1, denominator: 2))])
+        #expect(voice.noteTable.map(\.attack) == [beat(2)])
+        #expect(voice.noteTable.map(\.duration) == [dur(1, 8)])
     }
 
     @Test
@@ -584,7 +613,7 @@ extension MusicXMLImporterWalkerTests {
                                                           order: [0, 1, 2, 3])
         let voice = try #require(results.first?.part.voices.first)
 
-        #expect(voice.noteTable.map(\.attack) == [.zero, BeatTime(12)])
+        #expect(voice.noteTable.map(\.attack) == [.zero, beat(3)])
     }
 
     @Test
@@ -754,7 +783,7 @@ extension MusicXMLImporterWalkerTests {
         let events = try #require(results.first?.directionDynamicEvents)
 
         #expect(events.count == 1)
-        #expect(events.first?.beatTime == BeatTime(1))
+        #expect(events.first?.beatTime == beat(1, 4))
         #expect(events.first?.kind == .step)
     }
 
@@ -853,7 +882,15 @@ extension MusicXMLImporterWalkerTests {
                                                           order: [0])
 
         #expect(results.first?.tempoEvents.count == 1)
-        #expect(results.first?.tempoEvents.first?.tempo == Tempo(uintValue: 144))
+        #expect(results.first?.tempoEvents.first?.tempo == Tempo(144))
+    }
+
+    @Test
+    func walk_soundTempoAlone_isAQuarterNoteTempo() throws {
+        let tempo = try walkedTempo(directionType: "<words/>",
+                                    sound: #"<sound tempo="66.5"/>"#)
+
+        #expect(tempo == IvorExternTests.tempo("1/4=133/2"))
     }
 
     @Test
@@ -914,7 +951,7 @@ extension MusicXMLImporterWalkerTests {
 
         #expect(notes.count == 1)
         #expect(notes.first?.attack == .zero)
-        #expect(notes.first?.duration == BeatDuration(2))
+        #expect(notes.first?.duration == dur(1, 2))
     }
 
     @Test
@@ -969,7 +1006,7 @@ extension MusicXMLImporterWalkerTests {
             """)
         let voice = try #require(results.first?.part.voices.first)
 
-        #expect(voice.noteTable.map(\.duration) == [BeatDuration(2)])
+        #expect(voice.noteTable.map(\.duration) == [dur(1, 2)])
     }
 
     @Test
@@ -1073,7 +1110,7 @@ extension MusicXMLImporterWalkerTests {
             """)
         let voice = try #require(results.first?.part.voices.first)
 
-        #expect(voice.noteTable.map(\.attack) == [BeatTime(2)])
+        #expect(voice.noteTable.map(\.attack) == [beat(1, 2)])
     }
 
     @Test
@@ -1125,7 +1162,7 @@ extension MusicXMLImporterWalkerTests {
             """)
         let events = try #require(results.first?.directionDynamicEvents)
 
-        #expect(events.map(\.beatTime) == [.zero, BeatTime(2)])
+        #expect(events.map(\.beatTime) == [.zero, beat(1, 2)])
     }
 
     @Test
@@ -1159,7 +1196,7 @@ extension MusicXMLImporterWalkerTests {
         #expect(events.allSatisfy { $0.kind == .rampBoundary })
         #expect(events.first?.beatTime == .zero)
         #expect(events.first?.dynamic == .mp)
-        #expect(events.last?.beatTime == BeatTime(1))
+        #expect(events.last?.beatTime == beat(1, 4))
         #expect(events.last?.dynamic == .mf)
     }
 }

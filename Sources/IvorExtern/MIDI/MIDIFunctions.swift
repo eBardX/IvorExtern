@@ -22,9 +22,20 @@ internal func convertToInstrument(_ program: MIDI.Program) -> Instrument {
     Instrument(stringValue: GM1Instrument(program: program).name) ?? .vanilla
 }
 
+// A time signature's meter: its numerator over two to the power of its
+// denominator. Clocks per click and 32nds per quarter never affect it (see
+// `convertToMIDITimeSignatureExtras(_:)`).
+internal func convertToMeter(_ timeSignature: MIDI.TimeSignature) -> Meter? {
+    guard timeSignature.denominator < UInt.bitWidth - 1
+    else { return nil }
+
+    return Meter(numerators: [timeSignature.numerator],
+                 denominator: 1 << timeSignature.denominator)
+}
+
 internal func convertToMIDIEventTime(_ beatTime: BeatTime,
                                      _ tickRate: MIDI.TickRate) -> MIDI.EventTime? {
-    MIDI.EventTime(uintValue: UInt((beatTime.doubleValue * Double(tickRate.uintValue)).rounded()))
+    MIDI.EventTime(uintValue: UInt((beatTime.doubleValue * 4 * Double(tickRate.uintValue)).rounded()))
 }
 
 internal func convertToMIDIKeyVelocity(_ dynamic: Dynamic) -> MIDI.KeyVelocity? {
@@ -43,8 +54,17 @@ internal func convertToMIDIProgram(_ instrument: Instrument) -> MIDI.Program? {
     instrument.generalMIDIInstrument?.program
 }
 
+// MIDI states every tempo in microseconds per quarter note: 60,000,000
+// divided by the quarter-note rate, which is 15,000,000 divided by the speed
+// in whole notes per minute. It's rounded to the nearest microsecond only
+// here, on export.
 internal func convertToMIDITempo(_ tempo: Tempo) -> MIDI.Tempo? {
-    MIDI.Tempo(uintValue: 60_000_000 / tempo.uintValue)
+    let microseconds = round(Number(15_000_000) / tempo.numberValue).exact
+
+    guard !microseconds.isNegative
+    else { return nil }
+
+    return MIDI.Tempo(uintValue: microseconds.uintValue)
 }
 
 // SMF text is one byte per character, which IvorSMF reads and writes as
@@ -75,6 +95,50 @@ internal func convertToMIDIText(_ text: String) -> MIDI.Text? {
     return MIDI.Text(stringValue: result)
 }
 
+// The time signature written for a meter entry, or `nil` if there's none: a
+// time signature can only state one numerator over a power of two. A meter
+// over a power of two is written as the sum of its numerators over its
+// denominator (2+2+3/8 as 7/8). Any other metered meter whose bar length is a
+// whole number of some power-of-two note value is written as that (6/12 as
+// 2/4, by its quarter-note pulse; 3/6 as 2/4). A free meter, or one like 4/3
+// or 7/12, has none. The entry's `midiTimeSignature` extra supplies clocks
+// per click and 32nds per quarter; without it, 24 and 8.
+internal func convertToMIDITimeSignature(_ meter: Meter,
+                                         _ extras: Extras?) -> MIDI.TimeSignature? {
+    guard let (numerator, exponent) = _powerOfTwoMeter(meter)
+    else { return nil }
+
+    let values = extras?.elements.first { $0.name == Extra.midiTimeSignature.name }?.values ?? []
+    var clockRate: UInt = 24
+    var beatRate: UInt = 8
+
+    if values.count == 2,
+       case let .int(clocks) = values[0],
+       case let .int(notes) = values[1],
+       let clocks = UInt(exactly: clocks),
+       let notes = UInt(exactly: notes) {
+        clockRate = clocks
+        beatRate = notes
+    }
+
+    return MIDI.TimeSignature(numerator: numerator,
+                              denominator: exponent,
+                              clockRate: clockRate,
+                              beatRate: beatRate)
+}
+
+// The `midiTimeSignature` extra for an imported time signature: its clocks
+// per click and 32nds per quarter, or `nil` when they're the defaults (24
+// and 8) that the exporter writes anyway.
+internal func convertToMIDITimeSignatureExtras(_ timeSignature: MIDI.TimeSignature) -> Extras? {
+    guard timeSignature.clockRate != 24 || timeSignature.beatRate != 8
+    else { return nil }
+
+    return Extras(elements: [Extra(name: Extra.midiTimeSignature.name,
+                                   values: [.int(Int(timeSignature.clockRate)),
+                                            .int(Int(timeSignature.beatRate))])])
+}
+
 internal func convertToNoteNumber(_ noteNumber: MIDI.NoteNumber) -> NoteNumber {
     NoteNumber(noteNumber.uintValue)
 }
@@ -83,10 +147,17 @@ internal func convertToPan(_ panValue: MIDI.PanValue) -> Pan? {
     Pan(stereo: Number(((Double(panValue.uintValue) / 127.0) * 2.0) - 1.0))
 }
 
-internal func convertToTempo(_ tempo: MIDI.Tempo,
-                             _ factor: MIDI.BeatMap.Factor) -> Tempo {
-    Tempo(round(factor * Number(numerator: 60_000_000,
-                                denominator: tempo.uintValue)).exact.uintValue)
+// A MIDI tempo, in microseconds per quarter note, as an exact quarter-note
+// rate: 60,000,000 divided by the microseconds. Clocks per click never
+// affects it. A tempo of zero microseconds, which no valid file holds, gives
+// the default tempo.
+internal func convertToTempo(_ tempo: MIDI.Tempo) -> Tempo {
+    guard tempo.uintValue > 0
+    else { return .default }
+
+    return Tempo(rate: Number(numerator: 60_000_000,
+                              denominator: tempo.uintValue),
+                 unit: .quarter) ?? .default
 }
 
 // The timecode division `MIDI.Importer` recorded on a work it read from a
@@ -151,6 +222,29 @@ internal func impliedSMPTEStartTime(_ division: MIDI.Division) -> SMPTETime {
     return startTime
 }
 
+// The text of the marker meta event that states a meter entry's meter
+// exactly — `Ivor meter <plain>`, such as `Ivor meter 4/3` — or `nil` if the
+// entry's time signature already says it all (see
+// `convertToMIDITimeSignature(_:_:)`). A free meter, a grouped meter, and a
+// meter with no time signature of its own all need one; a simple meter
+// written as a stand-in of the same bar length (6/12 as 2/4) doesn't.
+// `MIDI.Importer` reads it back with `parseMeterMarker(_:)`.
+internal func makeMeterMarker(_ meter: Meter) -> MIDI.Text? {
+    guard meter.numerators.count != 1 || _powerOfTwoMeter(meter) == nil
+    else { return nil }
+
+    return MIDI.Text(stringValue: meterMarkerPrefix + meter.plain)
+}
+
+// The meter a marker meta event states, if it's one `makeMeterMarker(_:)`
+// wrote.
+internal func parseMeterMarker(_ text: String) -> Meter? {
+    guard text.hasPrefix(meterMarkerPrefix)
+    else { return nil }
+
+    return Meter(plain: String(text.dropFirst(meterMarkerPrefix.count)).trimmingCharacters(in: .whitespaces))
+}
+
 // The RP-026 song information tags in one Lyric meta event's text —
 // `{#Title=…}`, `{#Composer=…}`, `{#Lyrics=…}`, `{#Artist=…}` — as name and
 // value pairs, in order. RP-026 puts them at the start of the lyrics,
@@ -175,8 +269,50 @@ internal func parseSongInformation(_ text: String) -> [(name: String, value: Str
     return results
 }
 
+// MARK: Private Constants
+
+private let meterMarkerPrefix = "Ivor meter "
+
 // MARK: Private Functions
 
 private func _isLatin1(_ text: String) -> Bool {
     text.unicodeScalars.allSatisfy { $0.value <= 0xff }
+}
+
+// The numerator and power-of-two exponent a time signature writes for a
+// meter (see `convertToMIDITimeSignature(_:_:)`), or `nil` if there's none.
+private func _powerOfTwoMeter(_ meter: Meter) -> (numerator: UInt, exponent: UInt)? {
+    guard let denominator = meter.denominator,
+          let barLength = meter.barLength
+    else { return nil }
+
+    if denominator.nonzeroBitCount == 1 {
+        let numerator = meter.numerators.reduce(0, +)
+
+        guard numerator <= 255
+        else { return nil }
+
+        return (numerator, UInt(denominator.trailingZeroBitCount))
+    }
+
+    var exponents: [UInt] = []
+
+    if let pulse = meter.evenPulse,
+       pulse.numberValue.numerator == 1,
+       pulse.numberValue.denominator.uintValue.nonzeroBitCount == 1 {
+        exponents.append(UInt(pulse.numberValue.denominator.uintValue.trailingZeroBitCount))
+    }
+
+    exponents += Array(2...8)
+
+    for exponent in exponents {
+        let numerator = barLength.numberValue * Number(1 << exponent)
+
+        if numerator.denominator == 1,
+           (1...255).contains(numerator.numerator.uintValue) {
+            return (numerator.numerator.uintValue, exponent)
+        }
+    }
+
+    return nil
 }

@@ -58,7 +58,8 @@ extension Guido.Importer {
 
         return Work(name: determineWorkName(validated),
                     content: .standardBeat(fillEmptyPartNames(parts),
-                                           _makeTempoMap(contexts.flatMap(\.tempoEvents))),
+                                           _makeTempoMap(contexts.flatMap(\.tempoEvents)),
+                                           _makeMeterTable(contexts.first)),
                     info: determineWorkInfo(validated))
     }
 
@@ -135,6 +136,20 @@ extension Guido.Importer {
         }
 
         return instrumentTable
+    }
+
+    // The meter is work-wide, so it's read from the first voice only. A bar
+    // line at or after the end of that voice's music starts no bar, so it's
+    // dropped (the final bar line would otherwise make a short last bar a
+    // restart), except at time 0, where it still states the meter. A score
+    // with no `\meter` tag has no meter.
+    private static func _makeMeterTable(_ context: Guido.Importer.Context?) -> MeterTable {
+        guard let context
+        else { return MeterTable() }
+
+        let end = context.currentBeatTime
+
+        return makeMeterTable(context.barlines.filter { $0.beatTime < end || $0.beatTime == .zero })
     }
 
     // Mirrors `MIDI.Importer`'s own `TempoMap` builder: inserting both the

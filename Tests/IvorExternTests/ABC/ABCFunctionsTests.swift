@@ -143,7 +143,7 @@ extension ABCFunctionsTests {
     func convertToBeatDuration() throws {
         let duration = ABC.Duration(numberValue: Number(numerator: 1, denominator: 4))
 
-        #expect(try IvorExtern.convertToBeatDuration(duration) == BeatDuration(1))
+        #expect(try IvorExtern.convertToBeatDuration(duration) == dur(1, 4))
     }
 
     @Test
@@ -308,21 +308,31 @@ extension ABCFunctionsTests {
     }
 
     @Test
-    func convertToTempo_compoundBeat_sumsLengthsBeforeScaling() throws {
+    func convertToTempo_compoundBeat_sumsLengthsIntoTheUnit() throws {
         let lengths = try [#require(ABCLength(numerator: 1, denominator: 4)),
                            #require(ABCLength(numerator: 3, denominator: 8))]
-        let tempo = try #require(ABCTempo(lengths: lengths, rate: 40, text: nil))
+        let abcTempo = try #require(ABCTempo(lengths: lengths, rate: 40, text: nil))
+        let converted = try #require(convertToTempo(abcTempo))
 
-        // (1/4 + 3/8) whole notes × 40 × 4 = 100.
-        #expect(convertToTempo(tempo) == Tempo(uintValue: 100))
+        // 1/4 + 3/8 = 5/8, at 40 per minute: 25 whole notes per minute.
+        #expect(converted == tempo("5/8=40"))
+        #expect(converted.numberValue == 25)
     }
 
     @Test
-    func convertToTempo_rateForm_convertsToQuarterNoteBPM() throws {
-        let lengths = try [#require(ABCLength(numerator: 1, denominator: 4))]
-        let tempo = try #require(ABCTempo(lengths: lengths, rate: 120, text: nil))
+    func convertToTempo_dottedUnit_keepsTheUnit() throws {
+        let lengths = try [#require(ABCLength(numerator: 3, denominator: 8))]
+        let abcTempo = try #require(ABCTempo(lengths: lengths, rate: 67, text: nil))
 
-        #expect(convertToTempo(tempo) == Tempo(uintValue: 120))
+        #expect(convertToTempo(abcTempo) == tempo("3/8=67"))
+    }
+
+    @Test
+    func convertToTempo_rateForm_keepsAQuarterNoteUnit() throws {
+        let lengths = try [#require(ABCLength(numerator: 1, denominator: 4))]
+        let abcTempo = try #require(ABCTempo(lengths: lengths, rate: 120, text: nil))
+
+        #expect(convertToTempo(abcTempo) == Tempo(120))
     }
 
     @Test

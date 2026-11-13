@@ -16,11 +16,14 @@ extension MIDI {
 
         // MARK: Internal Initializers
 
-        // With a metrical division, a tick is a fixed fraction of a quarter
-        // note. With a timecode division, a tick is a fixed fraction of a
-        // second — one exact division by the frame rate and ticks per frame —
-        // so the quarter notes a tick spans depend on the tempo in effect,
-        // and every tempo change starts a new entry.
+        // Beat times count whole notes. With a metrical division, a tick is
+        // a fixed fraction of a quarter note, so a whole note is four times
+        // the division's ticks per quarter. With a timecode division, a tick
+        // is a fixed fraction of a second — one exact division by the frame
+        // rate and ticks per frame — so the whole notes a tick spans depend
+        // on the tempo in effect, and every tempo change starts a new entry.
+        // Time signatures never affect timing: clocks per click only says
+        // where the metronome clicks.
         internal init(division: MIDI.Division) {
             switch division {
             case let .metrical(tickRate):
@@ -34,7 +37,6 @@ extension MIDI {
 
             self.entries = [Entry(eventTime: .zero,
                                   beatTime: .zero,
-                                  factor: 1,
                                   tempo: MIDI.BeatMap.defaultTempo)]
         }
 
@@ -51,10 +53,6 @@ extension MIDI {
 
 extension MIDI.BeatMap {
 
-    // MARK: Internal Type Aliases
-
-    internal typealias Factor = Number
-
     // MARK: Internal Type Properties
 
     // The tempo in effect until the first tempo event, in microseconds per
@@ -63,52 +61,24 @@ extension MIDI.BeatMap {
 
     // MARK: Internal Instance Subscripts
 
-    internal subscript(eventTime: MIDI.EventTime) -> (BeatTime, Factor) {
+    internal subscript(eventTime: MIDI.EventTime) -> BeatTime {
         guard !entries.isEmpty
-        else { return (.zero, 1) }
+        else { return .zero }
 
         let maxIndex = entries.endIndex - 1
 
         guard let idx = entries.firstIndex(where: { eventTime < $0.eventTime })
-        else { return (_beatTime(for: eventTime,
-                                 after: entries[maxIndex]),
-                       entries[maxIndex].factor) }
+        else { return _beatTime(for: eventTime,
+                                after: entries[maxIndex]) }
 
         guard idx > 0
-        else { return (entries[0].beatTime,
-                       entries[0].factor) }
+        else { return entries[0].beatTime }
 
-        let entry = entries[idx - 1]
-
-        return (_beatTime(for: eventTime,
-                          after: entry),
-                entry.factor)
+        return _beatTime(for: eventTime,
+                         after: entries[idx - 1])
     }
 
     // MARK: Internal Instance Methods
-
-    internal mutating func append(eventTime: MIDI.EventTime,
-                                  clockRate: UInt) throws(MIDI.Error) {
-        guard eventTime >= 0
-        else { throw MIDI.Error.invalidEventTime(eventTime) }
-
-        guard clockRate > 0
-        else { throw MIDI.Error.invalidClockRate(clockRate) }
-
-        guard let lastEntry = entries.last
-        else { throw MIDI.Error.emptyBeatMap }
-
-        guard eventTime >= lastEntry.eventTime
-        else { throw MIDI.Error.invalidEventTime(eventTime) }
-
-        entries.insert(Entry(eventTime: eventTime,
-                             beatTime: _beatTime(for: eventTime,
-                                                 after: lastEntry),
-                             factor: Number(numerator: 24,
-                                            denominator: Number(clockRate)),
-                             tempo: lastEntry.tempo),
-                       at: entries.count)
-    }
 
     // Tempo changes only move beat times when ticks measure wall time, so
     // with a metrical division they leave the map untouched.
@@ -129,7 +99,6 @@ extension MIDI.BeatMap {
         entries.insert(Entry(eventTime: eventTime,
                              beatTime: _beatTime(for: eventTime,
                                                  after: lastEntry),
-                             factor: lastEntry.factor,
                              tempo: tempo),
                        at: entries.count)
     }
@@ -139,19 +108,18 @@ extension MIDI.BeatMap {
     private func _beatTime(for eventTime: MIDI.EventTime,
                            after entry: MIDI.BeatMap.Entry) -> BeatTime {
         BeatTime(entry.beatTime.numberValue +
-                 (entry.factor *
-                  _quarterNotes(eventTime.uintValue - entry.eventTime.uintValue,
-                                entry.tempo)))
+                 _wholeNotes(eventTime.uintValue - entry.eventTime.uintValue,
+                             entry.tempo))
     }
 
-    private func _quarterNotes(_ ticks: UInt,
-                               _ tempo: UInt) -> Number {
+    private func _wholeNotes(_ ticks: UInt,
+                             _ tempo: UInt) -> Number {
         if let ticksPerSecond {
-            return Number(ticks) * 1_000_000 / (ticksPerSecond * Number(tempo))
+            return Number(ticks) * 250_000 / (ticksPerSecond * Number(tempo))
         }
 
         return Number(numerator: ticks,
-                      denominator: tickRate ?? 1)
+                      denominator: 4 * (tickRate ?? 1))
     }
 }
 
@@ -162,7 +130,7 @@ extension MIDI.BeatMap: MIDI.ImportTimeMap {
     // MARK: Internal Instance Methods
 
     internal func time(at eventTime: MIDI.EventTime) -> BeatTime {
-        self[eventTime].0
+        self[eventTime]
     }
 
     internal func timeSpan(at eventTime: MIDI.EventTime,

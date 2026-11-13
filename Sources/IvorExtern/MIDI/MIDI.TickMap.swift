@@ -10,9 +10,9 @@ extension MIDI {
 
     // MARK: Internal Nested Types
 
-    // The exporter's counterpart to `MIDI.BeatMap`: maps beat times to SMF
-    // event times. With a metrical division, a beat is a fixed number of
-    // ticks. With a timecode division, a tick is a fixed fraction of a
+    // The exporter's counterpart to `MIDI.BeatMap`: maps beat times (in
+    // whole notes) to SMF event times. With a metrical division, a whole
+    // note is a fixed number of ticks (four times the ticks per quarter). With a timecode division, a tick is a fixed fraction of a
     // second, so a beat time is first converted to seconds through the
     // exact tempo changes the exporter writes — the same ones
     // `MIDI.BeatMap` reads back on import — and only then to ticks, rounding
@@ -92,9 +92,11 @@ extension MIDI.TickMap {
 
     // MARK: Private Type Methods
 
-    private static func _seconds(_ quarterNotes: Number,
+    // `tempo` is in microseconds per quarter note, and a whole note is four
+    // quarter notes.
+    private static func _seconds(_ wholeNotes: Number,
                                  _ tempo: UInt) -> Number {
-        quarterNotes * Number(tempo) / 1_000_000
+        wholeNotes * Number(tempo) / 250_000
     }
 }
 

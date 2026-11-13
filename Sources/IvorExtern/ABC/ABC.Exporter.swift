@@ -61,19 +61,7 @@ extension ABC.Exporter {
 
     // MARK: Private Type Methods
 
-    private static func _barTimes(measureCount: UInt) -> [BeatTime] {
-        var barTimes: [BeatTime] = []
-        var barBeat: UInt = 4
-
-        while barBeat < measureCount * 4 {
-            barTimes.append(BeatTime(Number(numerator: barBeat, denominator: 1)))
-            barBeat += 4
-        }
-
-        return barTimes
-    }
-
-    private static func _boundaries(events: [Event], barTimes: [BeatTime], endTime: BeatTime) -> [BeatTime] {
+    private static func _boundaries(events: [Event], barTimes: Set<BeatTime>, endTime: BeatTime) -> [BeatTime] {
         var boundaries: Set<BeatTime> = [.zero, endTime]
 
         for barTime in barTimes {
@@ -89,7 +77,7 @@ extension ABC.Exporter {
     }
 
     private static func _convert(work: Work) throws(ABC.Error) -> ABCTune {
-        guard case let .standardBeat(parts, tempoMap) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw ABC.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -97,12 +85,14 @@ extension ABC.Exporter {
             throw ABC.Error.unsupportedTimeBasis(work.timeBasis)
         }
 
-        let measureCount = _measureCount(work: work)
+        let bars = exportBars(meterTable,
+                              through: work.beatTimeRange?.upperBound ?? .zero)
         let header = _makeHeader(work: work,
                                  parts: parts,
-                                 tempoMap: tempoMap)
+                                 tempoMap: tempoMap,
+                                 firstBar: bars.first)
         let body = try _makeBody(parts: parts,
-                                 measureCount: measureCount)
+                                 bars: bars)
 
         guard let tune = ABCTune(header: header,
                                  body: body)
@@ -321,7 +311,8 @@ extension ABC.Exporter {
     // note each scale independently even when they'd share a marker in
     // idiomatic hand-written ABC.
     private static func _lengthAndTuplet(for duration: BeatDuration) throws(ABC.Error) -> (length: ABCLength, tuplet: ABCTuplet?) {
-        let numberValue = duration.numberValue
+        // In units of the `L:1/4` this exporter always writes.
+        let numberValue = duration.numberValue * 4
 
         guard numberValue.isRational
         else { throw ABC.Error.unrepresentableDuration("\(duration)") }
@@ -371,7 +362,7 @@ extension ABC.Exporter {
     }
 
     private static func _makeBody(parts: [Part<BeatTime, Pitch>],
-                                  measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
+                                  bars: [ExportBar]) throws(ABC.Error) -> [ABCBodyEntry] {
         var body: [ABCBodyEntry] = []
         let needsVoiceFields = _needsVoiceFields(parts: parts)
 
@@ -381,22 +372,26 @@ extension ABC.Exporter {
             }
 
             body += try _makePartBody(part: parts[index],
-                                      measureCount: measureCount)
+                                      bars: bars)
         }
 
         return body
     }
 
+    // The `M:` field is the first bar's meter (see `exportBars(_:through:)`);
+    // a later change is an inline field in the body.
     private static func _makeHeader(work: Work,
                                     parts: [Part<BeatTime, Pitch>],
-                                    tempoMap: TempoMap) -> [ABCHeaderEntry] {
+                                    tempoMap: TempoMap,
+                                    firstBar: ExportBar?) -> [ABCHeaderEntry] {
         var header: [ABCHeaderEntry] = [.field(.referenceNumber(ABCReferenceNumber(uintValue: 1).require())),
                                         .field(.tuneTitle(ABCText(stringValue: work.info.title ?? work.name).require()))]
 
         header += _infoFields(work.info).map { .field($0) }
 
-        header += [.field(.meter(.standard(ABCTimeSignature.StandardMeter(numerator: 4,
-                                                                          denominator: 4).require()))),
+        let timeSignature = firstBar.map { convertToABCTimeSignature($0.meter, $0.extras) } ?? .common
+
+        header += [.field(.meter(timeSignature)),
                    .field(.unitNoteLength(ABCLength(numerator: 1,
                                                     denominator: 4).require()))]
 
@@ -437,21 +432,25 @@ extension ABC.Exporter {
         return header
     }
 
-    // Lays one part's notes onto the fixed 4/4 grid: a note or chord
-    // crossing a barline splits into tied segments (each independently
-    // tuplet-scaled), gaps become rests, and every measure sums to exactly
-    // 4 beats. See `_lengthAndTuplet(for:)` for how a non-power-of-2
-    // duration becomes a tuplet-marked segment instead. Only the sustain
-    // pedal is written, as abcm2ps's `!ped!`/`!ped-up!` on the first note at
-    // or after each change (see `_pedalDecorations(_:)`).
+    // Lays one part's notes onto the work's bars (see
+    // `exportBars(_:through:)`): a note or chord crossing a barline splits
+    // into tied segments (each independently tuplet-scaled), gaps become
+    // rests, and every bar sums to its actual length, so a pickup or a short
+    // bar is written short. A bar whose meter is written (other than the
+    // first, whose meter is the header's `M:`) starts with an inline `[M:…]`
+    // field. See `_lengthAndTuplet(for:)` for how a non-power-of-2 duration
+    // becomes a tuplet-marked segment instead. Only the sustain pedal is
+    // written, as abcm2ps's `!ped!`/`!ped-up!` on the first note at or after
+    // each change (see `_pedalDecorations(_:)`).
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
-                                      measureCount: UInt) throws(ABC.Error) -> [ABCBodyEntry] {
+                                      bars: [ExportBar]) throws(ABC.Error) -> [ABCBodyEntry] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directives = _instrumentDirectives(part)
         let pedalDecorations = _pedalDecorations(part.pedals[.sustain])
-        let endTime = BeatTime(Number(numerator: measureCount * 4, denominator: 1))
-        let barTimes = _barTimes(measureCount: measureCount)
+        let endTime = bars.last?.end ?? .zero
+        let barTimes = Set(bars.dropFirst().map(\.start))
+        let meterChanges = _meterChanges(bars)
         let sortedBoundaries = _boundaries(events: events, barTimes: barTimes, endTime: endTime)
         var entries: [ABCBodyEntry] = []
         var pending: [ABCSymbol] = []
@@ -472,6 +471,8 @@ extension ABC.Exporter {
 
             guard start < end
             else { continue }
+
+            pending += meterChanges[start].map { [.inlineField(.meter($0))] } ?? []
 
             while directiveIndex < directives.count,
                   directives[directiveIndex].0 <= start {
@@ -541,7 +542,7 @@ extension ABC.Exporter {
     }
 
     // `tie` is `true` when this segment is not the last piece of a note or
-    // chord split across a barline — see `_makePartBody(part:measureCount:)`.
+    // chord split across a barline — see `_makePartBody(part:bars:)`.
     private static func _makeSymbols(pitches: [Pitch],
                                      duration: BeatDuration,
                                      tie: Bool) throws(ABC.Error) -> [ABCSymbol] {
@@ -598,16 +599,16 @@ extension ABC.Exporter {
                         properties: properties).require()
     }
 
-    // Per §3.1.7, `M:4/4` combined with `L:1/4` puts exactly 4 beats per
-    // measure; `beatTimeRange` is `nil` for a work with nothing in it, and
-    // that's still one (empty, rest-filled) measure.
-    private static func _measureCount(work: Work) -> UInt {
-        guard let range = work.beatTimeRange
-        else { return 1 }
+    // The time signature of each bar after the first whose meter is written
+    // (see `exportBars(_:through:)`), by the time it starts at.
+    private static func _meterChanges(_ bars: [ExportBar]) -> [BeatTime: ABCTimeSignature] {
+        var meterChanges: [BeatTime: ABCTimeSignature] = [:]
 
-        let measures = (range.upperBound.doubleValue / 4).rounded(.up)
+        for bar in bars.dropFirst() where bar.isMeterWritten {
+            meterChanges[bar.start] = convertToABCTimeSignature(bar.meter, bar.extras)
+        }
 
-        return max(1, UInt(measures))
+        return meterChanges
     }
 
     // A single, unnamed part is written as an implicit voice — no `V:`

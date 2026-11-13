@@ -41,6 +41,11 @@ internal import XestiTools
 // de-assigns one entry. File-header fields are replayed into each voice's
 // fresh `Context` ahead of the tune's own, so file-wide definitions carry
 // into every tune while a tune's own redefinitions die with it.
+//
+// `barlines` holds one entry per bar start while a meter is in force: one
+// wherever an `M:` field sets the meter (with its `meterSymbol`), and one
+// after every bar line — what `makeMeterTable(_:)` builds the work's meter
+// table from. The importer drops the ones at or after the end of the music.
 extension ABC.Importer {
 
     // MARK: Internal Nested Types
@@ -57,6 +62,7 @@ extension ABC.Importer {
 
         internal var activeClef: ABCClef?
         internal var barAccidentals: [ABCPitch.Letter: ABCPitch.Accidental] = [:]
+        internal var barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = []
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
         internal var hasExplicitUnitNoteLength = false

@@ -35,7 +35,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var foundBank: Int?
@@ -74,7 +74,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -92,7 +92,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Fiddle"))
@@ -135,6 +135,13 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_meterMarker_replacesTheTimeSignatureAtItsTick() throws {
+        let work = try midiImportedMeters([(0, "4/4", nil), (1_920, "4/4", "Ivor meter 4/3")])
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "1 4/3"])
+    }
+
+    @Test
     func convert_namedTracksSharingAChannel_produceOnePartPerTrack() throws {
         // The common single-instrument convention: every part shares one
         // channel, and only the track boundary (plus each track's own
@@ -158,7 +165,7 @@ extension MIDIImporterTests {
                                    tracks: [rightHandTrack, leftHandTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand", "Left Hand"])
@@ -195,7 +202,7 @@ extension MIDIImporterTests {
                                    tracks: [rightHandTrack, leftHandTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand, Channel 1",
@@ -221,7 +228,7 @@ extension MIDIImporterTests {
                                    tracks: [paddedTrack, otherTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand", "Left Hand"])
@@ -262,6 +269,13 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_noTimeSignature_isMeterless() throws {
+        let work = try midiImportedMeters([])
+
+        #expect(work.meterTable?.isEmpty == true)
+    }
+
+    @Test
     func convert_onePedalTablePerController() throws {
         let pedals = try midiImportedPedals([(0, .sustain, 127),
                                              (0, .sostenuto, 127),
@@ -272,7 +286,7 @@ extension MIDIImporterTests {
 
         #expect(Set(pedals.keys) == Set(Pedal.allCases))
         #expect(pedals[.sostenuto]?.map(\.level) == [.down, .up])
-        #expect(pedals[.sostenuto]?.map(\.time) == [0, 1])
+        #expect(pedals[.sostenuto]?.map(\.time) == [beat(0), beat(1, 4)])
     }
 
     @Test
@@ -285,7 +299,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -302,7 +316,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var entryChannels: [Int?] = []
@@ -322,7 +336,7 @@ extension MIDIImporterTests {
                                              (480, .sustain, 127),
                                              (960, .sustain, 0)])
 
-        #expect(pedals[.sustain]?.map(\.time) == [0, 1, 1, 2])
+        #expect(pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 4), beat(1, 4), beat(1, 2)])
         #expect(pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
     }
 
@@ -341,7 +355,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(work.name == "My Song")
@@ -361,11 +375,9 @@ extension MIDIImporterTests {
                                    division: .metrical(SMFTickRate(480)),
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
-        let startExtras = try #require(tempoMapExtras(work, at: .zero))
-
         #expect(work.smpteStartTime == offset)
-        #expect(intValue(startExtras, .midiTempo) == 600_000)
-        #expect(startExtras.elements.count == 1)
+        #expect(work.tempoMap?[.zero] == Tempo(100))
+        #expect(tempoMapExtras(work, at: .zero) == nil)
     }
 
     @Test
@@ -438,7 +450,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(_, tempoMap) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
@@ -467,8 +479,8 @@ extension MIDIImporterTests {
 
         // 1,000 ticks per second: one second at 120 BPM, then one at 60 BPM.
         #expect(notes.count == 1)
-        #expect(notes.first?.0 == BeatTime(2))
-        #expect(notes.first?.1 == BeatDuration(3))
+        #expect(notes.first?.0 == beat(1, 2))
+        #expect(notes.first?.1 == dur(3, 4))
         #expect(work.tempoMap?[BeatTime(4)] == Tempo(60))
         #expect(timeCodeValues(work.extras) == [.string("25"), .int(40)])
         #expect(timeCodeValues(tempoMapExtras(work, at: .zero)) == nil)
@@ -585,6 +597,23 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_timeSignatureOffTheBarGrid_startsABarThere() throws {
+        // 4/4, then 3/4 two quarter notes into the second bar, then 3/4
+        // again two quarter notes later: a change, then a restart.
+        let work = try midiImportedMeters([(0, "4/4", nil), (2_880, "3/4", nil), (3_840, "3/4", nil)])
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "3/2 3/4", "2 3/4"])
+        #expect(try work.meterTable?.shortBar(before: #require(work.meterTable?.last?.entryID))?.actual == dur(1, 2))
+    }
+
+    @Test
+    func convert_timeSignatureOnTheBarGrid_isRedundant() throws {
+        let work = try midiImportedMeters([(0, "3/4", nil), (1_440, "3/4", nil)])
+
+        #expect(meterSummary(work.meterTable) == ["0 3/4"])
+    }
+
+    @Test
     func convert_unnamedTrack_partNamedByChannel() throws {
         let channel = MIDIChannel(1)
         let key = MIDIData1Value(0x3c)
@@ -598,7 +627,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _) = work.content
+        guard case let .keyboardBeat(parts, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Channel 1"])

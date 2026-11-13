@@ -55,7 +55,8 @@ extension MIDIFormatterTests {
         let part = Part(name: "RoundTrip", noteTable: table)
         let original = Work(name: "RT",
                             content: .keyboardBeat([part],
-                                                   TempoMap()))
+                                                   TempoMap(),
+                                                   MeterTable()))
 
         let exportedSequence = try MIDI.Exporter().convert(original)
         let data = try MIDI.Formatter().format(exportedSequence)
@@ -63,7 +64,7 @@ extension MIDIFormatterTests {
         let parsedSequence = try MIDI.Parser().parse(data)
         let recovered = try MIDI.Importer().convert(parsedSequence)
 
-        guard case let .keyboardBeat(recoveredParts, _) = recovered.content
+        guard case let .keyboardBeat(recoveredParts, _, _) = recovered.content
         else { Issue.record("Unexpected content type"); return }
 
         var totalNotes = 0

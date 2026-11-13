@@ -6,11 +6,11 @@ extension ExportOptions {
 
     /// An export option that a format can use (see ``ExportFileFormat/supportedOptions``).
     public enum Key {
-        /// ``MIDIExportOptions/ticksPerQuarterNote``, for a beat-time work.
+        /// The ``MIDIExportOptions/ticksPerQuarterNote`` option, for a beat-time work.
         case midiTicksPerQuarterNote
 
-        /// ``MIDIExportOptions/timeCodeFrameRate`` and ``MIDIExportOptions/ticksPerFrame``, for
-        /// a wall-time work.
+        /// The ``MIDIExportOptions/timeCodeFrameRate`` and ``MIDIExportOptions/ticksPerFrame``
+        /// options, for a wall-time work.
         case midiTimeCode
     }
 }

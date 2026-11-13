@@ -6,14 +6,16 @@ internal import IvorTiming
 internal import IvorTuning
 internal import XestiTools
 
+private import Foundation
 private import IvorGeneralMIDI
 private import IvorMIDI
 private import XestiNumbers
 
 // MARK: Internal Functions
 
+// A Guido duration is a fraction of a whole note, as a beat duration is.
 internal func convertToBeatDuration(_ duration: Guido.Duration) -> BeatDuration {
-    BeatDuration(duration.numberValue * 4)
+    BeatDuration(duration.numberValue)
 }
 
 // `\intensity`'s `type` is an open string, matched against guidolib's own
@@ -58,8 +60,8 @@ internal func convertToDynamic(_ type: String) -> Dynamic? {
     }
 }
 
-// Reverse of `convertToBeatDuration(_:)`: a beat duration (quarter note = 1
-// beat) becomes a fraction of a whole note. `GMNDuration.init?` accepts any
+// Reverse of `convertToBeatDuration(_:)`: a beat duration is already a
+// fraction of a whole note. `GMNDuration.init?` accepts any
 // non-zero rational and reduces it itself, so unlike ABC there is no
 // power-of-2 constraint to work around — this only fails when `duration`
 // isn’t rational at all or reduces to a non-positive numerator, neither of
@@ -72,7 +74,7 @@ internal func convertToGuidoDuration(_ duration: BeatDuration) -> GMNDuration? {
     else { return nil }
 
     return GMNDuration(numerator: numberValue.numerator.uintValue,
-                       denominator: numberValue.denominator.uintValue * 4)
+                       denominator: numberValue.denominator.uintValue)
 }
 
 // Reverse of `convertToDynamic(_:)`: only the ten standard dynamic levels
@@ -120,6 +122,28 @@ internal func convertToGuidoIntensity(_ dynamic: Dynamic) -> GMNIntensity? {
     else { return nil }
 
     return GMNIntensity(type: type)
+}
+
+// A meter as a `\meter` tag: `"C"` or `"C/"` if a `meterSymbol` extra asks
+// for it and matches the meter (4/4 or 2/2), since a transform can scale
+// the meter without touching its extras; an empty type if it's free (Guido
+// has no free meter, and guidolib draws no meter for a type it can't read);
+// otherwise its plain form, which guidolib reads for any denominator
+// (`"2+2+3/8"`, `"4/3"`).
+internal func convertToGuidoMeter(_ meter: Meter,
+                                  _ extras: Extras?) -> GMNMeter {
+    let type = switch (stringValue(extras, .meterSymbol), meter.plain) {
+    case ("common", "4/4"):
+        "C"
+
+    case ("cut", "2/2"):
+        "C/"
+
+    default:
+        meter.isFree ? "" : meter.plain
+    }
+
+    return GMNMeter(type: type)
 }
 
 // The model has no field to store pitch spelling other than through
@@ -212,16 +236,23 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
     }
 }
 
-// The `bpm` metronome specification always uses a quarter note as the beat
-// unit — the same "quarter note = 1 beat" convention `convertToTempo(_:)`
-// assumes on import — so the reverse conversion is just `tempo`'s own value.
+// The `bpm` metronome specification takes any fraction of a whole note as
+// its beat unit, so the tempo's own unit is written as is (`3/8` for ♩.).
+// Its rate must be a whole number, so a fractional rate is rounded (see
+// `roundedTempoRate(_:)`).
 internal func convertToGuidoTempo(_ tempo: Tempo, text: String? = nil) -> GMNTempo? {
-    guard let unit = GMNTempo.Metronome.BeatUnit(1, 4)
+    let unitValue = tempo.unit.numberValue
+
+    guard unitValue.isRational,
+          let unit = GMNTempo.Metronome.BeatUnit(unitValue.numerator.intValue,
+                                                 unitValue.denominator.intValue)
     else { return nil }
 
-    return GMNTempo(tempo: text ?? "\(tempo.uintValue)",
+    let beats = Int(roundedTempoRate(tempo))
+
+    return GMNTempo(tempo: text ?? "\(beats)",
                     metronome: .rate(unit: unit,
-                                     beats: Int(tempo.uintValue)))
+                                     beats: beats))
 }
 
 // `\instrument`'s own name always wins over its `MIDI` program-number hint —
@@ -241,6 +272,52 @@ internal func convertToInstrument(_ instrument: GMNInstrument) -> Instrument {
     else { return .vanilla }
 
     return Instrument(stringValue: GM1Instrument(program: program).name) ?? .vanilla
+}
+
+// A `\meter` tag's meter: `C` is 4/4 and `C/` is 2/2 (each with a
+// `meterSymbol`, see `convertToMeterExtras(_:)`), an empty type (or
+// `none`/`free`) is free, and anything else is read in plain form, groups
+// and all (`"2+2+3/8"`). `nil` for a type that's none of these.
+internal func convertToMeter(_ meter: GMNMeter) -> Meter? {
+    let type = meter.type.trimmingCharacters(in: .whitespaces)
+
+    switch type.lowercased() {
+    case "",
+         "free",
+         "none":
+        return .free
+
+    case "c":
+        return Meter(numerators: [4],
+                     denominator: 4)
+
+    case "c/":
+        return Meter(numerators: [2],
+                     denominator: 2)
+
+    default:
+        return Meter(plain: type)
+    }
+}
+
+// A `\meter` tag's symbol, as a `meterSymbol` extra: `common` for `C` and
+// `cut` for `C/`; `nil` for any other type.
+internal func convertToMeterExtras(_ meter: GMNMeter) -> Extras? {
+    let symbol = switch meter.type.trimmingCharacters(in: .whitespaces).lowercased() {
+    case "c":
+        "common"
+
+    case "c/":
+        "cut"
+
+    default:
+        String?.none
+    }
+
+    return symbol.map {
+        Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                                values: [.string($0)])])
+    }
 }
 
 // guidolib's `\pizz` draws a left-hand pizzicato (a `+`) by default, and
@@ -264,19 +341,18 @@ internal func convertToStandardPitch(_ pitch: Guido.Pitch) throws(Guido.Error) -
 }
 
 // The `.equivalence` form (`1/4=1/8.`) states a note-equivalence with no
-// absolute rate; nothing here can turn that into a beats-per-minute value,
-// so it — and a `bpm` rounding to zero or less — contribute nothing.
+// absolute rate; nothing here can turn that into a rate, so it — and a
+// non-positive rate or unit — contribute nothing. A `bpm` rate keeps its
+// own unit (`3/8=80` is ♩. = 80).
 internal func convertToTempo(_ metronome: GMNTempo.Metronome) -> Tempo? {
     guard case let .rate(unit, beats) = metronome,
-          unit.denominator != 0
+          unit.denominator != 0,
+          beats > 0
     else { return nil }
 
-    let quarterBPM = Double(beats) * Double(unit.numerator) / Double(unit.denominator) * 4
-
-    guard quarterBPM > 0
-    else { return nil }
-
-    return Tempo(uintValue: UInt(quarterBPM.rounded()))
+    return Tempo(rate: Number(beats),
+                 unit: BeatDuration(Number(numerator: unit.numerator,
+                                           denominator: unit.denominator)))
 }
 
 internal func determinePartName(_ voice: Guido.Voice) -> String {

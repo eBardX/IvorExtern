@@ -21,9 +21,4 @@ extension ImportOptionsTests {
         #expect(ImportOptions(pedalSimplification: .snap) == ImportOptions(pedalSimplification: .snap)) // swiftlint:disable:this identical_operands
         #expect(ImportOptions(pedalSimplification: .snap) != ImportOptions())
     }
-
-    @Test
-    func key_allCases() {
-        #expect(ImportOptions.Key.allCases == [.pedalSimplification])
-    }
 }

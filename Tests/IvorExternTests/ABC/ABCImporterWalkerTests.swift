@@ -52,8 +52,8 @@ extension ABCImporterWalkerTests {
             durations.append(note.duration)
         }
 
-        #expect(durations == [BeatDuration(Number(numerator: 3, denominator: 2)),
-                              BeatDuration(Number(numerator: 1, denominator: 2))])
+        #expect(durations == [dur(3, 8),
+                              dur(1, 8)])
     }
 
     @Test
@@ -143,7 +143,7 @@ extension ABCImporterWalkerTests {
         #expect(events.allSatisfy { $0.kind == .rampBoundary })
         #expect(events.first?.beatTime == .zero)
         #expect(events.first?.dynamic == .mp)
-        #expect(events.last?.beatTime == BeatTime(2))
+        #expect(events.last?.beatTime == beat(1, 2))
         #expect(events.last?.dynamic == .mf)
     }
 
@@ -234,7 +234,7 @@ extension ABCImporterWalkerTests {
         let results = try walker.walk(tune, fileHeader: tunebook.fileHeader)
         let sustain = results[0].context.sustainTable
 
-        #expect(sustain.map(\.time) == [1, 2])
+        #expect(sustain.map(\.time) == [beat(1, 4), beat(1, 2)])
         #expect(sustain.map(\.level) == [.down, .up])
     }
 
@@ -268,7 +268,7 @@ extension ABCImporterWalkerTests {
         let events = results[0].context.dynamicEvents
 
         #expect(events.count == 1)
-        #expect(events.first?.beatTime == BeatTime(1))
+        #expect(events.first?.beatTime == beat(1, 4))
         #expect(events.first?.dynamic == .ff)
         #expect(events.first?.kind == .step)
     }
@@ -360,9 +360,9 @@ extension ABCImporterWalkerTests {
 
         #expect(notes.count == 2)
         #expect(notes[0].pitch == "C4")
-        #expect(notes[0].duration == BeatDuration(2))
+        #expect(notes[0].duration == dur(1, 2))
         #expect(notes[1].pitch == "D4")
-        #expect(notes[1].duration == BeatDuration(1))
+        #expect(notes[1].duration == dur(1, 4))
     }
 
     @Test

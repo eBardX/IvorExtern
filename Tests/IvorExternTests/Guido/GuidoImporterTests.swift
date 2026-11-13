@@ -17,6 +17,20 @@ struct GuidoImporterTests {
 
 extension GuidoImporterTests {
     @Test
+    func convert_differentMetersPerVoice_takesTheFirstVoices() throws {
+        let work = try readGuido(#"{ [ \meter<"3/4"> c d e ], [ \meter<"6/8"> c/8 d e f g a ] }"#)
+
+        #expect(meterSummary(work.meterTable) == ["0 3/4"])
+    }
+
+    @Test
+    func convert_dottedQuarterTempo_isExact() throws {
+        let work = try readGuido(#"[ \tempo<"Andante", "3/8=67"> c ]"#)
+
+        #expect(work.tempoMap?[.zero] == tempo("3/8=67"))
+    }
+
+    @Test
     func convert_failingWalk_wrapsErrorInConvertFailure() {
         let rest = GMNRest(duration: GMNDuration(milliseconds: 500))
         let score = Guido.Score(variables: [],
@@ -40,7 +54,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Piano"])
@@ -52,7 +66,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Piano"))
@@ -68,7 +82,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable.map(\.time) == [.zero])
@@ -85,12 +99,12 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         let instrumentTable = try #require(parts.first?.instrumentTable)
 
-        #expect(instrumentTable.map(\.time) == [BeatTime(1)])
+        #expect(instrumentTable.map(\.time) == [beat(1, 4)])
         #expect(instrumentTable[.zero] == instrumentTable.defaultInstrument)
         #expect(instrumentTable[BeatTime(1)] == Instrument("Piano"))
     }
@@ -101,7 +115,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Flute"])
@@ -112,7 +126,7 @@ extension GuidoImporterTests {
     func convert_intensityChange_isAStep() throws {
         let part = try #require(standardBeatParts(of: readGuido(#"[ \intens<"p"> c d \intens<"f"> e ]"#))?.first)
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2), BeatTime(2)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 2), beat(1, 2)])
         #expect(part.dynamicMap.map(\.dynamic) == [.p, .p, .f])
     }
 
@@ -121,7 +135,7 @@ extension GuidoImporterTests {
         let part = try #require(standardBeatParts(of: readGuido(#"[ \intens<"p"> c \intens<"sfz"> d ]"#))?.first)
         let marks = part.dynamicMap.map { stringValue($0.extras, .dynamicMark) }
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(1)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 4)])
         #expect(part.dynamicMap.map(\.dynamic) == [.p, .p])
         #expect(marks == [nil, "sfz"])
     }
@@ -132,10 +146,17 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Voice 1", "Bass", "Voice 3"])
+    }
+
+    @Test
+    func convert_noMeter_hasNoMeter() throws {
+        let work = try readGuido("[ c d e f ]")
+
+        #expect(meterSummary(work.meterTable).isEmpty)
     }
 
     @Test
@@ -144,11 +165,20 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_noteTiedAcrossBarAndMeterChange_staysOneNote() throws {
+        let work = try readGuido(#"[ \meter<"4/4"> c*1/1 \tieEnd \bar \meter<"3/4"> c*3/4 ]"#)
+        let notes = try notes(in: #require(standardBeatParts(of: work)?.first))
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "1 3/4"])
+        #expect(notes.map(\.duration) == [dur(7, 4)])
+    }
+
+    @Test
     func convert_pedalOnAndOff_populateSustainTable() throws {
         let part = try guidoPedalPart("[ \\pedalOn c d \\pedalOff e f ]")
 
         #expect(Array(part.pedals.keys) == [.sustain])
-        #expect(part.pedals[.sustain]?.map(\.time) == [0, 2])
+        #expect(part.pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 2)])
         #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up])
     }
 
@@ -156,7 +186,7 @@ extension GuidoImporterTests {
     func convert_rampTag_leavesAGlideBetweenItsEndpoints() throws {
         let part = try #require(standardBeatParts(of: readGuido(#"[ \cresc( c d ) e ]"#))?.first)
 
-        #expect(part.dynamicMap.map(\.time) == [.zero, BeatTime(2)])
+        #expect(part.dynamicMap.map(\.time) == [.zero, beat(1, 2)])
         #expect(part.dynamicMap.map(\.dynamic) == [.mp, .mf])
     }
 
@@ -164,8 +194,22 @@ extension GuidoImporterTests {
     func convert_repedal_keepsUpThenDown() throws {
         let part = try guidoPedalPart("[ \\pedalOn c d \\pedalOff \\pedalOn e \\pedalOff ]")
 
-        #expect(part.pedals[.sustain]?.map(\.time) == [0, 2, 2, 3])
+        #expect(part.pedals[.sustain]?.map(\.time) == [beat(0), beat(1, 2), beat(1, 2), beat(3, 4)])
         #expect(part.pedals[.sustain]?.map(\.level) == [.down, .up, .down, .up])
+    }
+
+    @Test
+    func convert_shortBarMidPiece_isARestart() throws {
+        let work = try readGuido(#"[ \meter<"4/4"> c/4 d e f \bar g a b \bar c d e f ]"#)
+
+        #expect(meterSummary(work.meterTable) == ["0 4/4", "7/4 4/4"])
+    }
+
+    @Test
+    func convert_shortFirstBar_isAPickup() throws {
+        let work = try readGuido(#"[ \meter<"3/4"> c/4 \bar d e f \bar g*3/4 ]"#)
+
+        #expect(meterSummary(work.meterTable) == ["pickup 1/4", "0 3/4"])
     }
 
     @Test
@@ -174,7 +218,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _) = work.content
+        guard case let .standardBeat(parts, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == [""])
@@ -184,11 +228,11 @@ extension GuidoImporterTests {
     func convert_tempoChange_isAStep() throws {
         let work = try readGuido(#"[ \tempo<"Fast", "1/4=120"> c \tempo<"Slow", "1/4=60"> d ]"#)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
-        #expect(tempoMap.map(\.beatTime) == [.zero, BeatTime(1), BeatTime(1)])
-        #expect(tempoMap.map(\.tempo.uintValue) == [120, 120, 60])
+        #expect(tempoMap.map(\.beatTime) == [.zero, beat(1, 4), beat(1, 4)])
+        #expect(tempoMap.map(\.tempo) == [Tempo(120), Tempo(120), Tempo(60)])
     }
 
     @Test
@@ -197,7 +241,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(_, tempoMap) = work.content
+        guard case let .standardBeat(_, tempoMap, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)

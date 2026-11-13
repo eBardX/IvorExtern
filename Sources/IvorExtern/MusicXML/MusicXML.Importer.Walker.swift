@@ -53,7 +53,8 @@ extension MusicXML.Importer.Walker {
 
             let context = try _walk(part, order: order)
 
-            results.append(WalkResult(directionDynamicEvents: context.directionDynamicEvents,
+            results.append(WalkResult(barlines: context.barlines,
+                                      directionDynamicEvents: context.directionDynamicEvents,
                                       panEvents: context.panEvents,
                                       part: MusicXML.Part(part: scorePart, voices: Self._voices(from: context)),
                                       pedalEvents: context.pedalEvents,
@@ -502,7 +503,7 @@ extension MusicXML.Importer.Walker {
             // priority over this same direction's visual-only `<metronome>`
             // mark, the same precedence its `dynamics` attribute gets over a
             // notated dynamics mark below.
-            if let tempo = direction.sound.flatMap(convertToTempo) ?? extractMetronome(direction).flatMap(convertToTempo) {
+            if let tempo = convertToTempo(sound: direction.sound, metronome: extractMetronome(direction)) {
                 context.tempoEvents.append((beatTime: beatTime, tempo: tempo))
             }
 
@@ -711,6 +712,12 @@ extension MusicXML.Importer.Walker {
                                                                context: "multiple-rest in measure \(measure.number)")
 
                 context.advance(duration)
+            }
+
+            if let barline = makeMusicXMLBarline(measure,
+                                                 at: convertToBeatTime(context.measureStart),
+                                                 times: context.times) {
+                context.barlines.append(barline)
             }
 
             context.measureStart += context.measureAdvance

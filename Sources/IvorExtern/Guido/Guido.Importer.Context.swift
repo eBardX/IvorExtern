@@ -35,6 +35,11 @@ internal import XestiTools
 // off the pre-walk AST, since only the walk splices each `$variable`'s
 // symbols into place, and an `\instrument` tag inside one is otherwise
 // invisible.
+//
+// `barlines` holds one entry per bar start while a meter is in force: one
+// at every `\meter` tag (with its `meterSymbol`), and one at every `\bar`
+// — what `makeMeterTable(_:)` builds the work's meter table from. `meter`
+// is the meter in force, from the last `\meter` tag the walk read.
 extension Guido.Importer {
 
     // MARK: Internal Nested Types
@@ -43,6 +48,7 @@ extension Guido.Importer {
 
         // MARK: Internal Instance Properties
 
+        internal var barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = []
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
         internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)] = []
@@ -50,6 +56,7 @@ extension Guido.Importer {
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp
         internal var lastOctave: GMNPitch.Octave = Self.defaultOctave
+        internal var meter: Meter?
         internal var noteTable: NoteTable<BeatTime, Pitch> = NoteTable()
         internal var pendingDynamicRamps: [GMNTag.Ident?: (beatTime: BeatTime, dynamic: Dynamic, direction: GMNDynamicRamp.Direction)] = [:]
         internal var pendingNote: (attackTime: BeatTime, notes: [Guido.Note], extras: [Extra])?

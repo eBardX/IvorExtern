@@ -96,6 +96,23 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_dottedQuarterTempo_writesMetronomeAndQuarterNoteSound() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: tempo("3/8=67"))
+
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap, MeterTable()))
+        let score = try MusicXML.Exporter().convert(work)
+        let metronome = try #require(directions(in: score).compactMap(extractMetronome).first)
+
+        #expect(metronome.content == .beatUnit(MXLBeatUnit(beatUnit: .quarter, dot: 1),
+                                               tied: [],
+                                               content: .perMinute(MXLPerMinute(value: "67"))))
+        // ♩. = 67 is ♩ = 100.5.
+        #expect(sounds(in: score).compactMap(\.tempo) == [100.5])
+    }
+
+    @Test
     func convert_dynamicMarkExtra_emitsFixedCaseItem() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -162,6 +179,13 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_freeMeter_writesSenzaMisura() throws {
+        let table = try meterTable(summary: ["0 4/4", "1 free", "3 3/4"])
+
+        #expect(try musicXMLExportedMeasures(table, length: dur(7, 2)) == ["1 4/4", "2 free", "3 3/4"])
+    }
+
+    @Test
     func convert_glissandoNote_exportsAtStartPitch() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -179,7 +203,7 @@ extension MusicXMLExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 1, denominator: 2)))
-        sustain.insert(time: 2, level: .up)
+        sustain.insert(time: beat(1, 2), level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
 
@@ -284,12 +308,46 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_irregularTempoUnit_restatesTheMetronomeInQuarterNotes() throws {
+        var tempoMap = TempoMap()
+
+        tempoMap.insert(beatTime: .zero, tempo: tempo("5/8=40"))
+
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap, MeterTable()))
+        let score = try MusicXML.Exporter().convert(work)
+        let metronome = try #require(directions(in: score).compactMap(extractMetronome).first)
+
+        #expect(metronome.content == .beatUnit(MXLBeatUnit(beatUnit: .quarter, dot: 0),
+                                               tied: [],
+                                               content: .perMinute(MXLPerMinute(value: "100"))))
+    }
+
+    @Test
     func convert_legatoAndPortamento_areDropped() throws {
         var table = PedalTable<BeatTime>()
 
         table.insert(time: 0, level: .down)
 
         #expect(try musicXMLExportedPedalDirections([.legato: table, .portamento: table]).isEmpty)
+    }
+
+    @Test
+    func convert_meterChangeAndRestart_writeTimeOnlyWhereTheMeterChanges() throws {
+        let table = try meterTable(summary: ["0 4/4", "1 3/4", "3/2 3/4"])
+
+        #expect(try musicXMLExportedMeasures(table, length: dur(9, 4)) == ["1 4/4", "2 3/4", "3"])
+    }
+
+    @Test
+    func convert_meterless_writesWholeNoteMeasuresOfCommonTime() throws {
+        #expect(try musicXMLExportedMeasures(MeterTable(), length: dur(5, 2)) == ["1 4/4", "2", "3"])
+    }
+
+    @Test
+    func convert_meterStartsLate_writesAPickupBeforeIt() throws {
+        let table = try meterTable(summary: ["1 3/4"])
+
+        #expect(try musicXMLExportedMeasures(table, length: dur(7, 4)) == ["0 implicit 3/4", "1", "2"])
     }
 
     @Test
@@ -413,6 +471,13 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func convert_pickup_isAnImplicitMeasureZero() throws {
+        let table = try meterTable(summary: ["pickup 1/4", "0 3/4"])
+
+        #expect(try musicXMLExportedMeasures(table, length: dur(7, 4)) == ["0 implicit 3/4", "1", "2"])
+    }
+
+    @Test
     func convert_releaseVelocityExtra_emitsEndDynamicsOnLastSegmentOnly() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
@@ -435,9 +500,9 @@ extension MusicXMLExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sustain.insert(time: 1, level: .up)
-        sustain.insert(time: 1, level: .down)
-        sustain.insert(time: 2, level: .up)
+        sustain.insert(time: beat(1, 4), level: .up)
+        sustain.insert(time: beat(1, 4), level: .down)
+        sustain.insert(time: beat(1, 2), level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.sustain: sustain])
 
@@ -449,7 +514,7 @@ extension MusicXMLExporterTests {
     func convert_shortFinalMeasure_isRestFilled() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: dur(1, 4), pitch: "C4")
 
         let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
         let score = try MusicXML.Exporter().convert(work)
@@ -483,7 +548,7 @@ extension MusicXMLExporterTests {
         var soft = PedalTable<BeatTime>()
 
         soft.insert(time: 0, level: .down)
-        soft.insert(time: 2, level: .up)
+        soft.insert(time: beat(1, 2), level: .up)
 
         let directions = try musicXMLExportedPedalDirections([.soft: soft])
 
@@ -497,9 +562,9 @@ extension MusicXMLExporterTests {
         var sostenuto = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: .down)
-        sostenuto.insert(time: 1, level: .down)
-        sustain.insert(time: 2, level: .up)
-        sostenuto.insert(time: 3, level: .up)
+        sostenuto.insert(time: beat(1, 4), level: .down)
+        sustain.insert(time: beat(1, 2), level: .up)
+        sostenuto.insert(time: beat(3, 4), level: .up)
 
         let pedals = try musicXMLExportedPedalDirections([.sostenuto: sostenuto, .sustain: sustain]).flatMap(\.pedals)
 
@@ -517,7 +582,7 @@ extension MusicXMLExporterTests {
         // has to live inside a `<direction>` inside a part, so at least one
         // part (even an empty one) is required for the tempo to have
         // anywhere to attach.
-        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap))
+        let work = Work(name: "Test", content: .standardBeat([Part(name: "", noteTable: NoteTable())], tempoMap, MeterTable()))
         let score = try MusicXML.Exporter().convert(work)
         let tempo = try #require(sounds(in: score).compactMap(\.tempo).first)
 
@@ -529,7 +594,7 @@ extension MusicXMLExporterTests {
         var sustain = PedalTable<BeatTime>()
 
         sustain.insert(time: 0, level: Pedal.Level(Number(numerator: 63, denominator: 127)))
-        sustain.insert(time: 1, level: Pedal.Level(Number(numerator: 64, denominator: 127)))
+        sustain.insert(time: beat(1, 4), level: Pedal.Level(Number(numerator: 64, denominator: 127)))
 
         #expect(try musicXMLExportedPedalDirections([.sustain: sustain]).map(\.marks) == [[], [.start]])
     }
@@ -545,7 +610,7 @@ extension MusicXMLExporterTests {
 
     @Test
     func convert_wrongPitchNotation_throwsUnsupportedPitchNotation() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: MusicXML.Error.self) {
             try MusicXML.Exporter().convert(work)
@@ -567,7 +632,7 @@ extension MusicXMLExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [.string("1")])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -596,7 +661,7 @@ extension MusicXMLExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -608,13 +673,27 @@ extension MusicXMLExporterTests {
     }
 
     @Test
+    func roundTrip_commonTimeSymbol_isKept() throws {
+        let extras = Extras(elements: [Extra(name: Extra.meterSymbol.name,
+                                             values: [.string("common")])])
+        let table = try meterTable([(.zero, "4/4")], extras: extras)
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(2)),
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+
+        #expect(meterSummary(recovered.meterTable) == ["0 4/4"])
+        #expect(recovered.meterTable?.first?.extras == extras)
+    }
+
+    @Test
     func roundTrip_compressed_preservesNotes() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Compressed", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Compressed", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -660,7 +739,7 @@ extension MusicXMLExporterTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -675,6 +754,28 @@ extension MusicXMLExporterTests {
         }
 
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
+    }
+
+    @Test(arguments: [["0 6/8"],
+                      ["0 2+2+3/8"],
+                      ["0 5/8"],
+                      ["0 4/3"],
+                      ["0 6/12"],
+                      ["0 4/4", "1 4/3", "7/3 3/4"],
+                      ["pickup 1/4", "0 3/4"],
+                      ["pickup 1/4", "0 4/4", "1/4 3/4"],
+                      ["0 4/4", "7/4 4/4"],
+                      ["0 4/4", "1 3/4", "3/2 3/4"],
+                      ["0 4/4", "1 free", "3 3/4"],
+                      ["0 free"]])
+    func roundTrip_meterTable_isKept(_ summary: [String]) throws {
+        let table = try meterTable(summary: summary)
+        let recovered = try roundTrip(meteredStandardWork(table, length: dur(4)),
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+
+        #expect(meterSummary(recovered.meterTable) == summary)
     }
 
     @Test
@@ -692,7 +793,7 @@ extension MusicXMLExporterTests {
                                                              Extra(name: Extra.midiUnpitched.name, values: [.int(38)])]))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "InstrumentExtras", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "InstrumentExtras", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -726,7 +827,7 @@ extension MusicXMLExporterTests {
         table2.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "G3")
 
         let parts = [Part(name: "Lead", noteTable: table1), Part(name: "Bass", noteTable: table2)]
-        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap()))
+        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -750,7 +851,7 @@ extension MusicXMLExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(2), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -773,7 +874,7 @@ extension MusicXMLExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -782,6 +883,20 @@ extension MusicXMLExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_notesAcrossShortBars_keepTheirTimes() throws {
+        let table = try meterTable(summary: ["pickup 1/4", "0 3/4", "5/4 3/4"])
+        let work = meteredStandardWork(table, length: dur(5, 2))
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let notes = try notes(in: #require(standardBeatParts(of: recovered)?.first))
+
+        #expect(notes.map(\.attack) == [.zero])
+        #expect(notes.map(\.duration) == [dur(5, 2)])
     }
 
     // MusicXML declares elevation once per part, so it applies to every
@@ -799,7 +914,7 @@ extension MusicXMLExporterTests {
         panMap.insert(time: BeatTime(4), pan: Pan(horizontal: 90, vertical: 30))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -828,7 +943,7 @@ extension MusicXMLExporterTests {
         panMap.insert(time: BeatTime(0), pan: .right)
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Pan", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Pan", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -850,7 +965,7 @@ extension MusicXMLExporterTests {
         panMap.insert(time: BeatTime(0), pan: Pan(horizontal: 135))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "PanDegree", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "PanDegree", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -876,7 +991,7 @@ extension MusicXMLExporterTests {
         panMap.insert(time: BeatTime(0), pan: Pan(vertical: 45))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Elevation", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -916,7 +1031,7 @@ extension MusicXMLExporterTests {
                      extras: velocity.map { Extras(elements: [Extra(name: Extra.releaseVelocity.name, values: [.int($0)])]) })
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "ReleaseVelocity", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "ReleaseVelocity", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -935,12 +1050,12 @@ extension MusicXMLExporterTests {
 
     @Test
     func roundTrip_repeatedPedals_markedOnceButKeptInEveryPart() throws {
-        let sustain = beatSustainTable([(0, .down), (1, .up), (1, .down), (2, .up)])
+        let sustain = beatSustainTable([(0, .down), (beat(1, 4), .up), (beat(1, 4), .down), (beat(1, 2), .up)])
         let parts = ["C4", "E4"].map { pitch in
             var noteTable = NoteTable<BeatTime, Pitch>()
 
             noteTable.insert(attack: BeatTime(0),
-                             duration: BeatDuration(2),
+                             duration: dur(1, 2),
                              pitch: Pitch(stringLiteral: pitch))
 
             return Part<BeatTime, Pitch>(name: "Piano",
@@ -977,7 +1092,7 @@ extension MusicXMLExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap))
+        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -1006,7 +1121,7 @@ extension MusicXMLExporterTests {
                      pitch: "E4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap()))
+        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
@@ -1058,7 +1173,7 @@ extension MusicXMLExporterTests {
 
     @Test
     func write_noTitle_writesWorkNameAsWorkTitle() throws {
-        let score = try MusicXML.Exporter().convert(Work(name: "Sketch 3", content: .standardBeat([], TempoMap())))
+        let score = try MusicXML.Exporter().convert(Work(name: "Sketch 3", content: .standardBeat([], TempoMap(), MeterTable())))
 
         #expect(score.work?.title == "Sketch 3")
         #expect(score.movementTitle == nil)

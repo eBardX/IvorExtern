@@ -20,7 +20,8 @@ extension JohnnySonicExporterTests {
     func convert_absoluteBeatWork_empty() throws {
         let work = Work(name: "Test",
                         content: .absoluteBeat([] as [Part<BeatTime, Frequency>],
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
 
         _ = try JohnnySonic.Exporter().convert(work)
     }
@@ -35,7 +36,7 @@ extension JohnnySonicExporterTests {
 
         let part = Part(name: "Tone", noteTable: table)
         let work = Work(name: "Test",
-                        content: .absoluteBeat([part], TempoMap()))
+                        content: .absoluteBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -60,7 +61,7 @@ extension JohnnySonicExporterTests {
         try dynamicMap.insert(time: BeatTime(0), dynamic: #require(Dynamic(numberValue: Number(0.5))))
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -85,7 +86,7 @@ extension JohnnySonicExporterTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Flute")))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -103,10 +104,10 @@ extension JohnnySonicExporterTests {
     func convert_keyboardBeat_note_emitsPitchesNote() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
-        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
+        table.insert(attack: BeatTime(0), duration: dur(1, 4), pitch: NoteNumber(60))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -135,7 +136,7 @@ extension JohnnySonicExporterTests {
         dynamicMap.insert(time: BeatTime(0), dynamic: .pp)
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -159,7 +160,7 @@ extension JohnnySonicExporterTests {
         panMap.insert(time: BeatTime(0), pan: Pan(horizontal: -45))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let notes = score.commands.compactMap { command -> DKMPitchesNote? in
@@ -177,7 +178,8 @@ extension JohnnySonicExporterTests {
     func convert_standardBeatWork_throws() {
         let work = Work(name: "Test",
                         content: .standardBeat([] as [Part<BeatTime, Pitch>],
-                                               TempoMap()))
+                                               TempoMap(),
+                                               MeterTable()))
 
         #expect(throws: (any Error).self) {
             try JohnnySonic.Exporter().convert(work)
@@ -189,16 +191,16 @@ extension JohnnySonicExporterTests {
         var tempoMap = TempoMap()
 
         tempoMap.insert(beatTime: BeatTime(0), tempo: Tempo(120))
-        tempoMap.insert(beatTime: BeatTime(4), tempo: Tempo(140))
+        tempoMap.insert(beatTime: beat(1), tempo: Tempo(140))
 
         var table = NoteTable<BeatTime, NoteNumber>()
 
         // Extend the work's beatTimeRange past the last tempo entry so
         // there is a trailing segment to emit.
-        table.insert(attack: BeatTime(8), duration: BeatDuration(1), pitch: NoteNumber(60))
+        table.insert(attack: beat(2), duration: dur(1, 4), pitch: NoteNumber(60))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Test", content: .keyboardBeat([part], tempoMap))
+        let work = Work(name: "Test", content: .keyboardBeat([part], tempoMap, MeterTable()))
         let score = try JohnnySonic.Exporter().convert(work)
 
         let tempoLines = score.commands.compactMap { command -> DKMTempoLine? in
@@ -237,7 +239,7 @@ extension JohnnySonicExporterTests {
         try table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: #require(Frequency(numberValue: Number(440.0))))
 
         let part = Part(name: "Tone", noteTable: table)
-        let work = Work(name: "Notes", content: .absoluteBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .absoluteBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -259,7 +261,7 @@ extension JohnnySonicExporterTests {
         try dynamicMap.insert(time: BeatTime(0), dynamic: #require(Dynamic(numberValue: Number(0.5))))
 
         let part = Part(name: "Piano", noteTable: table, dynamicMap: dynamicMap)
-        let work = Work(name: "Dynamics", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Dynamics", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -287,7 +289,7 @@ extension JohnnySonicExporterTests {
                              remarks: [Remark(text: "A plain remark"),
                                        Remark(text: "First\n\nSecond", label: "history")].compactMap(\.self))
         let work = Work(name: "Sketch",
-                        content: .keyboardBeat([Part(name: "Piano", noteTable: table)], TempoMap()),
+                        content: .keyboardBeat([Part(name: "Piano", noteTable: table)], TempoMap(), MeterTable()),
                         info: info)
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -311,7 +313,7 @@ extension JohnnySonicExporterTests {
         try instrumentTable.insert(time: BeatTime(1), instrument: #require(Instrument(stringValue: "Flute")))
 
         let part = Part(name: "Lead", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Instruments", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -344,7 +346,7 @@ extension JohnnySonicExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: NoteNumber(67))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Notes", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -380,7 +382,7 @@ extension JohnnySonicExporterTests {
         // the way back in.
         let parts = [Part(name: "P1", noteTable: table1, instrumentTable: instrumentTable1),
                      Part(name: "P2", noteTable: table2, instrumentTable: instrumentTable2)]
-        let work = Work(name: "MultiPart", content: .keyboardBeat(parts, TempoMap()))
+        let work = Work(name: "MultiPart", content: .keyboardBeat(parts, TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -408,7 +410,7 @@ extension JohnnySonicExporterTests {
         panMap.insert(time: BeatTime(0), pan: Pan(horizontal: -45))
 
         let part = Part(name: "Piano", noteTable: table, panMap: panMap)
-        let work = Work(name: "Pan", content: .keyboardBeat([part], TempoMap()))
+        let work = Work(name: "Pan", content: .keyboardBeat([part], TempoMap(), MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -430,7 +432,7 @@ extension JohnnySonicExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tempo", content: .keyboardBeat([part], tempoMap))
+        let work = Work(name: "Tempo", content: .keyboardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -469,7 +471,7 @@ extension JohnnySonicExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: NoteNumber(60))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "TempoRamp", content: .keyboardBeat([part], tempoMap))
+        let work = Work(name: "TempoRamp", content: .keyboardBeat([part], tempoMap, MeterTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: JohnnySonic.Exporter(),
@@ -514,8 +516,8 @@ extension JohnnySonicExporterTests {
 
     @Test
     func write_multipleWorks_throws() {
-        let works = [Work(name: "A", content: .keyboardBeat([], TempoMap())),
-                     Work(name: "B", content: .keyboardBeat([], TempoMap()))]
+        let works = [Work(name: "A", content: .keyboardBeat([], TempoMap(), MeterTable())),
+                     Work(name: "B", content: .keyboardBeat([], TempoMap(), MeterTable()))]
 
         #expect(throws: (any Error).self) {
             try JohnnySonic.Exporter().write(works: works, as: .dkm)
@@ -525,7 +527,7 @@ extension JohnnySonicExporterTests {
     @Test
     func write_singleKeyboardBeatWork_returnsRegularFile() throws {
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
         let wrapper = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
 
@@ -536,7 +538,7 @@ extension JohnnySonicExporterTests {
     @Test
     func write_unsupportedFormat_throws() {
         let work = Work(name: "Test",
-                        content: .keyboardBeat([], TempoMap()))
+                        content: .keyboardBeat([], TempoMap(), MeterTable()))
 
         #expect(throws: (any Error).self) {
             try JohnnySonic.Exporter().write(works: [work],

@@ -118,7 +118,7 @@ extension GuidoImporterWalkerTests {
         }
 
         #expect(count == 2)
-        #expect(context.currentBeatTime == BeatTime(2))
+        #expect(context.currentBeatTime == beat(1, 2))
     }
 
     @Test
@@ -129,7 +129,7 @@ extension GuidoImporterWalkerTests {
         let chord = try #require(GMNChord(segments: [restSegment, noteSegment]))
         let context = try walkGMN([.chord(chord)])
 
-        #expect(context.noteTable.map(\.duration) == [BeatDuration(2)])
+        #expect(context.noteTable.map(\.duration) == [dur(1, 2)])
     }
 
     @Test
@@ -172,7 +172,7 @@ extension GuidoImporterWalkerTests {
         #expect(context.dynamicEvents.allSatisfy { $0.kind == .rampBoundary })
         #expect(context.dynamicEvents.first?.beatTime == .zero)
         #expect(context.dynamicEvents.first?.dynamic == .mp)
-        #expect(context.dynamicEvents.last?.beatTime == BeatTime(1))
+        #expect(context.dynamicEvents.last?.beatTime == beat(1, 4))
         #expect(context.dynamicEvents.last?.dynamic == .mf)
     }
 
@@ -194,7 +194,7 @@ extension GuidoImporterWalkerTests {
         #expect(context.dynamicEvents[1].beatTime == .zero)
         #expect(context.dynamicEvents[1].dynamic == .p)
         #expect(context.dynamicEvents[1].kind == .rampBoundary)
-        #expect(context.dynamicEvents[2].beatTime == BeatTime(1))
+        #expect(context.dynamicEvents[2].beatTime == beat(1, 4))
         #expect(context.dynamicEvents[2].dynamic == .mp)
         #expect(context.dynamicEvents[2].kind == .rampBoundary)
     }
@@ -205,7 +205,7 @@ extension GuidoImporterWalkerTests {
         let cue = try GMNCue(body: [.note(makeGMNNote())])
         let context = try walkGMN([.note(makeGMNNote()), .tag(.tie(tie)), .tag(.cue(cue)), .note(makeGMNNote())])
 
-        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+        #expect(context.noteTable.map(\.attack) == [.zero, beat(1, 4)])
     }
 
     @Test
@@ -218,7 +218,7 @@ extension GuidoImporterWalkerTests {
 
         let context = try walker.walk(voice)
 
-        #expect(context.currentBeatTime == BeatTime(1.5))
+        #expect(context.currentBeatTime == beat(3, 8))
     }
 
     @Test
@@ -247,7 +247,7 @@ extension GuidoImporterWalkerTests {
         let grace = try GMNGrace(body: [.note(makeGMNNote())])
         let context = try walkGMN([.note(makeGMNNote()), .tag(.tie(tie)), .tag(.grace(grace)), .note(makeGMNNote())])
 
-        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+        #expect(context.noteTable.map(\.attack) == [.zero, beat(1, 4)])
     }
 
     @Test
@@ -308,7 +308,7 @@ extension GuidoImporterWalkerTests {
         let context = try walkGMN([.note(makeGMNNote(name: .empty))])
 
         #expect(context.noteTable.map(\.attack).isEmpty)
-        #expect(context.currentBeatTime == BeatTime(1))
+        #expect(context.currentBeatTime == beat(1, 4))
     }
 
     @Test
@@ -327,11 +327,11 @@ extension GuidoImporterWalkerTests {
             count += 1
 
             #expect(note.attack == .zero)
-            #expect(note.duration == BeatDuration(1))
+            #expect(note.duration == dur(1, 4))
         }
 
         #expect(count == 1)
-        #expect(context.currentBeatTime == BeatTime(1))
+        #expect(context.currentBeatTime == beat(1, 4))
     }
 
     @Test
@@ -407,7 +407,7 @@ extension GuidoImporterWalkerTests {
 
         let context = try walker.walk(voice)
 
-        #expect(context.sustainTable.map(\.time) == [0, 1])
+        #expect(context.sustainTable.map(\.time) == [beat(0), beat(1, 4)])
         #expect(context.sustainTable.map(\.level) == [.down, .up])
     }
 
@@ -420,7 +420,7 @@ extension GuidoImporterWalkerTests {
         let context = try walker.walk(voice)
 
         #expect(context.noteTable.isEmpty)
-        #expect(context.currentBeatTime == BeatTime(1))
+        #expect(context.currentBeatTime == beat(1, 4))
     }
 
     @Test
@@ -472,7 +472,7 @@ extension GuidoImporterWalkerTests {
 
         #expect(context.tempoEvents.count == 1)
         #expect(context.tempoEvents.first?.beatTime == .zero)
-        #expect(context.tempoEvents.first?.tempo == Tempo(uintValue: 120))
+        #expect(context.tempoEvents.first?.tempo == Tempo(120))
     }
 
     @Test
@@ -493,7 +493,7 @@ extension GuidoImporterWalkerTests {
             count += 1
 
             #expect(note.attack == .zero)
-            #expect(note.duration == BeatDuration(2))
+            #expect(note.duration == dur(1, 2))
         }
 
         #expect(count == 1)
@@ -537,7 +537,7 @@ extension GuidoImporterWalkerTests {
         }
 
         #expect(count == 3)
-        #expect(context.currentBeatTime == BeatTime(3))
+        #expect(context.currentBeatTime == beat(3, 4))
     }
 
     @Test
@@ -551,7 +551,7 @@ extension GuidoImporterWalkerTests {
 
         let context = try walker.walk(Guido.Voice(symbols: [.variable(name)]))
 
-        #expect(context.noteTable.map(\.attack) == [.zero, BeatTime(1)])
+        #expect(context.noteTable.map(\.attack) == [.zero, beat(1, 4)])
     }
 
     @Test

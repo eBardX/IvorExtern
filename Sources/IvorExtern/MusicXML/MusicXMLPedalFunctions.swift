@@ -131,11 +131,11 @@ private func _isPartial(_ level: Pedal.Level) -> Bool {
 private func _makeSound(_ pedal: Pedal,
                         _ level: Pedal.Level) -> MXLSound {
     let value: MXLYesNoNumber = switch level {
-    case .up:
-        .no
-
     case .down:
         .yes
+
+    case .up:
+        .no
 
     default:
         .number(level.doubleValue * 100)

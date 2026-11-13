@@ -20,14 +20,14 @@ extension JohnnySonicFunctionsTests {
     func convertToBeatDuration() {
         let result = IvorExtern.convertToBeatDuration(2)
 
-        #expect(result == BeatDuration(2))
+        #expect(result == dur(1, 2))
     }
 
     @Test
     func convertToBeatTime() {
         let result = IvorExtern.convertToBeatTime(2)
 
-        #expect(result == BeatTime(2))
+        #expect(result == beat(1, 2))
     }
 
     @Test
@@ -56,8 +56,9 @@ extension JohnnySonicFunctionsTests {
 
     @Test
     func convertToJohnnySonicBeat() {
-        let result = IvorExtern.convertToJohnnySonicBeat(BeatTime(2))
+        let result = IvorExtern.convertToJohnnySonicBeat(beat(1, 2))
 
+        // Half a whole note is two JohnnySonic (quarter-note) beats.
         #expect(result == 2)
     }
 
@@ -82,7 +83,7 @@ extension JohnnySonicFunctionsTests {
 
     @Test
     func convertToJohnnySonicDuration() {
-        let result = IvorExtern.convertToJohnnySonicDuration(BeatDuration(2))
+        let result = IvorExtern.convertToJohnnySonicDuration(dur(1, 2))
 
         #expect(result == 2)
     }
@@ -139,8 +140,8 @@ extension JohnnySonicFunctionsTests {
 
     @Test
     func convertToTempo_nonFiniteOrNonPositiveBPM_returnsDefault() {
-        #expect(convertToTempo(0) == .default)
-        #expect(convertToTempo(-10) == .default)
+        #expect(convertToTempo(0.0) == .default)
+        #expect(convertToTempo(-10.0) == .default)
         #expect(convertToTempo(.nan) == .default)
     }
 

@@ -1,7 +1,6 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 internal import IvorTiming
-internal import XestiNumbers
 
 extension MIDI.BeatMap {
 
@@ -13,11 +12,9 @@ extension MIDI.BeatMap {
 
         internal init(eventTime: MIDI.EventTime,
                       beatTime: BeatTime,
-                      factor: Number,
                       tempo: UInt) {
             self.beatTime = beatTime
             self.eventTime = eventTime
-            self.factor = factor
             self.tempo = tempo
         }
 
@@ -25,7 +22,6 @@ extension MIDI.BeatMap {
 
         internal let beatTime: BeatTime
         internal let eventTime: MIDI.EventTime
-        internal let factor: Factor
         internal let tempo: UInt
     }
 }

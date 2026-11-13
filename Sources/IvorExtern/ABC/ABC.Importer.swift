@@ -62,7 +62,9 @@ extension ABC.Importer {
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 
         return try Work(name: determineWorkName(tune),
-                        content: .standardBeat(fillEmptyPartNames(parts), _makeTempoMap(tempoEvents)),
+                        content: .standardBeat(fillEmptyPartNames(parts),
+                                               _makeTempoMap(tempoEvents),
+                                               _makeMeterTable(results)),
                         info: _makeInfo(tune,
                                         fileHeader: fileHeader,
                                         version: version))
@@ -376,6 +378,21 @@ extension ABC.Importer {
         let extras = channel.map { Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int($0)])]) }
 
         return (instrumentTable, extras)
+    }
+
+    // The meter is work-wide, so it's read from the first voice that becomes
+    // a part (see `_isEmptyImplicitVoice(_:)`). A bar line at or after the
+    // end of that voice's music starts no bar, so it's dropped (the bar line
+    // that closes the tune would otherwise make a short last bar a restart),
+    // except at time 0, where it still states the meter. A tune with no `M:`
+    // field has no meter.
+    private static func _makeMeterTable(_ results: [(identity: ABC.Voice?, context: ABC.Importer.Context)]) -> MeterTable {
+        guard let context = results.first(where: { $0.identity != nil || !_isEmptyImplicitVoice($0.context) })?.context
+        else { return MeterTable() }
+
+        let end = context.currentBeatTime
+
+        return makeMeterTable(context.barlines.filter { $0.beatTime < end || $0.beatTime == .zero })
     }
 
     // The same prev/curr double-insert step MIDI's and Guido's `TempoMap`
