@@ -432,14 +432,12 @@ extension MusicXML.Importer.Walker {
             if hasStart {
                 context.pendingTies[voiceID, default: [:]][pitch] = pending
             } else {
-                var table = context.noteTable(forVoice: voiceID)
+                _ = context.noteTable(forVoice: voiceID)  // registers the voice
 
-                table.insert(attack: pending.attack,
-                             duration: pending.duration,
-                             pitch: pitch,
-                             extras: pending.extras)
-
-                context.noteTables[voiceID] = table
+                context.noteTables[voiceID, default: NoteTable()].insert(attack: pending.attack,
+                                                                         duration: pending.duration,
+                                                                         pitch: pitch,
+                                                                         extras: pending.extras)
                 context.pendingTies[voiceID]?[pitch] = nil
             }
 
@@ -454,14 +452,12 @@ extension MusicXML.Importer.Walker {
             return
         }
 
-        var table = context.noteTables[voiceID] ?? NoteTable()
-
-        table.insert(attack: attack,
-                     duration: duration,
-                     pitch: pitch,
-                     extras: extras)
-
-        context.noteTables[voiceID] = table
+        // Inserts in place: copying the table out and storing it back would copy every
+        // note already in it, since the dictionary still holds the original.
+        context.noteTables[voiceID, default: NoteTable()].insert(attack: attack,
+                                                                 duration: duration,
+                                                                 pitch: pitch,
+                                                                 extras: extras)
     }
 
     private func _resolve(_ item: MXLMusicItem,
