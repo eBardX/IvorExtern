@@ -1,5 +1,5 @@
 {
-  "originHash" : "45deb49fb4359a611c4fff412372e6f70a349f3a7963b809a05ef01b9112de51",
+  "originHash" : "b0203c040545a5a843fc7bc8c4d03546899369536d268fe0a5c94238297a1980",
   "pins" : [
     {
       "identity" : "bigint",
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMXL.git",
       "state" : {
-        "revision" : "f005826b9ff2370878cbf544b3d78cda484d990b",
-        "version" : "0.1.0"
+        "revision" : "b32d2e11654255ffef09673a6583a8f7688594ee",
+        "version" : "0.2.0"
       }
     },
     {

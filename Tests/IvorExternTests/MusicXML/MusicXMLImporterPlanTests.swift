@@ -170,6 +170,33 @@ extension MusicXMLImporterPlanTests {
     }
 
     @Test
+    func init_endingStopWithNoStart_closingARepeat_isAFirstEnding() throws {
+        //
+        // Old Finale exports close a first ending that was never opened, with an
+        // empty number, on the barline of its backward repeat.
+        //
+        let strayStop = #"<barline location="right"><ending number="" type="stop"/><repeat direction="backward"/></barline>"#
+        let order = try plannedOrder([forward,
+                                      strayStop,
+                                      lastEnding(2),
+                                      ""])
+
+        #expect(order == [0, 1, 0, 2, 3])
+    }
+
+    @Test
+    func init_endingStopWithNoStart_elsewhere_endsNothing() throws {
+        let strayStop = #"<barline location="right"><ending number="2" type="stop"/></barline>"#
+        let order = try plannedOrder([forward,
+                                      firstEnding(1),
+                                      lastEnding(2),
+                                      strayStop,
+                                      ""])
+
+        #expect(order == [0, 1, 0, 2, 3, 4])
+    }
+
+    @Test
     func init_noMarkers_playsEveryMeasureOnceInOrder() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>

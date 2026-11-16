@@ -97,6 +97,58 @@ extension MusicXMLImporterTests {
     }
 
     @Test
+    func read_endingStopWithNoStart_imports() throws {
+        //
+        // Old Finale exports (MusicXML 0.6a) close a first ending that was never opened, with an
+        // empty number, before the second ending starts.
+        //
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>Violin</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                  <barline location="right">
+                    <ending type="stop" number=""/>
+                    <repeat direction="backward"/>
+                  </barline>
+                </measure>
+                <measure number="2">
+                  <barline location="left">
+                    <ending type="start" number="2"/>
+                  </barline>
+                  <note>
+                    <pitch><step>D</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                  </note>
+                  <barline location="right">
+                    <ending type="discontinue" number="2"/>
+                  </barline>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+        let work = try #require(works.first)
+        let parts = try #require(standardBeatParts(of: work))
+
+        // The stray stop closes a first ending of its own, so the repeat
+        // returns once, skips it, and takes the second ending.
+        #expect(notes(in: parts[0]).map(\.pitch) == ["C5", "D5"])
+    }
+
+    @Test
     func read_identification_preferredOverCredits() throws {
         let work = try readMusicXML(header: """
               <work><work-number>Op. 2</work-number><work-title>Suite</work-title></work>
@@ -934,6 +986,42 @@ extension MusicXMLImporterTests {
         #expect(dynamicMap[BeatTime(2)] == .mf)
         #expect(dynamicMap[BeatTime(1)] != .f)
         #expect(dynamicMap[beat(1, 4)] != .mf)
+    }
+
+    @Test
+    func read_zeroDurationForward_imports() throws {
+        //
+        // Old Finale exports (MusicXML 0.6a) write a zero-length forward after a voice's last
+        // note.
+        //
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>Violin</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <voice>1</voice>
+                    <type>quarter</type>
+                  </note>
+                  <forward>
+                    <duration>0</duration>
+                    <voice>1</voice>
+                  </forward>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let wrapper = FileWrapper(regularFileWithContents: Data(musicXML.utf8))
+
+        let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
+
+        #expect(works.count == 1)
     }
 
     @Test

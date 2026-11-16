@@ -50,6 +50,7 @@ extension MusicXML.Importer {
             fileprivate var coda: String?
             fileprivate var dalsegno: String?
             fileprivate var endingNumbers: [Int]?
+            fileprivate var endingStopNumbers: [Int] = []
             fileprivate var endingStops = false
             fileprivate var isDaCapo = false
             fileprivate var isFine = false
@@ -133,8 +134,9 @@ extension MusicXML.Importer.Plan {
             measure.endingNumbers = barline.ending?.number
         }
 
-        if let kind = barline.ending?.kind,
-           kind == .stop || kind == .discontinue {
+        if let ending = barline.ending,
+           ending.kind == .stop || ending.kind == .discontinue {
+            measure.endingStopNumbers = ending.number
             measure.endingStops = true
         }
 
@@ -235,6 +237,34 @@ extension MusicXML.Importer.Plan {
             ?? measures.firstIndex { $0.segno != nil }
     }
 
+    // Old Finale exports (MusicXML 0.6a) close a first ending that was never
+    // opened, often with an empty number, on the barline of its backward
+    // repeat. Left as is, that measure would play on every pass, and the
+    // exhausted repeat would then skip the next ending, so the stop is taken
+    // to close a one-measure ending of its own number (or 1). Any other stop
+    // with no start ends nothing.
+    private static func _inferEndingStarts(_ measures: inout [Measure]) {
+        var isOpen = false
+
+        for index in measures.indices {
+            if measures[index].endingNumbers != nil {
+                isOpen = true
+            }
+
+            guard measures[index].endingStops
+            else { continue }
+
+            if !isOpen,
+               measures[index].closesRepeat != nil {
+                let numbers = measures[index].endingStopNumbers.filter { $0 > 0 }
+
+                measures[index].endingNumbers = numbers.isEmpty ? [1] : numbers
+            }
+
+            isOpen = false
+        }
+    }
+
     // Whether no other `<ending>` comes straight after the one at `index`.
     private static func _isLastEnding(at index: Int,
                                       in measures: [Measure]) -> Bool {
@@ -271,6 +301,8 @@ extension MusicXML.Importer.Plan {
                 }
             }
         }
+
+        _inferEndingStarts(&measures)
 
         return measures
     }

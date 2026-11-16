@@ -38,9 +38,10 @@ extension MusicXML.Importer {
     private static func _convert(_ document: MusicXML.Document) throws -> Work {
         let (normalized, _) = MusicXML.Normalizer().normalize(document)
         let (validated, issues) = try MusicXML.Validator().validate(normalized)
+        let fatalIssues = issues.filter(_isFatal)
 
-        guard issues.isEmpty
-        else { throw MusicXML.Error.validationFailure(issues) }
+        guard fatalIssues.isEmpty
+        else { throw MusicXML.Error.validationFailure(fatalIssues) }
 
         guard case let .scorePartwise(score) = validated.content
         else { throw MusicXML.Error.unsupportedScoreFormat("opus") }
@@ -149,6 +150,21 @@ extension MusicXML.Importer {
         }
 
         return groupNames
+    }
+
+    // Whether a validation issue should stop the import. An `<ending>` stop
+    // with no start — which old Finale exports write, closing a first ending
+    // that was never opened, or stopping one already discontinued — isn't:
+    // `Plan` infers the missing start of a first ending and otherwise lets a
+    // stray stop end nothing.
+    private static func _isFatal(_ issue: MusicXML.Validator.Issue) -> Bool {
+        switch issue {
+        case .unmatchedEndingStop:
+            false
+
+        default:
+            true
+        }
     }
 
     // A part's static `<score-part><midi-instrument><pan>` — the common
