@@ -61,11 +61,18 @@ extension ABC.Exporter {
 
     // MARK: Private Type Methods
 
-    private static func _boundaries(events: [Event], barTimes: Set<BeatTime>, endTime: BeatTime) -> [BeatTime] {
+    private static func _boundaries(events: [Event],
+                                    barTimes: Set<BeatTime>,
+                                    keyTimes: [BeatTime],
+                                    endTime: BeatTime) -> [BeatTime] {
         var boundaries: Set<BeatTime> = [.zero, endTime]
 
         for barTime in barTimes {
             boundaries.insert(barTime)
+        }
+
+        for keyTime in keyTimes where keyTime < endTime {
+            boundaries.insert(keyTime)
         }
 
         for event in events {
@@ -77,7 +84,7 @@ extension ABC.Exporter {
     }
 
     private static func _convert(work: Work) throws(ABC.Error) -> ABCTune {
-        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keySignatureTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw ABC.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -90,9 +97,11 @@ extension ABC.Exporter {
         let header = _makeHeader(work: work,
                                  parts: parts,
                                  tempoMap: tempoMap,
-                                 firstBar: bars.first)
+                                 firstBar: bars.first,
+                                 keySignatureTable: keySignatureTable)
         let body = try _makeBody(parts: parts,
-                                 bars: bars)
+                                 bars: bars,
+                                 keySignatureTable: keySignatureTable)
 
         guard let tune = ABCTune(header: header,
                                  body: body)
@@ -362,7 +371,8 @@ extension ABC.Exporter {
     }
 
     private static func _makeBody(parts: [Part<BeatTime, Pitch>],
-                                  bars: [ExportBar]) throws(ABC.Error) -> [ABCBodyEntry] {
+                                  bars: [ExportBar],
+                                  keySignatureTable: KeySignatureTable) throws(ABC.Error) -> [ABCBodyEntry] {
         var body: [ABCBodyEntry] = []
         let needsVoiceFields = _needsVoiceFields(parts: parts)
 
@@ -372,18 +382,22 @@ extension ABC.Exporter {
             }
 
             body += try _makePartBody(part: parts[index],
-                                      bars: bars)
+                                      bars: bars,
+                                      keySignatureTable: keySignatureTable)
         }
 
         return body
     }
 
     // The `M:` field is the first bar's meter (see `exportBars(_:through:)`);
-    // a later change is an inline field in the body.
+    // a later change is an inline field in the body. Likewise the `K:` field
+    // is the key signature at time 0, or `K:C` if there's none (ABC requires
+    // a `K:`), and a later one is an inline field in each voice.
     private static func _makeHeader(work: Work,
                                     parts: [Part<BeatTime, Pitch>],
                                     tempoMap: TempoMap,
-                                    firstBar: ExportBar?) -> [ABCHeaderEntry] {
+                                    firstBar: ExportBar?,
+                                    keySignatureTable: KeySignatureTable) -> [ABCHeaderEntry] {
         var header: [ABCHeaderEntry] = [.field(.referenceNumber(ABCReferenceNumber(uintValue: 1).require())),
                                         .field(.tuneTitle(ABCText(stringValue: work.info.title ?? work.name).require()))]
 
@@ -421,13 +435,10 @@ extension ABC.Exporter {
             header.append(.directive(ABCDirective(name: midiDirectiveName, value: "programbase 1")))
         }
 
-        // K:C, spelling every altered pitch class with an explicit
-        // accidental in the body — the model doesn't preserve the
-        // originating key, and `Pitch` already carries its spelling
-        // directly, so this is correctness-preserving rather than merely
-        // a conservative default.
-        header.append(.field(.key(.standard(ABCKeySignature.Standard(tonic: .c,
-                                                                     mode: .major).require()))))
+        let first = keySignatureTable.first.flatMap { $0.beatTime == .zero ? $0 : nil }
+
+        header.append(.field(.key(convertToABCKeySignature(first?.keySignature,
+                                                           mode: stringValue(first?.extras, .keySignatureMode)))))
 
         return header
     }
@@ -443,7 +454,8 @@ extension ABC.Exporter {
     // written, as abcm2ps's `!ped!`/`!ped-up!` on the first note at or after
     // each change (see `_pedalDecorations(_:)`).
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
-                                      bars: [ExportBar]) throws(ABC.Error) -> [ABCBodyEntry] {
+                                      bars: [ExportBar],
+                                      keySignatureTable: KeySignatureTable) throws(ABC.Error) -> [ABCBodyEntry] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directives = _instrumentDirectives(part)
@@ -451,7 +463,11 @@ extension ABC.Exporter {
         let endTime = bars.last?.end ?? .zero
         let barTimes = Set(bars.dropFirst().map(\.start))
         let meterChanges = _meterChanges(bars)
-        let sortedBoundaries = _boundaries(events: events, barTimes: barTimes, endTime: endTime)
+        let sortedBoundaries = _boundaries(events: events,
+                                           barTimes: barTimes,
+                                           keyTimes: keySignatureTable.map(\.beatTime),
+                                           endTime: endTime)
+        var accidentals = AccidentalState(keySignatureTable: keySignatureTable)
         var entries: [ABCBodyEntry] = []
         var pending: [ABCSymbol] = []
         var directiveIndex = 0
@@ -473,6 +489,8 @@ extension ABC.Exporter {
             else { continue }
 
             pending += meterChanges[start].map { [.inlineField(.meter($0))] } ?? []
+
+            pending += accidentals.keyChangeSymbols(through: start)
 
             while directiveIndex < directives.count,
                   directives[directiveIndex].0 <= start {
@@ -506,7 +524,8 @@ extension ABC.Exporter {
 
                 pending += try _makeSymbols(pitches: event.pitches,
                                             duration: segmentDuration,
-                                            tie: !isLastSegment)
+                                            tie: !isLastSegment,
+                                            accidentals: &accidentals)
 
                 if isLastSegment {
                     pending += _trailingSlurEndSymbol(event.extrasList)
@@ -517,6 +536,7 @@ extension ABC.Exporter {
 
             if barTimes.contains(end) {
                 pending.append(.barLine(ABCBarLine(kind: .standard).require()))
+                accidentals.startBar()
             }
         }
 
@@ -542,10 +562,14 @@ extension ABC.Exporter {
     }
 
     // `tie` is `true` when this segment is not the last piece of a note or
-    // chord split across a barline — see `_makePartBody(part:bars:)`.
+    // chord split across a barline — see
+    // `_makePartBody(part:bars:keySignatureTable:)`. Each pitch is written
+    // relative to the key signature and the bar's accidentals so far (see
+    // `AccidentalState`).
     private static func _makeSymbols(pitches: [Pitch],
                                      duration: BeatDuration,
-                                     tie: Bool) throws(ABC.Error) -> [ABCSymbol] {
+                                     tie: Bool,
+                                     accidentals: inout AccidentalState) throws(ABC.Error) -> [ABCSymbol] {
         let (length, tuplet) = try _lengthAndTuplet(for: duration)
         var symbols: [ABCSymbol] = []
 
@@ -556,7 +580,7 @@ extension ABC.Exporter {
         let tieValue: ABCTie? = tie ? .regular : nil
 
         if pitches.count == 1 {
-            try symbols.append(.note(ABCNote(pitch: convertToABCPitch(pitches[0]),
+            try symbols.append(.note(ABCNote(pitch: accidentals.abcPitch(for: pitches[0]),
                                              length: length,
                                              tie: tieValue)))
         } else {
@@ -565,7 +589,7 @@ extension ABC.Exporter {
             var notes: [ABCNote] = []
 
             for pitch in pitches {
-                try notes.append(ABCNote(pitch: convertToABCPitch(pitch),
+                try notes.append(ABCNote(pitch: accidentals.abcPitch(for: pitch),
                                          length: unitLength,
                                          tie: tieValue))
             }

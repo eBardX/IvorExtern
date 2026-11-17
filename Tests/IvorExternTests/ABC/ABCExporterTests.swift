@@ -422,7 +422,7 @@ extension ABCExporterTests {
         }.first)
 
         #expect(note.pitch.letter == .c)
-        #expect(note.pitch.accidental == .natural)
+        #expect(note.pitch.accidental == .omitted)      // in the key (K:C), so written bare
         #expect(note.pitch.octave.uintValue == 4)
     }
 
@@ -484,7 +484,7 @@ extension ABCExporterTests {
 
         tempoMap.insert(beatTime: BeatTime(0), tempo: Tempo(144))
 
-        let work = Work(name: "Test", content: .standardBeat([], tempoMap, MeterTable()))
+        let work = Work(name: "Test", content: .standardBeat([], tempoMap, MeterTable(), KeySignatureTable()))
         let tune = try ABC.Exporter().convert(work)
         let tempo = try #require(tune.header.compactMap { entry -> ABCTempo? in
             guard case let .field(.tempo(tempo)) = entry
@@ -545,7 +545,7 @@ extension ABCExporterTests {
 
     @Test
     func convert_wrongPitchNotation_throwsUnsupportedPitchNotation() {
-        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable()))
+        let work = Work(name: "Test", content: .keyboardBeat([], TempoMap(), MeterTable(), KeySignatureTable()))
 
         #expect(throws: ABC.Error.self) {
             try ABC.Exporter().convert(work)
@@ -567,7 +567,7 @@ extension ABCExporterTests {
                      extras: Extras(elements: [Extra(name: Extra.slurEnd.name, values: [])]))
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Articulation", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -596,7 +596,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Chord", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -633,7 +633,7 @@ extension ABCExporterTests {
         let part = Part<BeatTime, Pitch>(name: "Flute",
                                          noteTable: NoteTable())
         let work = Work(name: "Aubade",
-                        content: .standardBeat([part], TempoMap(), MeterTable()),
+                        content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()),
                         info: sampleABCInfo())
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -667,7 +667,7 @@ extension ABCExporterTests {
         try instrumentTable.insert(time: BeatTime(0), instrument: #require(Instrument(stringValue: "Acoustic Grand Piano")))
 
         let part = Part(name: "Piano", noteTable: table, instrumentTable: instrumentTable)
-        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Instrument", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -763,7 +763,7 @@ extension ABCExporterTests {
 
         let parts = [Part(name: "Organ", noteTable: table, instrumentTable: organMap),
                      Part(name: "Flute", noteTable: table, instrumentTable: fluteMap)]
-        let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap(), MeterTable()))
+        let work = Work(name: "Banks", content: .standardBeat(parts, TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -797,7 +797,7 @@ extension ABCExporterTests {
             parts.append(Part(name: name, noteTable: table, instrumentTable: instrumentTable))
         }
 
-        let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap(), MeterTable()))
+        let work = Work(name: "Duet", content: .standardBeat(parts, TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -819,7 +819,7 @@ extension ABCExporterTests {
         table2.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "G3")
 
         let parts = [Part(name: "Lead", noteTable: table1), Part(name: "Bass", noteTable: table2)]
-        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap(), MeterTable()))
+        let work = Work(name: "MultiPart", content: .standardBeat(parts, TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -837,7 +837,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(2), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Tie", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -860,7 +860,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(3), duration: BeatDuration(1), pitch: "G4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Notes", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -907,7 +907,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "", noteTable: table)
-        let work = Work(name: "Untitled", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Untitled", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -929,7 +929,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap, MeterTable()))
+        let work = Work(name: "Tempo", content: .standardBeat([part], tempoMap, MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -953,7 +953,7 @@ extension ABCExporterTests {
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap, MeterTable()))
+        let work = Work(name: "TempoText", content: .standardBeat([part], tempoMap, MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -983,7 +983,7 @@ extension ABCExporterTests {
                      pitch: "E4")
 
         let part = Part(name: "Piano", noteTable: table)
-        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap(), MeterTable()))
+        let work = Work(name: "Triplet", content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
 
         let recovered = try roundTrip(work,
                                       exporter: ABC.Exporter(),
@@ -1048,7 +1048,7 @@ extension ABCExporterTests {
 
         tempoMap.insert(beatTime: .zero, tempo: tempo("5/8=40"))
 
-        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable(), KeySignatureTable())))
 
         #expect(abc.contains("Q:1/4 3/8=40"))
     }
@@ -1074,7 +1074,7 @@ extension ABCExporterTests {
         info.credits = [Credit(name: "J. Editor", role: .editor)].compactMap(\.self)
 
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap(), MeterTable()),
+                                     content: .standardBeat([], TempoMap(), MeterTable(), KeySignatureTable()),
                                      info: info))
 
         #expect(text.split(separator: "\n").contains("Z:abc-edited-by J. Editor"))
@@ -1093,7 +1093,7 @@ extension ABCExporterTests {
 
         tempoMap.insert(beatTime: .zero, tempo: tempo("3/8=133/2"))
 
-        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable(), KeySignatureTable())))
 
         #expect(abc.contains("Q:3/8=67"))
     }
@@ -1101,7 +1101,7 @@ extension ABCExporterTests {
     @Test
     func write_info_writesStringFields() throws {
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap(), MeterTable()),
+                                     content: .standardBeat([], TempoMap(), MeterTable(), KeySignatureTable()),
                                      info: sampleABCInfo()))
         let lines = text.split(separator: "\n").map(String.init)
 
@@ -1133,7 +1133,7 @@ extension ABCExporterTests {
         info.remarks = [Remark(text: "Some text", label: label)].compactMap(\.self)
 
         let text = try writeABC(Work(name: "Sketch",
-                                     content: .standardBeat([], TempoMap(), MeterTable()),
+                                     content: .standardBeat([], TempoMap(), MeterTable(), KeySignatureTable()),
                                      info: info))
 
         #expect(text.split(separator: "\n").contains("\(field):Some text"[...]))
@@ -1149,7 +1149,7 @@ extension ABCExporterTests {
 
     @Test
     func write_noTitle_writesWorkNameAsTitle() throws {
-        let text = try writeABC(Work(name: "Sketch 3", content: .standardBeat([], TempoMap(), MeterTable())))
+        let text = try writeABC(Work(name: "Sketch 3", content: .standardBeat([], TempoMap(), MeterTable(), KeySignatureTable())))
 
         #expect(text.contains("T:Sketch 3\n"))
     }
@@ -1205,7 +1205,7 @@ extension ABCExporterTests {
         // A triplet quarter note (1/6) at 90 is a quarter note at 60.
         tempoMap.insert(beatTime: .zero, tempo: tempo("1/6=90"))
 
-        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable())))
+        let abc = try writeABC(Work(name: "Tune", content: .standardBeat([emptyPart("")], tempoMap, MeterTable(), KeySignatureTable())))
 
         #expect(abc.contains("Q:1/4=60"))
     }

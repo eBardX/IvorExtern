@@ -40,6 +40,11 @@ internal import XestiTools
 // at every `\meter` tag (with its `meterSymbol`), and one at every `\bar`
 // — what `makeMeterTable(_:)` builds the work's meter table from. `meter`
 // is the meter in force, from the last `\meter` tag the walk read.
+//
+// `keySignatureEvents` holds each `\key` tag as it's met, with the key
+// signature and mode name `convertToKeySignature(_:)` gives it — what
+// `makeKeySignatureTable(_:)` builds the work's key signature table from. A
+// key it can't represent is left out.
 extension Guido.Importer {
 
     // MARK: Internal Nested Types
@@ -53,6 +58,7 @@ extension Guido.Importer {
         internal var dynamicEvents: [DynamicEvent] = []
         internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)] = []
         internal var instrumentName: String?
+        internal var keySignatureEvents: [(beatTime: BeatTime, keySignature: KeySignature, mode: String?)] = []
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp
         internal var lastOctave: GMNPitch.Octave = Self.defaultOctave
@@ -75,6 +81,28 @@ extension Guido.Importer.Context {
 
     internal mutating func advance(_ duration: BeatDuration) {
         currentBeatTime += duration
+    }
+
+    // Records the key signature of a `\key` tag here (see
+    // `keySignatureEvents`).
+    internal mutating func recordKeySignature(_ key: GMNKey) {
+        guard let converted = convertToKeySignature(key)
+        else { return }
+
+        keySignatureEvents.append((beatTime: currentBeatTime,
+                                   keySignature: converted.keySignature,
+                                   mode: converted.mode))
+    }
+
+    // Records a `\meter` tag here: it's the meter in force from now on, and
+    // starts a bar (see `barlines`).
+    internal mutating func recordMeter(_ meter: GMNMeter) {
+        guard let converted = convertToMeter(meter)
+        else { return }
+
+        self.meter = converted
+
+        barlines.append((currentBeatTime, converted, convertToMeterExtras(meter)))
     }
 
     // MARK: Private Type Properties

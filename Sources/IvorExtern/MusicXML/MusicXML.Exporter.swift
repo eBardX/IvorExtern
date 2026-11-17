@@ -83,8 +83,9 @@ extension MusicXML.Exporter {
     // MARK: Private Type Methods
 
     // The sorted union of every time this part's body needs to notice:
-    // `.zero` and the work's end, every bar line, every note's attack and
-    // end, and every tempo/pan/pedal/dynamic annotation's own time. Splitting a
+    // `.zero` and the work's end, every time in `barTimes` (each bar line,
+    // and each mid-bar key signature change), every note's attack and end,
+    // and every tempo/pan/pedal/dynamic annotation's own time. Splitting a
     // note at one of these — even one with no note of its own — is what lets
     // a tempo change, pan change, or dynamic mark/wedge boundary land exactly
     // where the model says it should, and what lets a note crossing a bar
@@ -129,7 +130,7 @@ extension MusicXML.Exporter {
     }
 
     private static func _convert(work: Work) throws(MusicXML.Error) -> MusicXML.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keySignatureTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw MusicXML.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -140,6 +141,7 @@ extension MusicXML.Exporter {
         let bars = exportBars(meterTable,
                               through: work.beatTimeRange?.upperBound ?? .zero)
         let divisions = _divisions(parts: parts, tempoMap: tempoMap, bars: bars)
+        let keys = placeMusicXMLKeys(keySignatureTable, in: bars)
 
         let hiddenPedals = repeatedPedals(parts.map(\.pedals))
         var scoreParts: [MusicXML.ScorePart] = []
@@ -155,7 +157,8 @@ extension MusicXML.Exporter {
                                                                             hiddenPedals: hiddenPedals[index],
                                                                             bars: bars,
                                                                             divisions: divisions,
-                                                                            tempoMap: tempoMap)))
+                                                                            tempoMap: tempoMap,
+                                                                            keys: keys)))
         }
 
         let info = work.info
@@ -297,15 +300,16 @@ extension MusicXML.Exporter {
 
     // Bins the flat, boundary-ordered stream of music items into one
     // `Measure` per bar (see `exportBars(_:through:)`). The first measure
-    // opens with `<attributes>` (divisions, the time signature, and a fixed
-    // C-major key signature — the model has no field for one), per
-    // `MXLValidator`'s `durationBeforeDivisions` check; any later measure
-    // where the meter is written opens with a `<time>` of its own. A pickup
-    // is an implicit measure numbered 0, and short measures are simply
-    // short.
+    // opens with `<attributes>` (divisions, the key signature in `barKeys`
+    // for it, if any, and the time signature), per `MXLValidator`'s
+    // `durationBeforeDivisions` check; any later measure where the meter is
+    // written, or a key signature starts, opens with `<attributes>` holding
+    // its `<key>` and `<time>`. A pickup is an implicit measure numbered 0,
+    // and short measures are simply short.
     private static func _groupIntoMeasures(chunks: [(start: BeatTime, items: [MXLMusicItem])],
                                            bars: [ExportBar],
-                                           divisions: Int) -> [MusicXML.Score.Part.Measure] {
+                                           divisions: Int,
+                                           barKeys: [Int: MXLKey]) -> [MusicXML.Score.Part.Measure] {
         var itemsByMeasure: [Int: [MXLMusicItem]] = [:]
 
         for chunk in chunks {
@@ -318,11 +322,11 @@ extension MusicXML.Exporter {
         for (index, bar) in bars.enumerated() {
             var items = itemsByMeasure[index] ?? []
 
-            if index == 0 {
-                items = [.attributes(_makeAttributes(divisions: divisions, bar: bar))] + items
-            } else if bar.isMeterWritten {
-                items = [.attributes(MXLAttributes(time: [convertToMusicXMLTime(bar.meter, bar.extras)],
-                                                   content: .transpose([])))] + items
+            if let attributes = makeMusicXMLMeasureAttributes(bar,
+                                                              isFirst: index == 0,
+                                                              divisions: divisions,
+                                                              key: barKeys[index]) {
+                items = [.attributes(attributes)] + items
             }
 
             measures.append(MusicXML.Score.Part.Measure(number: String(firstNumber + index),
@@ -331,14 +335,6 @@ extension MusicXML.Exporter {
         }
 
         return measures
-    }
-
-    private static func _makeAttributes(divisions: Int,
-                                        bar: ExportBar) -> MXLAttributes {
-        MXLAttributes(divisions: MXLPositiveDivisions(intValue: divisions).require(),
-                      key: [MXLKey(content: .traditionalKey(MXLTraditionalKey(fifths: MXLFifths(intValue: 0).require())))],
-                      time: [convertToMusicXMLTime(bar.meter, bar.extras)],
-                      content: .transpose([]))
     }
 
     // One chunk per boundary interval, each either a tied note/chord fragment
@@ -354,6 +350,7 @@ extension MusicXML.Exporter {
                                     tempos: [(BeatTime, Tempo)],
                                     directions: [(BeatTime, MXLDirection)],
                                     annotations: [DynamicAnnotation],
+                                    midBarKeys: [BeatTime: MXLMusicItem],
                                     sortedBoundaries: [BeatTime],
                                     divisions: Int) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
         var chunks: [(start: BeatTime, items: [MXLMusicItem])] = []
@@ -374,13 +371,15 @@ extension MusicXML.Exporter {
             guard start < end
             else { continue }
 
-            var items = _makeDirectionItems(at: start,
-                                            tempos: tempos,
-                                            tempoIndex: &tempoIndex,
-                                            directions: directions,
-                                            directionIndex: &directionIndex,
-                                            annotations: annotations,
-                                            ramps: ramps)
+            var items = midBarKeys[start].map { [$0] } ?? []
+
+            items += _makeDirectionItems(at: start,
+                                         tempos: tempos,
+                                         tempoIndex: &tempoIndex,
+                                         directions: directions,
+                                         directionIndex: &directionIndex,
+                                         annotations: annotations,
+                                         ramps: ramps)
 
             items += try _makeSegmentItems(events: events, start: start, end: end, divisions: divisions)
 
@@ -520,7 +519,8 @@ extension MusicXML.Exporter {
                                       hiddenPedals: Set<Pedal>,
                                       bars: [ExportBar],
                                       divisions: Int,
-                                      tempoMap: TempoMap) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
+                                      tempoMap: TempoMap,
+                                      keys: MusicXMLKeyPlacement) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
         let events = _events(part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directions = _playbackDirections(part, hiddenPedals: hiddenPedals)
@@ -531,16 +531,17 @@ extension MusicXML.Exporter {
                                            tempos: tempos,
                                            directions: directions,
                                            annotations: annotations,
-                                           barTimes: barTimes,
+                                           barTimes: barTimes + keys.midBarKeys.keys,
                                            endTime: endTime)
         let chunks = try _makeChunks(events: events,
                                      tempos: tempos,
                                      directions: directions,
                                      annotations: annotations,
+                                     midBarKeys: keys.midBarKeys,
                                      sortedBoundaries: sortedBoundaries,
                                      divisions: divisions)
 
-        return _groupIntoMeasures(chunks: chunks, bars: bars, divisions: divisions)
+        return _groupIntoMeasures(chunks: chunks, bars: bars, divisions: divisions, barKeys: keys.barKeys)
     }
 
     // A part's own name is its `<part-name>` — `determinePartName(_:)` reads

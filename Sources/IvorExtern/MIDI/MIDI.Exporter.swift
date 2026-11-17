@@ -111,25 +111,26 @@ extension MIDI.Exporter {
     // `determineTimeCode`) is written back with the same division; every
     // other beat-time work gets a metrical division at `tickRate`.
     // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
-    // meta event (see `_smpteOffset`).
-    private static func _convert(name: String,
-                                 info: Work.Info,
+    // meta event (see `_smpteOffset`), and its title (or name) and info on
+    // the first track.
+    private static func _convert(work: Work,
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
                                  meterTable: MeterTable,
+                                 keySignatureTable: KeySignatureTable,
                                  timeCode: MIDI.TimeCode?,
-                                 tickRate: MIDI.TickRate,
-                                 smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
+                                 tickRate: MIDI.TickRate) throws(MIDI.Error) -> MIDI.Sequence {
         let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(tickRate)
         let tempoChanges = _tempoChanges(from: tempoMap)
         let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: tickRate)
         var tracks: [MIDI.Track] = []
 
-        try tracks.append(_convert(name: name,
-                                   info: info,
-                                   smpteOffset: _smpteOffset(smpteStartTime, division),
+        try tracks.append(_convert(name: work.info.title ?? work.name,
+                                   info: work.info,
+                                   smpteOffset: _smpteOffset(work.smpteStartTime, division),
                                    tempoChanges: tempoChanges,
                                    meterTable: meterTable,
+                                   keySignatureTable: keySignatureTable,
                                    tickMap: tickMap))
 
         tracks += try _convert(parts: parts,
@@ -173,6 +174,7 @@ extension MIDI.Exporter {
                                  smpteOffset: SMPTETime?,
                                  tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
                                  meterTable: MeterTable,
+                                 keySignatureTable: KeySignatureTable,
                                  tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events = _headerEvents(name: name,
                                    info: info,
@@ -180,6 +182,9 @@ extension MIDI.Exporter {
 
         events += _meterEvents(meterTable,
                                tickMap: tickMap)
+
+        events += _keySignatureEvents(keySignatureTable,
+                                      tickMap: tickMap)
 
         for (beatTime, tempo) in tempoChanges {
             if let eventTime = tickMap[beatTime] {
@@ -262,15 +267,14 @@ extension MIDI.Exporter {
         let timeCode = determineTimeCode(work)
 
         switch work.content {
-        case let .keyboardBeat(parts, tempoMap, meterTable):
-            return try _convert(name: work.info.title ?? work.name,
-                                info: work.info,
+        case let .keyboardBeat(parts, tempoMap, meterTable, keySignatureTable):
+            return try _convert(work: work,
                                 parts: parts,
                                 tempoMap: tempoMap,
                                 meterTable: meterTable,
+                                keySignatureTable: keySignatureTable,
                                 timeCode: timeCode,
-                                tickRate: tickRate,
-                                smpteStartTime: work.smpteStartTime)
+                                tickRate: tickRate)
 
         case let .keyboardWall(parts):
             return try _convert(name: work.info.title ?? work.name,
@@ -406,6 +410,26 @@ extension MIDI.Exporter {
     // the marker alone. A pickup is written as a restart of the first meter
     // where the pickup ends, so that the first bar comes back short. A
     // meterless work is written in 4/4.
+    // A key signature meta event for each entry, on the conductor track.
+    // `sf` can only express a diatonic signature, so a custom one is written
+    // as its nearest diatonic signature (see `KeySignature.nearestDiatonic`);
+    // `mi` is 1 when the entry's mode is minor (or aeolian), and 0 otherwise.
+    // An empty table writes none.
+    private static func _keySignatureEvents(_ keySignatureTable: KeySignatureTable,
+                                            tickMap: MIDI.TickMap) -> [MIDI.Event] {
+        keySignatureTable.compactMap { entry in
+            let mode = entry.keySignature.isDiatonic ? stringValue(entry.extras, .keySignatureMode) : nil
+
+            guard let fifths = entry.keySignature.nearestDiatonic.fifths,
+                  let smfKeySignature = SMFKeySignature(bytesValue: [UInt8(bitPattern: Int8(fifths)),
+                                                                     isMinorMode(mode) ? 1 : 0]),
+                  let eventTime = tickMap[entry.beatTime]
+            else { return nil }
+
+            return .meta(eventTime, .keySignature(smfKeySignature))
+        }
+    }
+
     private static func _meterEvents(_ meterTable: MeterTable,
                                      tickMap: MIDI.TickMap) -> [MIDI.Event] {
         guard !meterTable.isEmpty

@@ -81,7 +81,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.dynamicMap[.zero] == .mf)
@@ -274,7 +274,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(tempoMap[.zero] == Tempo(96))
@@ -304,7 +304,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         let foundChannel = intValue(parts.first?.extras, .midiChannel)
@@ -342,7 +342,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable.isEmpty == true)
@@ -383,7 +383,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Voice 1", "Cello", "Voice 3"])
@@ -495,7 +495,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         //
@@ -561,7 +561,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Horns in F (1, 2)", "Horns in F (3, 4)", "Tuba"])
@@ -608,7 +608,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -664,7 +664,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!(parts.first?.panMap.isEmpty ?? true))
@@ -773,7 +773,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!(parts.first?.panMap.isEmpty ?? true))
@@ -808,7 +808,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
@@ -971,7 +971,7 @@ extension MusicXMLImporterTests {
         let works = try MusicXML.Importer().read(from: wrapper, as: .musicXML)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(parts, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected standardBeat content"); return }
 
         let dynamicMap = try #require(parts.first?.dynamicMap)

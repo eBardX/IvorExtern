@@ -124,9 +124,53 @@ internal func convertToABCPitch(_ pitch: Pitch) throws(ABC.Error) -> ABCPitch {
           let octave = ABCPitch.Octave(uintValue: UInt(pitch.octave.intValue))
     else { throw ABC.Error.unrepresentablePitch(pitch.description) }
 
-    return ABCPitch(letter: _convertToABCPitchLetter(pitch.letter),
-                    accidental: _convertToABCPitchAccidental(pitch.accidental),
+    return ABCPitch(letter: convertToABCPitchLetter(pitch.letter),
+                    accidental: convertToABCPitchAccidental(pitch.accidental),
                     octave: octave)
+}
+
+internal func convertToABCPitchAccidental(_ accidental: Pitch.Accidental) -> ABCPitch.Accidental {
+    switch accidental {
+    case .doubleFlat:
+        .doubleFlat
+
+    case .doubleSharp:
+        .doubleSharp
+
+    case .flat:
+        .flat
+
+    case .natural:
+        .natural
+
+    case .sharp:
+        .sharp
+    }
+}
+
+internal func convertToABCPitchLetter(_ letter: Pitch.Letter) -> ABCPitch.Letter {
+    switch letter {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
+    }
 }
 
 // The inverse of `convertToTempo(_:)`. The tempo keeps its own unit: a
@@ -318,6 +362,32 @@ internal func convertToInstrument(_ directive: ABCDirective,
     return (instrument, channel, program)
 }
 
+// An ABC letter's letter.
+internal func convertToPitchLetter(_ letter: ABCPitch.Letter) -> Pitch.Letter {
+    switch letter {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
+    }
+}
+
 // abc2midi's `%%MIDI programbase n`, which says whether `%%MIDI program`
 // numbers count from 0 or 1. Like abc2midi, any `n` but 0 means 1.
 internal func convertToProgramBase(_ directive: ABCDirective) -> Int? {
@@ -499,74 +569,9 @@ private func _abcTempoLengths(_ unit: BeatDuration) -> [ABCLength]? {
     return nil
 }
 
-private func _convertToABCPitchAccidental(_ accidental: Pitch.Accidental) -> ABCPitch.Accidental {
-    switch accidental {
-    case .doubleFlat:
-        .doubleFlat
-
-    case .doubleSharp:
-        .doubleSharp
-
-    case .flat:
-        .flat
-
-    case .natural:
-        .natural
-
-    case .sharp:
-        .sharp
-    }
-}
-
-private func _convertToABCPitchLetter(_ letter: Pitch.Letter) -> ABCPitch.Letter {
-    switch letter {
-    case .a:
-        .a
-
-    case .b:
-        .b
-
-    case .c:
-        .c
-
-    case .d:
-        .d
-
-    case .e:
-        .e
-
-    case .f:
-        .f
-
-    case .g:
-        .g
-    }
-}
-
 private func _convertToStandardPitchClass(_ apLetter: ABC.Pitch.Letter,
                                           _ apAccidental: ABC.Pitch.Accidental) throws(ABC.Error) -> PitchClass {
-    let letter: Pitch.Letter = switch apLetter {
-    case .a:
-        .a
-
-    case .b:
-        .b
-
-    case .c:
-        .c
-
-    case .d:
-        .d
-
-    case .e:
-        .e
-
-    case .f:
-        .f
-
-    case .g:
-        .g
-    }
+    let letter = convertToPitchLetter(apLetter)
 
     let accidental: Pitch.Accidental = switch apAccidental {
     case .doubleFlat:

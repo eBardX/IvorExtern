@@ -70,14 +70,14 @@ internal func notes(in part: Part<BeatTime, Pitch>,
 }
 
 internal func absoluteBeatParts(of work: Work) -> [Part<BeatTime, Frequency>]? {
-    guard case let .absoluteBeat(parts, _, _) = work.content
+    guard case let .absoluteBeat(parts, _, _, _) = work.content
     else { return nil }
 
     return parts
 }
 
 internal func keyboardBeatParts(of work: Work) -> [Part<BeatTime, NoteNumber>]? {
-    guard case let .keyboardBeat(parts, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content
     else { return nil }
 
     return parts
@@ -91,7 +91,7 @@ internal func keyboardWallParts(of work: Work) -> [Part<WallTime, NoteNumber>]? 
 }
 
 internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
-    guard case let .standardBeat(parts, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content
     else { return nil }
 
     return parts
@@ -102,7 +102,7 @@ internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
 // note-level output, not tempo.
 internal func standardBeatWork(parts: [Part<BeatTime, Pitch>]) -> Work {
     Work(name: "Test",
-         content: .standardBeat(parts, TempoMap(), MeterTable()))
+         content: .standardBeat(parts, TempoMap(), MeterTable(), KeySignatureTable()))
 }
 
 // Looks a part up by name rather than by index, so an ABC round trip stays
@@ -724,7 +724,7 @@ internal func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
                                tracks: [track])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content
     else { Issue.record("Expected keyboardBeat content"); return [] }
 
     return parts.map(\.name)
@@ -766,7 +766,7 @@ internal func sampleMIDIWork() -> Work {
                     instrumentTable: instrumentTable)
 
     return Work(name: "Sketch",
-                content: .keyboardBeat([part], TempoMap(), MeterTable()),
+                content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 dedication: "To my teacher\nwith thanks",
@@ -837,7 +837,7 @@ internal func sampleMusicXMLWork() -> Work {
                                      instrumentTable: instrumentTable)
 
     return Work(name: "Collected Pieces: Aubade",
-                content: .standardBeat([part], TempoMap(), MeterTable()),
+                content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 alternateTitles: ["Morning Piece"],
@@ -1114,7 +1114,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
         \(body)
         """)
 
-    guard case let .standardBeat(parts, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1123,7 +1123,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
 internal func guidoPedalPart(_ gmn: String) throws -> Part<BeatTime, Pitch> {
     let work = try Guido.Importer().convert(Guido.Parser().parse(Data(gmn.utf8)))
 
-    guard case let .standardBeat(parts, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1149,7 +1149,7 @@ internal func midiImportedPedals(_ events: [(tick: UInt, controller: MIDIControl
                                tracks: [SMFTrack(events: smfEvents)])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content
     else { Issue.record("Expected keyboardBeat content"); return [:] }
 
     return try #require(parts.first).pedals
@@ -1200,7 +1200,7 @@ internal func musicXMLImportedParts(_ musicXML: String) throws -> [Part<BeatTime
                                              as: .musicXML)
     let work = try #require(works.first)
 
-    guard case let .standardBeat(parts, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content
     else { Issue.record("Expected standardBeat content"); return [] }
 
     return parts
@@ -1225,7 +1225,7 @@ internal func midiExportedPedalEvents(_ pedals: [Pedal: PedalTable<BeatTime>]) t
     noteTable.insert(attack: 0, duration: 1, pitch: NoteNumber(60))
 
     let part = Part<BeatTime, NoteNumber>(name: "Piano", noteTable: noteTable, pedals: pedals)
-    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable())))
+    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable())))
 
     return sequence.tracks.flatMap(\.events).compactMap { event in
         guard case let .midi(eventTime, .controlChange(_, controller, value)) = event,
@@ -1450,7 +1450,8 @@ internal func meteredKeyboardWork(_ meterTable: MeterTable,
     return Work(name: "Metered",
                 content: .keyboardBeat([Part(name: "Piano", noteTable: noteTable)],
                                        TempoMap(),
-                                       meterTable))
+                                       meterTable,
+                                       KeySignatureTable()))
 }
 
 // A one-part standard-beat work with the given meter table, whose music is
@@ -1466,7 +1467,8 @@ internal func meteredStandardWork(_ meterTable: MeterTable,
     return Work(name: "Metered",
                 content: .standardBeat([Part(name: "Piano", noteTable: noteTable)],
                                        TempoMap(),
-                                       meterTable))
+                                       meterTable,
+                                       KeySignatureTable()))
 }
 
 // A rational number as a simple fraction (`3/2`), or a whole number (`2`).

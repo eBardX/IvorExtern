@@ -64,7 +64,8 @@ extension ABC.Importer {
         return try Work(name: determineWorkName(tune),
                         content: .standardBeat(fillEmptyPartNames(parts),
                                                _makeTempoMap(tempoEvents),
-                                               _makeMeterTable(results)),
+                                               _makeMeterTable(results),
+                                               _makeKeySignatureTable(results)),
                         info: _makeInfo(tune,
                                         fileHeader: fileHeader,
                                         version: version))
@@ -378,6 +379,18 @@ extension ABC.Importer {
         let extras = channel.map { Extras(elements: [Extra(name: Extra.midiChannel.name, values: [.int($0)])]) }
 
         return (instrumentTable, extras)
+    }
+
+    // The key signature is work-wide, so, like the meter, it's read from the
+    // first voice that becomes a part. A `K:` at or after the end of that
+    // voice's music is dropped, except at time 0.
+    private static func _makeKeySignatureTable(_ results: [(identity: ABC.Voice?, context: ABC.Importer.Context)]) -> KeySignatureTable {
+        guard let context = results.first(where: { $0.identity != nil || !_isEmptyImplicitVoice($0.context) })?.context
+        else { return KeySignatureTable() }
+
+        let end = context.currentBeatTime
+
+        return makeKeySignatureTable(context.keySignatureEvents.filter { $0.beatTime < end || $0.beatTime == .zero })
     }
 
     // The meter is work-wide, so it's read from the first voice that becomes

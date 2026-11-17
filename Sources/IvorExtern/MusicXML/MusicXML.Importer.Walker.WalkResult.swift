@@ -2,13 +2,15 @@
 
 internal import IvorModel
 internal import IvorTiming
+internal import IvorTuning
 internal import XestiTools
 
 extension MusicXML.Importer.Walker {
 
     // MARK: Internal Nested Types
 
-    // The barlines a part's measures drew (see `Context.barlines`), and the
+    // The barlines a part's measures drew (see `Context.barlines`), its key
+    // signatures (see `Context.keySignatureEvents`), and the
     // pan, pedal, tempo, and notated-dynamics events its `<sound>`/
     // `<direction>` elements produced, gathered alongside the part's
     // resolved voices — one instance per MusicXML part. Each voice's own
@@ -21,6 +23,7 @@ extension MusicXML.Importer.Walker {
 
         internal let barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)]
         internal let directionDynamicEvents: [MusicXML.Importer.Context.DynamicEvent]
+        internal let keySignatureEvents: [(beatTime: BeatTime, keySignature: KeySignature, mode: String?)]
         internal let panEvents: [(beatTime: BeatTime, pan: Pan)]
         internal let part: MusicXML.Part
         internal let pedalEvents: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)]

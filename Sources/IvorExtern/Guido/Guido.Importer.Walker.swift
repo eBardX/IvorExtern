@@ -554,10 +554,11 @@ extension Guido.Importer.Walker {
 
             try _walk(articulation.body, &context, &inProgressVariableNames)
 
-        // A bar line, and a meter (which starts a bar), are the only
-        // bodiless tags that leave the pending note and its tie alone: the
-        // exporter writes them between the two halves of a note tied across
-        // a bar line, and the tie has to survive them.
+        // A bar line, a meter (which starts a bar) and a key signature are
+        // the only bodiless tags that leave the pending note and its tie
+        // alone: the exporter writes them between the two halves of a note
+        // tied across a bar line (or a key change), and the tie has to
+        // survive them.
         case .barLine:
             if let meter = context.meter {
                 context.barlines.append((context.currentBeatTime, meter, nil))
@@ -611,11 +612,11 @@ extension Guido.Importer.Walker {
 
             Self._handleIntensity(intensity, &context)
 
+        case let .key(key):
+            context.recordKeySignature(key)
+
         case let .meter(meter):
-            if let converted = convertToMeter(meter) {
-                context.meter = converted
-                context.barlines.append((context.currentBeatTime, converted, convertToMeterExtras(meter)))
-            }
+            context.recordMeter(meter)
 
         case let .ornament(ornament):
             context.pendingNoteExtras.append(Self._ornamentExtra(ornament))

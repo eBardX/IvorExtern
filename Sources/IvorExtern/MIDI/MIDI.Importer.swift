@@ -86,6 +86,7 @@ extension MIDI.Importer {
         return try Work(name: determineWorkName(validated),
                         content: _convert(voices,
                                           timeline,
+                                          _keySignatureEvents(validated.tracks),
                                           validated.division),
                         smpteStartTime: _makeStartTime(timeline,
                                                        validated.division),
@@ -199,6 +200,7 @@ extension MIDI.Importer {
     // the work itself (see `_makeExtras`).
     private static func _convert(_ voices: [TrackVoice],
                                  _ timeline: [MIDI.Event],
+                                 _ keySignatureEvents: [MIDI.Event],
                                  _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
         if case let .timeCode(timeCode) = division,
            !timeline.contains(where: { if case .meta(_, .tempo) = $0 { true } else { false } }) {
@@ -214,12 +216,32 @@ extension MIDI.Importer {
                              _convert(timeline,
                                       beatMap),
                              _makeMeterTable(timeline,
-                                             beatMap))
+                                             beatMap),
+                             _makeKeySignatureTable(keySignatureEvents,
+                                                    beatMap))
     }
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
                                                               _ timeMap: TimeMap) -> [Part<TimeMap.TimeType, NoteNumber>] {
         voices.map { _convert($0.voice, $0.instrumentNameEvents, timeMap) }
+    }
+
+    // The key signature meta events of the conductor track — the first
+    // track, in format 1 — or else of the first track that has any. Another
+    // track's key signatures are dropped: the work has one key signature
+    // table, and convention keeps them on the conductor track.
+    private static func _keySignatureEvents(_ tracks: [MIDI.Track]) -> [MIDI.Event] {
+        for track in tracks {
+            let events = track.events.filter {
+                if case .meta(_, .keySignature) = $0 { true } else { false }
+            }
+
+            if !events.isEmpty {
+                return events
+            }
+        }
+
+        return []
     }
 
     private static func _makeBeatMap(_ division: MIDI.Division,
@@ -378,6 +400,22 @@ extension MIDI.Importer {
     // signature's there. A time signature's clocks per click and 32nds per
     // quarter are kept in a `midiTimeSignature` extra unless they're the
     // defaults. Time signatures never affect timing.
+    // Every key signature is diatonic, and `mi` gives its mode: major or
+    // minor. Sequencers often leave `mi` at major, so a minor key's name can
+    // be wrong, but the signature is right.
+    private static func _makeKeySignatureTable(_ events: [MIDI.Event],
+                                               _ beatMap: MIDI.BeatMap) -> KeySignatureTable {
+        makeKeySignatureTable(events.compactMap { event in
+            guard case let .meta(eventTime, .keySignature(smfKeySignature)) = event,
+                  let bytes = smfKeySignature.bytesValue,
+                  bytes.count == 2,
+                  let keySignature = KeySignature(fifths: Int(Int8(bitPattern: bytes[0])))
+            else { return nil }
+
+            return (beatMap[eventTime], keySignature, bytes[1] == 1 ? "minor" : "major")
+        })
+    }
+
     private static func _makeMeterTable(_ timeline: [MIDI.Event],
                                         _ beatMap: MIDI.BeatMap) -> MeterTable {
         var ticks: [MIDI.EventTime] = []

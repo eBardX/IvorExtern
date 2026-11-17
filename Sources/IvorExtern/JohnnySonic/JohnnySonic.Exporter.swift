@@ -209,10 +209,10 @@ extension JohnnySonic.Exporter {
         }
 
         switch work.content {
-        case let .absoluteBeat(parts, _, _):
+        case let .absoluteBeat(parts, _, _, _):
             commands += try _convert(parts: parts)
 
-        case let .keyboardBeat(parts, _, _):
+        case let .keyboardBeat(parts, _, _, _):
             commands += try _convert(parts: parts)
 
         case .standardBeat:

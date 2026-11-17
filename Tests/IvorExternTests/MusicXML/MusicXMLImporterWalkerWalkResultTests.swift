@@ -14,7 +14,7 @@ struct MusicXMLImporterWalkerWalkResultTests {
 
 extension MusicXMLImporterWalkerWalkResultTests {
     @Test
-    func init_storesProperties() {
+    func init_storesProperties() throws {
         let scorePart = MXLScorePart(id: "P1",
                                      name: MXLPartName(value: "Violin",
                                                        text: .init()))
@@ -26,15 +26,17 @@ extension MusicXMLImporterWalkerWalkResultTests {
                                                                   dynamic: .mf,
                                                                   kind: .step)
 
-        let result = MusicXML.Importer.Walker.WalkResult(barlines: [(beatTime: .zero, meter: .free, extras: nil)],
-                                                         directionDynamicEvents: [dynamicEvent],
-                                                         panEvents: [(beatTime: .zero, pan: .center)],
-                                                         part: part,
-                                                         pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .down)],
-                                                         tempoEvents: [(beatTime: .zero, tempo: .default)])
+        let result = try MusicXML.Importer.Walker.WalkResult(barlines: [(beatTime: .zero, meter: .free, extras: nil)],
+                                                             directionDynamicEvents: [dynamicEvent],
+                                                             keySignatureEvents: [(beatTime: .zero, keySignature: keySignature(2), mode: "major")],
+                                                             panEvents: [(beatTime: .zero, pan: .center)],
+                                                             part: part,
+                                                             pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .down)],
+                                                             tempoEvents: [(beatTime: .zero, tempo: .default)])
 
         #expect(result.barlines.map(\.meter) == [.free])
         #expect(result.directionDynamicEvents.map(\.kind) == [.step])
+        #expect(result.keySignatureEvents.map(\.mode) == ["major"])
         #expect(result.panEvents.map(\.pan) == [.center])
         #expect(result.part.part == scorePart)
         #expect(result.pedalEvents.map(\.pedal) == [.sustain])

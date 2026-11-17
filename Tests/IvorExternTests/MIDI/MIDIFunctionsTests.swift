@@ -182,7 +182,7 @@ extension MIDIFunctionsTests {
 
     @Test
     func determineTimeCode_beat_readsWorkExtras() throws {
-        let work = Work(content: .standardBeat([], TempoMap(), MeterTable()),
+        let work = Work(content: .standardBeat([], TempoMap(), MeterTable(), KeySignatureTable()),
                         extras: timeCodeExtras("29.97DF", 80))
         let timeCode = try #require(SMFTimeCode(frameRate: .fps2997Drop, ticksPerFrame: 80))
 
@@ -197,13 +197,13 @@ extension MIDIFunctionsTests {
         tempoMap.insert(beatTime: .zero, tempo: Tempo(120), extras: timeCodeExtras("25", 40))
         instrumentTable.insert(time: .zero, instrument: .vanilla, extras: timeCodeExtras("25", 40))
 
-        #expect(determineTimeCode(Work(content: .keyboardBeat([], tempoMap, MeterTable()))) == nil)
+        #expect(determineTimeCode(Work(content: .keyboardBeat([], tempoMap, MeterTable(), KeySignatureTable()))) == nil)
         #expect(determineTimeCode(Work(content: .keyboardWall([Part(name: "Piano", instrumentTable: instrumentTable)]))) == nil)
     }
 
     @Test
     func determineTimeCode_none() {
-        #expect(determineTimeCode(Work(content: .keyboardBeat([], TempoMap(), MeterTable()))) == nil)
+        #expect(determineTimeCode(Work(content: .keyboardBeat([], TempoMap(), MeterTable(), KeySignatureTable()))) == nil)
         #expect(determineTimeCode(Work(content: .keyboardWall([Part(name: "Piano")]))) == nil)
     }
 

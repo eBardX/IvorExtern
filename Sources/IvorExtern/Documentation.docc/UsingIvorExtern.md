@@ -83,6 +83,23 @@ let file = try midi.write(works: [work])   // a FileWrapper
 ``ExportFileFormat/write(works:options:)`` writes one or more works to a `FileWrapper`,
 ready to save or share.
 
+### Key signatures
+
+A beat-time work’s key signature table comes in from every format that has key
+signatures and goes back out to it. Where a format names the key’s mode, the
+mode is kept as a `keySignatureMode` extra and written back. A key signature a
+format records but Ivor can’t represent (one with a double sharp or flat, or a
+microtonal alteration) is left out on import, and so is one that only repeats
+the key before it.
+
+ Format      | Reads                                       | Writes                                      | Loses
+:------      |:-----                                       |:------                                      |:-----
+ MIDI        | Key signature meta events of the first track that has any | A meta event at each key, on the first track | A custom key signature, written as its nearest diatonic one; modes other than major and minor
+ MusicXML    | `<key>` of each part’s first staff, traditional or not, along the play order | `<key>` at each key, at a measure’s start or in the middle | `<key-octave>`
+ ABC         | `K:` fields, in the header and inline, along the play order | `K:` and inline `[K:…]`, with every note’s accidental written against the key and the bar | No key at all, written as `K:C`
+ Guido       | `\key`: a number of fifths, a key name, or a free key | `\key`: a key name for major or minor, a number of fifths for another mode, or a free key for a custom signature | Modes other than major and minor
+ JohnnySonic | —                                           | —                                           | Every key signature
+
 ``ExportOptions`` adjusts how a format writes. For now its only options are
 the ``MIDIExportOptions`` of a Standard MIDI File: the ticks per quarter note
 for a beat-time work, and the frame rate and ticks per frame for a wall-time

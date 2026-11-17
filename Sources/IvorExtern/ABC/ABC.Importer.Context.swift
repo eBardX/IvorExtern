@@ -46,6 +46,11 @@ internal import XestiTools
 // wherever an `M:` field sets the meter (with its `meterSymbol`), and one
 // after every bar line — what `makeMeterTable(_:)` builds the work's meter
 // table from. The importer drops the ones at or after the end of the music.
+//
+// `keySignatureEvents` holds each `K:` field (header or inline) as it's met,
+// with the key signature and mode name `convertToKeySignature(_:)` gives it —
+// what `makeKeySignatureTable(_:)` builds the work's key signature table
+// from. A key it can't represent is left out.
 extension ABC.Importer {
 
     // MARK: Internal Nested Types
@@ -67,6 +72,7 @@ extension ABC.Importer {
         internal var dynamicEvents: [DynamicEvent] = []
         internal var hasExplicitUnitNoteLength = false
         internal var keyAccidentals: [ABCPitch.Letter: ABCPitch.Accidental] = [:]
+        internal var keySignatureEvents: [(beatTime: BeatTime, keySignature: KeySignature, mode: String?)] = []
         internal var lastDynamic: Dynamic = .mp
         internal var macros: [ABCMacro] = []
         internal var meter: ABCTimeSignature?

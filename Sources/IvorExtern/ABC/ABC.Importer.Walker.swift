@@ -263,31 +263,41 @@ extension ABC.Importer.Walker {
 
     // MARK: Private Instance Methods
 
-    // A bar starts here in the meter in force, if there is one. The note or
-    // chord still in `pendingEvent` has already been written, so the bar
-    // starts where it ends, not at `currentBeatTime` (which it hasn't
-    // advanced yet).
+    // A bar starts here in the meter in force, if there is one (see
+    // `_fieldBeatTime(_:)` for where).
     private func _addBarline(_ extras: Extras?,
                              _ context: inout ABC.Importer.Context) throws(ABC.Error) {
         guard let meter = context.meter.flatMap(convertToMeter)
         else { return }
 
-        var beatTime = context.currentBeatTime
-
-        if let pending = context.pendingEvent {
-            beatTime = try pending.attack + convertToBeatDuration(rhythm.advanceDuration(pending.event))
-        }
-
-        context.barlines.append((beatTime, meter, extras))
+        try context.barlines.append((_fieldBeatTime(context), meter, extras))
     }
 
-    // An `M:` field is the one field that doesn't flush `pendingEvent`: it's
-    // written right after a bar line, and a note tied across that bar line
-    // has to stay pending to merge with its continuation. It starts a bar
-    // where it's written (see `_addBarline(_:)`).
+    // An `M:` or `K:` field is the one kind of field that doesn't flush
+    // `pendingEvent`: it can be written between a note and its tied
+    // continuation (after a bar line, or at a key change), and the note has
+    // to stay pending to merge with it. An `M:` field starts a bar where it's
+    // written (see `_addBarline(_:)`).
     private func _apply(_ field: ABCField,
                         _ context: inout ABC.Importer.Context) throws(ABC.Error) {
-        if case let .meter(meter) = field {
+        switch field {
+        case let .key(keySignature):
+            context.barAccidentals = [:]
+            context.keyAccidentals = keySignature.accidentals
+
+            if let converted = convertToKeySignature(keySignature) {
+                try context.keySignatureEvents.append((beatTime: _fieldBeatTime(context),
+                                                       keySignature: converted.keySignature,
+                                                       mode: converted.mode))
+            }
+
+            if let clef = pitchFolder.clef(from: keySignature) {
+                context.activeClef = clef
+            }
+
+            return
+
+        case let .meter(meter):
             context.meter = meter
 
             if !context.hasExplicitUnitNoteLength {
@@ -297,19 +307,14 @@ extension ABC.Importer.Walker {
             try _addBarline(convertToMeterExtras(meter), &context)
 
             return
+
+        default:
+            break
         }
 
         try _commitPending(&context)
 
         switch field {
-        case let .key(keySignature):
-            context.barAccidentals = [:]
-            context.keyAccidentals = keySignature.accidentals
-
-            if let clef = pitchFolder.clef(from: keySignature) {
-                context.activeClef = clef
-            }
-
         case let .macro(macro):
             context.macros.append(macro)
 
@@ -384,6 +389,17 @@ extension ABC.Importer.Walker {
         }
 
         context.tieArmed = event.tie != nil
+    }
+
+    // Where a field that leaves `pendingEvent` alone (see `_apply(_:_:)`)
+    // takes effect. The note or chord still pending has already been
+    // written, so that's where it ends, not `currentBeatTime` (which it
+    // hasn't advanced yet).
+    private func _fieldBeatTime(_ context: ABC.Importer.Context) throws(ABC.Error) -> BeatTime {
+        guard let pending = context.pendingEvent
+        else { return context.currentBeatTime }
+
+        return try pending.attack + convertToBeatDuration(rhythm.advanceDuration(pending.event))
     }
 
     private func _handleChord(_ chord: ABCChord,

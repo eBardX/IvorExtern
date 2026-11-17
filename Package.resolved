@@ -1,5 +1,5 @@
 {
-  "originHash" : "876ffed43ad2a9e92546c42e9bb15d6721e624b5538dffbda5e7d9172b4b140a",
+  "originHash" : "474f64240506392b1112f0aced282f3c776d125fc99aa14705d16c2194f97559",
   "pins" : [
     {
       "identity" : "bigint",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorABC.git",
       "state" : {
-        "revision" : "1814f9a3eb79e0a24ba4d55f5260a9492010ad33",
-        "version" : "0.1.1"
+        "revision" : "1a74f2a83d8ebf18654e0c239a58f58b4e00d379",
+        "version" : "0.1.2"
       }
     },
     {
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorModel.git",
       "state" : {
-        "revision" : "87bc4b0328f6c669415184e4ef69add8e0a67e42",
-        "version" : "0.55.1"
+        "revision" : "ca1c14ff6da04d3e21d034ffeaeb391e70717d74",
+        "version" : "0.56.0"
       }
     },
     {
@@ -69,8 +69,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorMXL.git",
       "state" : {
-        "revision" : "b32d2e11654255ffef09673a6583a8f7688594ee",
-        "version" : "0.2.0"
+        "revision" : "ce6aea1b9c8d297764d300e3832bac0c6549fae6",
+        "version" : "0.3.0"
       }
     },
     {
@@ -105,8 +105,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorTuning.git",
       "state" : {
-        "revision" : "d448fa48b4fad4eb4b313c022ea909d681a05783",
-        "version" : "0.14.0"
+        "revision" : "a8bd0028789e6e8723f077e854e81d125f18c9d6",
+        "version" : "0.15.0"
       }
     },
     {

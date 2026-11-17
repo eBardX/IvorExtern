@@ -103,7 +103,8 @@ extension JohnnySonic.Importer {
         else { return Work(name: workName,
                            content: .keyboardBeat([],
                                                   tempoMap,
-                                                  MeterTable()),
+                                                  MeterTable(),
+                                                  KeySignatureTable()),
                            info: info) }
 
         if hasAbsolutePitch {
@@ -113,7 +114,8 @@ extension JohnnySonic.Importer {
             return Work(name: workName,
                         content: .absoluteBeat(parts,
                                                tempoMap,
-                                               MeterTable()),
+                                               MeterTable(),
+                                               KeySignatureTable()),
                         info: info)
         } else {
             let parts = try _convertKeyboard(activeCommands)
@@ -121,7 +123,8 @@ extension JohnnySonic.Importer {
             return Work(name: workName,
                         content: .keyboardBeat(parts,
                                                tempoMap,
-                                               MeterTable()),
+                                               MeterTable(),
+                                               KeySignatureTable()),
                         info: info)
         }
     }

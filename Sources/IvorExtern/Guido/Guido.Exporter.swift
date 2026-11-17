@@ -72,8 +72,9 @@ extension Guido.Exporter {
     // MARK: Private Type Methods
 
     // The sorted union of every time this part's body needs to notice: `.zero`
-    // and the work's end, every bar line, every note's attack and end, and
-    // every tempo/instrument/pedal/dynamic annotation's own time. Splitting a
+    // and the work's end, every bar line, every key signature change, every
+    // note's attack and end, and every tempo/instrument/pedal/dynamic
+    // annotation's own time. Splitting a
     // note at one of these — even one with no note of its own — is what lets a
     // tempo change, instrument change, pedal change, or dynamic mark/ramp boundary land
     // exactly where the model says it should.
@@ -82,11 +83,16 @@ extension Guido.Exporter {
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: Set<BeatTime>,
+                                    keyTimes: [BeatTime],
                                     endTime: BeatTime) -> [BeatTime] {
         var boundaries: Set<BeatTime> = [.zero, endTime]
 
         for barTime in barTimes {
             boundaries.insert(barTime)
+        }
+
+        for keyTime in keyTimes {
+            boundaries.insert(keyTime)
         }
 
         for event in events {
@@ -117,7 +123,7 @@ extension Guido.Exporter {
     }
 
     private static func _convert(work: Work) throws(Guido.Error) -> Guido.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keySignatureTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw Guido.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -130,7 +136,8 @@ extension Guido.Exporter {
         let voices = try _makeBody(work: work,
                                    parts: parts,
                                    bars: bars,
-                                   tempoMap: tempoMap)
+                                   tempoMap: tempoMap,
+                                   keySignatureTable: keySignatureTable)
 
         return Guido.Score(variables: [], voices: voices)
     }
@@ -275,12 +282,13 @@ extension Guido.Exporter {
     }
 
     // Every voice opens with the first bar's meter (see
-    // `exportBars(_:through:)`), though the importer reads only the first
-    // voice's.
+    // `exportBars(_:through:)`), and writes every key signature, though the
+    // importer reads only the first voice's.
     private static func _makeBody(work: Work,
                                   parts: [Part<BeatTime, Pitch>],
                                   bars: [ExportBar],
-                                  tempoMap: TempoMap) throws(Guido.Error) -> [Guido.Voice] {
+                                  tempoMap: TempoMap,
+                                  keySignatureTable: KeySignatureTable) throws(Guido.Error) -> [Guido.Voice] {
         let firstMeter = bars.first.map { convertToGuidoMeter($0.meter, $0.extras) } ?? GMNMeter(type: "4/4")
         var voices: [Guido.Voice] = []
 
@@ -315,7 +323,8 @@ extension Guido.Exporter {
             // voice carries it.
             symbols += try _makePartBody(part: parts[index],
                                          bars: bars,
-                                         tempoMap: index == 0 ? tempoMap : TempoMap())
+                                         tempoMap: index == 0 ? tempoMap : TempoMap(),
+                                         keySignatureTable: keySignatureTable)
 
             voices.append(GMNVoice(symbols: symbols))
         }
@@ -328,11 +337,12 @@ extension Guido.Exporter {
     // into segments tied by a bare `\tieEnd` marker, gaps become rests, and
     // every bar sums to its actual length, so a pickup or a short bar is
     // written short. A bar whose meter is written (other than the first,
-    // whose `\meter` opens the voice) starts with a `\meter` tag.
+    // whose `\meter` opens the voice) starts with a `\meter` tag, and a key
+    // signature is a `\key` tag at its own time.
     //
     // `Guido.Importer.Walker._handleTag` flushes the pending note and clears
-    // the tie-armed flag on every tag other than `\tieEnd`, `\bar` and
-    // `\meter`, so a directive or mark can never appear between two segments
+    // the tie-armed flag on every tag other than `\tieEnd`, `\bar`, `\meter`
+    // and `\key`, so a directive or mark can never appear between two segments
     // of the same tied note without breaking the tie. A segment boundary
     // with nothing but a barline (and perhaps a meter) is where a tie
     // continues; any other boundary has no tied note across it.
@@ -342,6 +352,7 @@ extension Guido.Exporter {
                                     annotations: [DynamicAnnotation],
                                     barTimes: Set<BeatTime>,
                                     meterTags: [BeatTime: GMNMeter],
+                                    keyTags: [BeatTime: GMNKey],
                                     sortedBoundaries: [BeatTime]) throws(Guido.Error) -> [(start: BeatTime, symbols: [GMNSymbol])] {
         var chunks: [(start: BeatTime, symbols: [GMNSymbol])] = []
         var directiveIndex = 0
@@ -355,6 +366,8 @@ extension Guido.Exporter {
             else { continue }
 
             var symbols: [GMNSymbol] = meterTags[start].map { [.tag(.meter($0))] } ?? []
+
+            symbols += keyTags[start].map { [.tag(.key($0))] } ?? []
 
             while tempoIndex < tempos.count, tempos[tempoIndex].0 <= start {
                 symbols.append(.tag(.tempo(tempos[tempoIndex].1)))
@@ -398,7 +411,8 @@ extension Guido.Exporter {
 
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       bars: [ExportBar],
-                                      tempoMap: TempoMap) throws(Guido.Error) -> [GMNSymbol] {
+                                      tempoMap: TempoMap,
+                                      keySignatureTable: KeySignatureTable) throws(Guido.Error) -> [GMNSymbol] {
         let events = _events(part.noteTable)
         let directives = (_instrumentDirectives(part.instrumentTable) + _pedalDirectives(part.pedals[.sustain]))
             .enumerated()
@@ -414,11 +428,19 @@ extension Guido.Exporter {
             meterTags[bar.start] = convertToGuidoMeter(bar.meter, bar.extras)
         }
 
+        var keyTags: [BeatTime: GMNKey] = [:]
+
+        for entry in keySignatureTable where entry.beatTime < endTime || entry.beatTime == .zero {
+            keyTags[entry.beatTime] = convertToGMNKey(entry.keySignature,
+                                                      mode: stringValue(entry.extras, .keySignatureMode))
+        }
+
         let sortedBoundaries = _boundaries(events: events,
                                            directives: directives,
                                            tempos: tempos,
                                            annotations: annotations,
                                            barTimes: barTimes,
+                                           keyTimes: Array(keyTags.keys),
                                            endTime: endTime)
         let chunks = try _makeChunks(events: events,
                                      directives: directives,
@@ -426,6 +448,7 @@ extension Guido.Exporter {
                                      annotations: annotations,
                                      barTimes: barTimes,
                                      meterTags: meterTags,
+                                     keyTags: keyTags,
                                      sortedBoundaries: sortedBoundaries)
 
         var body = _wrapDynamicRamps(chunks: chunks, annotations: annotations)

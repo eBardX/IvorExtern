@@ -253,7 +253,7 @@ internal func convertToMusicXMLNotationItems(_ elements: [Extra]) -> [MXLNotatio
 // export-direction reuse of an import-direction error case the Guido and ABC
 // exporters already establish for their own out-of-range octaves.
 internal func convertToMusicXMLPitch(_ pitch: Pitch) throws(MusicXML.Error) -> MusicXML.Pitch {
-    try MusicXML.Pitch(step: _convertToMusicXMLStep(pitch.pitchClass.letter),
+    try MusicXML.Pitch(step: convertToMusicXMLStep(pitch.pitchClass.letter),
                        alter: _convertToMusicXMLAlter(pitch.pitchClass.accidental),
                        octave: _convertToMusicXMLOctave(pitch.octave))
 }
@@ -296,6 +296,32 @@ internal func convertToMusicXMLSound(pan: Pan) -> MXLSound {
     MXLSound(pan: pan.horizontal.doubleValue)
 }
 
+// The reverse of `convertToPitchLetter(_:)`.
+internal func convertToMusicXMLStep(_ letter: Pitch.Letter) -> MusicXML.Step {
+    switch letter {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
+    }
+}
+
 // A `<sound>`'s midi-instrument `<pan>` takes priority over the sound
 // element's own `pan` attribute, which the MusicXML spec deprecated in favor
 // of the midi-instrument element. Degrees run -180...180, with -90 hard left
@@ -317,6 +343,32 @@ internal func convertToPan(horizontal: Double?,
     else { return nil }
 
     return Pan(horizontal: hangle, vertical: vangle)
+}
+
+// A MusicXML step's letter.
+internal func convertToPitchLetter(_ step: MusicXML.Step) -> Pitch.Letter {
+    switch step {
+    case .a:
+        .a
+
+    case .b:
+        .b
+
+    case .c:
+        .c
+
+    case .d:
+        .d
+
+    case .e:
+        .e
+
+    case .f:
+        .f
+
+    case .g:
+        .g
+    }
 }
 
 internal func convertToStandardPitch(_ pitch: MusicXML.Pitch) throws(MusicXML.Error) -> Pitch {
@@ -474,6 +526,25 @@ internal func extractWedge(_ direction: MXLDirection) -> MXLWedge? {
     return nil
 }
 
+// The `<attributes>` a measure opens with, if any. The first measure's
+// hold the divisions, the key signature that starts there (if any) and the
+// time signature, per `MXLValidator`'s `durationBeforeDivisions` check. A
+// later measure's hold the key signature that starts there, if any, and the
+// time signature, if its meter is written (see `exportBars(_:through:)`);
+// it has none if neither is.
+internal func makeMusicXMLMeasureAttributes(_ bar: ExportBar,
+                                            isFirst: Bool,
+                                            divisions: Int,
+                                            key: MXLKey?) -> MXLAttributes? {
+    guard isFirst || bar.isMeterWritten || key != nil
+    else { return nil }
+
+    return MXLAttributes(divisions: isFirst ? MXLPositiveDivisions(intValue: divisions).require() : nil,
+                         key: key.map { [$0] } ?? [],
+                         time: isFirst || bar.isMeterWritten ? [convertToMusicXMLTime(bar.meter, bar.extras)] : [],
+                         content: .transpose([]))
+}
+
 // MARK: Private Functions
 
 // Shared by `convertToDynamic(_ note:)` and `convertToDynamic(_ sound:)`:
@@ -594,32 +665,6 @@ private func _convertToMusicXMLOctave(_ octave: Pitch.Octave) throws(MusicXML.Er
     return mpOctave
 }
 
-// The reverse of `_convertToStandardPitchClass(_:_:)`'s step leg.
-private func _convertToMusicXMLStep(_ letter: Pitch.Letter) -> MusicXML.Step {
-    switch letter {
-    case .a:
-        .a
-
-    case .b:
-        .b
-
-    case .c:
-        .c
-
-    case .d:
-        .d
-
-    case .e:
-        .e
-
-    case .f:
-        .f
-
-    case .g:
-        .g
-    }
-}
-
 private func _convertToPanDegree(_ sound: MXLSound) -> Double? {
     sound.group.lazy.compactMap(\.midiInstrument?.pan).first ?? sound.pan
 }
@@ -630,28 +675,7 @@ private func _convertToPanDegree(_ sound: MXLSound) -> Double? {
 // and is rejected.
 private func _convertToStandardPitchClass(_ mpStep: MusicXML.Step,
                                           _ mpAlter: MusicXML.Semitones?) throws(MusicXML.Error) -> PitchClass {
-    let letter: Pitch.Letter = switch mpStep {
-    case .a:
-        .a
-
-    case .b:
-        .b
-
-    case .c:
-        .c
-
-    case .d:
-        .d
-
-    case .e:
-        .e
-
-    case .f:
-        .f
-
-    case .g:
-        .g
-    }
+    let letter = convertToPitchLetter(mpStep)
 
     let accidental: Pitch.Accidental = switch mpAlter ?? 0 {
     case -2:

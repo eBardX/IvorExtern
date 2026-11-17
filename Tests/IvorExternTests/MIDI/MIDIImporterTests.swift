@@ -35,7 +35,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var foundBank: Int?
@@ -74,7 +74,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -92,7 +92,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Fiddle"))
@@ -165,7 +165,7 @@ extension MIDIImporterTests {
                                    tracks: [rightHandTrack, leftHandTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand", "Left Hand"])
@@ -202,7 +202,7 @@ extension MIDIImporterTests {
                                    tracks: [rightHandTrack, leftHandTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand, Channel 1",
@@ -228,7 +228,7 @@ extension MIDIImporterTests {
                                    tracks: [paddedTrack, otherTrack])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Right Hand", "Left Hand"])
@@ -299,7 +299,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Violin"))
@@ -316,7 +316,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var entryChannels: [Int?] = []
@@ -355,7 +355,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(work.name == "My Song")
@@ -450,7 +450,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(_, tempoMap, _) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
@@ -627,7 +627,7 @@ extension MIDIImporterTests {
                                    tracks: [track])
         let work = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Channel 1"])
