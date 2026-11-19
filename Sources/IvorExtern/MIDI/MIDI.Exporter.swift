@@ -117,7 +117,7 @@ extension MIDI.Exporter {
                                  parts: [Part<BeatTime, NoteNumber>],
                                  tempoMap: TempoMap,
                                  meterTable: MeterTable,
-                                 keySignatureTable: KeySignatureTable,
+                                 keyTable: KeyTable,
                                  timeCode: MIDI.TimeCode?,
                                  tickRate: MIDI.TickRate) throws(MIDI.Error) -> MIDI.Sequence {
         let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(tickRate)
@@ -130,7 +130,7 @@ extension MIDI.Exporter {
                                    smpteOffset: _smpteOffset(work.smpteStartTime, division),
                                    tempoChanges: tempoChanges,
                                    meterTable: meterTable,
-                                   keySignatureTable: keySignatureTable,
+                                   keyTable: keyTable,
                                    tickMap: tickMap))
 
         tracks += try _convert(parts: parts,
@@ -174,7 +174,7 @@ extension MIDI.Exporter {
                                  smpteOffset: SMPTETime?,
                                  tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
                                  meterTable: MeterTable,
-                                 keySignatureTable: KeySignatureTable,
+                                 keyTable: KeyTable,
                                  tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events = _headerEvents(name: name,
                                    info: info,
@@ -183,8 +183,8 @@ extension MIDI.Exporter {
         events += _meterEvents(meterTable,
                                tickMap: tickMap)
 
-        events += _keySignatureEvents(keySignatureTable,
-                                      tickMap: tickMap)
+        events += _keyEvents(keyTable,
+                             tickMap: tickMap)
 
         for (beatTime, tempo) in tempoChanges {
             if let eventTime = tickMap[beatTime] {
@@ -267,12 +267,12 @@ extension MIDI.Exporter {
         let timeCode = determineTimeCode(work)
 
         switch work.content {
-        case let .keyboardBeat(parts, tempoMap, meterTable, keySignatureTable):
+        case let .keyboardBeat(parts, tempoMap, meterTable, keyTable):
             return try _convert(work: work,
                                 parts: parts,
                                 tempoMap: tempoMap,
                                 meterTable: meterTable,
-                                keySignatureTable: keySignatureTable,
+                                keyTable: keyTable,
                                 timeCode: timeCode,
                                 tickRate: tickRate)
 
@@ -411,18 +411,16 @@ extension MIDI.Exporter {
     // where the pickup ends, so that the first bar comes back short. A
     // meterless work is written in 4/4.
     // A key signature meta event for each entry, on the conductor track.
-    // `sf` can only express a diatonic signature, so a custom one is written
-    // as its nearest diatonic signature (see `KeySignature.nearestDiatonic`);
-    // `mi` is 1 when the entry's mode is minor (or aeolian), and 0 otherwise.
-    // An empty table writes none.
-    private static func _keySignatureEvents(_ keySignatureTable: KeySignatureTable,
-                                            tickMap: MIDI.TickMap) -> [MIDI.Event] {
-        keySignatureTable.compactMap { entry in
-            let mode = entry.keySignature.isDiatonic ? stringValue(entry.extras, .keySignatureMode) : nil
-
-            guard let fifths = entry.keySignature.nearestDiatonic.fifths,
-                  let smfKeySignature = SMFKeySignature(bytesValue: [UInt8(bitPattern: Int8(fifths)),
-                                                                     isMinorMode(mode) ? 1 : 0]),
+    // `sf` can only express a diatonic signature, so a custom key is written
+    // as its nearest diatonic signature (see `Key.nearestDiatonicFifths`), and
+    // an atonal one as no sharps or flats; `mi` is 1 for a minor key, and 0
+    // otherwise, so other modes and no mode read back as major. An empty
+    // table writes none.
+    private static func _keyEvents(_ keyTable: KeyTable,
+                                   tickMap: MIDI.TickMap) -> [MIDI.Event] {
+        keyTable.compactMap { entry in
+            guard let smfKeySignature = SMFKeySignature(bytesValue: [UInt8(bitPattern: Int8(entry.key.nearestDiatonicFifths)),
+                                                                     entry.key.mode == .minor ? 1 : 0]),
                   let eventTime = tickMap[entry.beatTime]
             else { return nil }
 

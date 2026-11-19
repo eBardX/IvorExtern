@@ -11,35 +11,42 @@ import XestiNumbers
 import XestiTools
 
 //
-// Key signatures through MIDI: meta events in, key signature table entries
+// Keys through MIDI: key signature meta events in, key table entries
 // out, and back.
 //
 
-struct MIDIKeySignatureTests {
+struct MIDIKeyTests {
 }
 
 // MARK: -
 
-extension MIDIKeySignatureTests {
+extension MIDIKeyTests {
     @Test
-    func export_customSignatureWritesNearestDiatonic() throws {
-        let table = try keyTable([(0, customKeySignature([.fSharp, .gSharp]), nil)])
+    func export_atonalWritesNoSharpsOrFlats() throws {
+        let table = try keyTable([(0, .atonal)])
+
+        #expect(try exportedKeyEvents(table) == ["0 0 0"])
+    }
+
+    @Test
+    func export_customKeyWritesNearestDiatonic() throws {
+        let table = try keyTable([(0, customKey([.fSharp, .gSharp]))])
 
         #expect(try exportedKeyEvents(table) == ["0 1 0"])
     }
 
     @Test
     func export_emptyTableWritesNone() throws {
-        #expect(try exportedKeyEvents(KeySignatureTable()).isEmpty)
+        #expect(try exportedKeyEvents(KeyTable()).isEmpty)
     }
 
     @Test
-    func export_minorAndAeolianSetMi() throws {
-        let table = try keyTable([(0, keySignature(-3), "minor"),
-                                  (1, keySignature(1), "aeolian"),
-                                  (2, keySignature(2), "dorian")])
+    func export_onlyMinorSetsMi() throws {
+        let table = try keyTable([(0, key(-3, .minor)),
+                                  (1, key(1)),
+                                  (2, key(2, .dorian))])
 
-        #expect(try exportedKeyEvents(table) == ["0 -3 1", "1920 1 1", "3840 2 0"])
+        #expect(try exportedKeyEvents(table) == ["0 -3 1", "1920 1 0", "3840 2 0"])
     }
 
     @Test
@@ -54,7 +61,7 @@ extension MIDIKeySignatureTests {
                                                            division: .metrical(SMFTickRate(480)),
                                                            tracks: [conductor, notes]))
 
-        #expect(keySummary(work.keySignatureTable) == ["1/2 2# major"])
+        #expect(keySummary(work.keyTable) == ["1/2 D major"])
     }
 
     @Test
@@ -68,37 +75,40 @@ extension MIDIKeySignatureTests {
                                                            division: .metrical(SMFTickRate(480)),
                                                            tracks: [conductor, notes]))
 
-        #expect(keySummary(work.keySignatureTable) == ["0 3b major"])
+        #expect(keySummary(work.keyTable) == ["0 Eb major"])
     }
 
     @Test
     func import_noKeys_givesEmptyTable() throws {
-        let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(KeySignatureTable())))
+        let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(KeyTable())))
 
-        #expect(work.keySignatureTable?.isEmpty == true)
+        #expect(work.keyTable?.isEmpty == true)
     }
 
     @Test
     func roundTrip_keyChangesAndModes() throws {
-        let table = try keyTable([(0, keySignature(-1), "minor"),
-                                  (1, keySignature(4), "major"),
-                                  (frac(3, 2), keySignature(-7), "minor")])
+        let table = try keyTable([(0, key(-1, .minor)),
+                                  (1, key(4, .major)),
+                                  (frac(3, 2), key(-7, .minor))])
         let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(table)))
 
-        #expect(keySummary(work.keySignatureTable) == ["0 1b minor", "1 4# major", "3/2 7b minor"])
+        #expect(keySummary(work.keyTable) == ["0 D minor", "1 E major", "3/2 Ab minor"])
     }
 
     @Test
-    func roundTrip_otherModesComeBackAsMajor() throws {
-        let table = try keyTable([(0, keySignature(2), "dorian")])
+    func roundTrip_otherModesAndNoModeComeBackAsMajor() throws {
+        // MIDI keys are taken at face value: `mi` 0 is major.
+        let table = try keyTable([(0, key(2, .dorian)),
+                                  (1, key(-1)),
+                                  (frac(3, 2), .atonal)])
         let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(table)))
 
-        #expect(keySummary(work.keySignatureTable) == ["0 2# major"])
+        #expect(keySummary(work.keyTable) == ["0 D major", "1 F major", "3/2 C major"])
     }
 
     // The conductor track's key signature events, at 480 ticks per quarter,
     // as `"<tick> <sf> <mi>"`.
-    private func exportedKeyEvents(_ table: KeySignatureTable) throws -> [String] {
+    private func exportedKeyEvents(_ table: KeyTable) throws -> [String] {
         let sequence = try MIDI.Exporter().convert(keyedKeyboardWork(table))
 
         return sequence.tracks[0].events.compactMap { event in

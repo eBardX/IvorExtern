@@ -86,7 +86,7 @@ extension MIDI.Importer {
         return try Work(name: determineWorkName(validated),
                         content: _convert(voices,
                                           timeline,
-                                          _keySignatureEvents(validated.tracks),
+                                          _keyEvents(validated.tracks),
                                           validated.division),
                         smpteStartTime: _makeStartTime(timeline,
                                                        validated.division),
@@ -200,7 +200,7 @@ extension MIDI.Importer {
     // the work itself (see `_makeExtras`).
     private static func _convert(_ voices: [TrackVoice],
                                  _ timeline: [MIDI.Event],
-                                 _ keySignatureEvents: [MIDI.Event],
+                                 _ keyEvents: [MIDI.Event],
                                  _ division: MIDI.Division) throws(MIDI.Error) -> Work.Content {
         if case let .timeCode(timeCode) = division,
            !timeline.contains(where: { if case .meta(_, .tempo) = $0 { true } else { false } }) {
@@ -217,8 +217,8 @@ extension MIDI.Importer {
                                       beatMap),
                              _makeMeterTable(timeline,
                                              beatMap),
-                             _makeKeySignatureTable(keySignatureEvents,
-                                                    beatMap))
+                             _makeKeyTable(keyEvents,
+                                           beatMap))
     }
 
     private static func _convert<TimeMap: MIDI.ImportTimeMap>(_ voices: [TrackVoice],
@@ -228,9 +228,9 @@ extension MIDI.Importer {
 
     // The key signature meta events of the conductor track — the first
     // track, in format 1 — or else of the first track that has any. Another
-    // track's key signatures are dropped: the work has one key signature
-    // table, and convention keeps them on the conductor track.
-    private static func _keySignatureEvents(_ tracks: [MIDI.Track]) -> [MIDI.Event] {
+    // track's key signatures are dropped: the work has one key table, and
+    // convention keeps them on the conductor track.
+    private static func _keyEvents(_ tracks: [MIDI.Track]) -> [MIDI.Event] {
         for track in tracks {
             let events = track.events.filter {
                 if case .meta(_, .keySignature) = $0 { true } else { false }
@@ -400,19 +400,21 @@ extension MIDI.Importer {
     // signature's there. A time signature's clocks per click and 32nds per
     // quarter are kept in a `midiTimeSignature` extra unless they're the
     // defaults. Time signatures never affect timing.
-    // Every key signature is diatonic, and `mi` gives its mode: major or
-    // minor. Sequencers often leave `mi` at major, so a minor key's name can
-    // be wrong, but the signature is right.
-    private static func _makeKeySignatureTable(_ events: [MIDI.Event],
-                                               _ beatMap: MIDI.BeatMap) -> KeySignatureTable {
-        makeKeySignatureTable(events.compactMap { event in
+    // Every key signature event gives a diatonic key with a mode: minor when
+    // `mi` is 1, otherwise major, taken at face value. Sequencers often leave
+    // `mi` at major, so a minor key's name can be wrong, but the signature is
+    // right. An event with `sf` outside −7…+7 is skipped.
+    private static func _makeKeyTable(_ events: [MIDI.Event],
+                                      _ beatMap: MIDI.BeatMap) -> KeyTable {
+        makeKeyTable(events.compactMap { event in
             guard case let .meta(eventTime, .keySignature(smfKeySignature)) = event,
                   let bytes = smfKeySignature.bytesValue,
                   bytes.count == 2,
-                  let keySignature = KeySignature(fifths: Int(Int8(bitPattern: bytes[0])))
+                  let key = Key.diatonic(fifths: Int(Int8(bitPattern: bytes[0])),
+                                         mode: bytes[1] == 1 ? .minor : .major)
             else { return nil }
 
-            return (beatMap[eventTime], keySignature, bytes[1] == 1 ? "minor" : "major")
+            return (beatMap[eventTime], key)
         })
     }
 

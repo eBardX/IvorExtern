@@ -41,10 +41,9 @@ internal import XestiTools
 // — what `makeMeterTable(_:)` builds the work's meter table from. `meter`
 // is the meter in force, from the last `\meter` tag the walk read.
 //
-// `keySignatureEvents` holds each `\key` tag as it's met, with the key
-// signature and mode name `convertToKeySignature(_:)` gives it — what
-// `makeKeySignatureTable(_:)` builds the work's key signature table from. A
-// key it can't represent is left out.
+// `keyEvents` holds each `\key` tag as it's met, with the key
+// `convertToKey(_:)` gives it — what `makeKeyTable(_:)` builds the work's
+// key table from. A key it can't represent is left out.
 extension Guido.Importer {
 
     // MARK: Internal Nested Types
@@ -58,7 +57,7 @@ extension Guido.Importer {
         internal var dynamicEvents: [DynamicEvent] = []
         internal var instrumentEvents: [(beatTime: BeatTime, instrument: Instrument, tag: GMNInstrument)] = []
         internal var instrumentName: String?
-        internal var keySignatureEvents: [(beatTime: BeatTime, keySignature: KeySignature, mode: String?)] = []
+        internal var keyEvents: [(beatTime: BeatTime, key: Key)] = []
         internal var lastDuration: Guido.Duration = Self.defaultDuration
         internal var lastDynamic: Dynamic = .mp
         internal var lastOctave: GMNPitch.Octave = Self.defaultOctave
@@ -83,15 +82,13 @@ extension Guido.Importer.Context {
         currentBeatTime += duration
     }
 
-    // Records the key signature of a `\key` tag here (see
-    // `keySignatureEvents`).
-    internal mutating func recordKeySignature(_ key: GMNKey) {
-        guard let converted = convertToKeySignature(key)
+    // Records the key of a `\key` tag here (see `keyEvents`).
+    internal mutating func recordKey(_ gmnKey: GMNKey) {
+        guard let key = convertToKey(gmnKey)
         else { return }
 
-        keySignatureEvents.append((beatTime: currentBeatTime,
-                                   keySignature: converted.keySignature,
-                                   mode: converted.mode))
+        keyEvents.append((beatTime: currentBeatTime,
+                          key: key))
     }
 
     // Records a `\meter` tag here: it's the meter in force from now on, and

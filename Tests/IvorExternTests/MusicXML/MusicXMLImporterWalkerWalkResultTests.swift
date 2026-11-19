@@ -28,7 +28,7 @@ extension MusicXMLImporterWalkerWalkResultTests {
 
         let result = try MusicXML.Importer.Walker.WalkResult(barlines: [(beatTime: .zero, meter: .free, extras: nil)],
                                                              directionDynamicEvents: [dynamicEvent],
-                                                             keySignatureEvents: [(beatTime: .zero, keySignature: keySignature(2), mode: "major")],
+                                                             keyEvents: [(beatTime: .zero, key: key(2, .major))],
                                                              panEvents: [(beatTime: .zero, pan: .center)],
                                                              part: part,
                                                              pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .down)],
@@ -36,7 +36,7 @@ extension MusicXMLImporterWalkerWalkResultTests {
 
         #expect(result.barlines.map(\.meter) == [.free])
         #expect(result.directionDynamicEvents.map(\.kind) == [.step])
-        #expect(result.keySignatureEvents.map(\.mode) == ["major"])
+        #expect(try result.keyEvents.map(\.key) == [key(2, .major)])
         #expect(result.panEvents.map(\.pan) == [.center])
         #expect(result.part.part == scorePart)
         #expect(result.pedalEvents.map(\.pedal) == [.sustain])

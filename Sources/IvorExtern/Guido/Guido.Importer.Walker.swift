@@ -613,7 +613,7 @@ extension Guido.Importer.Walker {
             Self._handleIntensity(intensity, &context)
 
         case let .key(key):
-            context.recordKeySignature(key)
+            context.recordKey(key)
 
         case let .meter(meter):
             context.recordMeter(meter)

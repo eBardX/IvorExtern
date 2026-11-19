@@ -1,5 +1,6 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
+import Foundation
 @testable import IvorExtern
 import IvorModel
 import IvorTiming
@@ -8,46 +9,46 @@ import Testing
 import XestiNumbers
 import XestiTools
 
-// A key signature from its accidentals, in any order.
-internal func customKeySignature(_ accidentals: [PitchClass]) throws -> KeySignature {
-    try #require(KeySignature(accidentals: accidentals))
+// The key a written signature gives, from its accidentals in any order:
+// diatonic with no mode for a diatonic set, otherwise custom.
+internal func customKey(_ accidentals: [PitchClass]) throws -> Key {
+    try #require(Key(accidentals: accidentals))
 }
 
-// The diatonic key signature with `fifths` sharps (or flats, when negative).
-internal func keySignature(_ fifths: Int) throws -> KeySignature {
-    try #require(KeySignature(fifths: fifths))
+// The diatonic key with `fifths` sharps (or flats, when negative), in
+// `mode`, or with no mode.
+internal func key(_ fifths: Int,
+                  _ mode: Key.Mode? = nil) throws -> Key {
+    try #require(Key.diatonic(fifths: fifths,
+                              mode: mode))
 }
 
-// Each entry of a key signature table as `"<beat time> <short form>"`, with
-// ` <mode>` appended when it has a mode extra: `"0 2# minor"`, `"4 Bb F#"`.
-internal func keySummary(_ table: KeySignatureTable?) -> [String] {
+// Each entry of a key table as `"<beat time> <full name>"`, in ASCII:
+// `"0 B minor"`, `"2 F# C#"`, `"4 Bb F#"`, `"6 Atonal"`.
+internal func keySummary(_ table: KeyTable?) -> [String] {
     guard let table
     else { return ["no table"] }
 
     return table.map { entry in
-        let head = "\(simpleFraction(entry.beatTime.numberValue)) \(entry.keySignature.stringValue(ascii: true))"
-
-        return stringValue(entry.extras, .keySignatureMode).map { "\(head) \($0)" } ?? head
+        "\(simpleFraction(entry.beatTime.numberValue)) \(String(entry.key.formatted(Key.FormatStyle(ascii: true)).characters))"
     }
 }
 
-// A key signature table with an entry at each beat time, each with an
-// optional mode extra.
-internal func keyTable(_ entries: [(Number, KeySignature, String?)]) throws -> KeySignatureTable {
-    var table = KeySignatureTable()
+// A key table with an entry at each beat time.
+internal func keyTable(_ entries: [(Number, Key)]) throws -> KeyTable {
+    var table = KeyTable()
 
-    for (time, keySignature, mode) in entries {
+    for (time, key) in entries {
         try table.insert(beatTime: #require(BeatTime(numberValue: time)),
-                         keySignature: keySignature,
-                         extras: keySignatureModeExtras(mode))
+                         key: key)
     }
 
     return table
 }
 
-// A one-part keyboard-beat work with the given key signature table: a C4
+// A one-part keyboard-beat work with the given key table: a C4
 // on every beat for `beats` quarter notes.
-internal func keyedKeyboardWork(_ table: KeySignatureTable,
+internal func keyedKeyboardWork(_ table: KeyTable,
                                 beats: Int = 8) -> Work {
     var noteTable = NoteTable<BeatTime, NoteNumber>()
 
@@ -64,9 +65,9 @@ internal func keyedKeyboardWork(_ table: KeySignatureTable,
                                        table))
 }
 
-// A one-part standard-beat work with the given key signature table and
+// A one-part standard-beat work with the given key table and
 // pitches, one per quarter note from 0.
-internal func keyedStandardWork(_ table: KeySignatureTable,
+internal func keyedStandardWork(_ table: KeyTable,
                                 pitches: [Pitch],
                                 meterTable: MeterTable = MeterTable()) -> Work {
     var noteTable = NoteTable<BeatTime, Pitch>()

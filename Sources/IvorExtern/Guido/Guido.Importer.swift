@@ -60,7 +60,7 @@ extension Guido.Importer {
                     content: .standardBeat(fillEmptyPartNames(parts),
                                            _makeTempoMap(contexts.flatMap(\.tempoEvents)),
                                            _makeMeterTable(contexts.first),
-                                           _makeKeySignatureTable(contexts.first)),
+                                           _makeKeyTable(contexts.first)),
                     info: determineWorkInfo(validated))
     }
 
@@ -144,16 +144,16 @@ extension Guido.Importer {
     // dropped (the final bar line would otherwise make a short last bar a
     // restart), except at time 0, where it still states the meter. A score
     // with no `\meter` tag has no meter.
-    // The key signature is work-wide, so, like the meter, it's read from the
+    // The key is work-wide, so, like the meter, it's read from the
     // first voice. A `\key` at or after the end of its music is dropped,
     // except at time 0.
-    private static func _makeKeySignatureTable(_ context: Guido.Importer.Context?) -> KeySignatureTable {
+    private static func _makeKeyTable(_ context: Guido.Importer.Context?) -> KeyTable {
         guard let context
-        else { return KeySignatureTable() }
+        else { return KeyTable() }
 
         let end = context.currentBeatTime
 
-        return makeKeySignatureTable(context.keySignatureEvents.filter { $0.beatTime < end || $0.beatTime == .zero })
+        return makeKeyTable(context.keyEvents.filter { $0.beatTime < end || $0.beatTime == .zero })
     }
 
     private static func _makeMeterTable(_ context: Guido.Importer.Context?) -> MeterTable {

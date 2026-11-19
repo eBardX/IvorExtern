@@ -285,10 +285,9 @@ extension ABC.Importer.Walker {
             context.barAccidentals = [:]
             context.keyAccidentals = keySignature.accidentals
 
-            if let converted = convertToKeySignature(keySignature) {
-                try context.keySignatureEvents.append((beatTime: _fieldBeatTime(context),
-                                                       keySignature: converted.keySignature,
-                                                       mode: converted.mode))
+            if let key = convertToKey(keySignature) {
+                try context.keyEvents.append((beatTime: _fieldBeatTime(context),
+                                              key: key))
             }
 
             if let clef = pitchFolder.clef(from: keySignature) {

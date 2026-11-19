@@ -9,34 +9,36 @@ import XestiNumbers
 import XestiTools
 
 //
-// Key signatures through ABC: `K:` fields in, key signature table entries
+// Keys through ABC: `K:` fields in, key table entries
 // out, and back — with every note's accidental written relative to the key
 // and to the accidentals earlier in its bar.
 //
 
-struct ABCKeySignatureTests {
+struct ABCKeyTests {
 }
 
 // MARK: -
 
-extension ABCKeySignatureTests {
+extension ABCKeyTests {
 
     // MARK: Import
 
-    @Test(arguments: [("K:D", "0 2# major"),
-                      ("K:Bm", "0 2# minor"),
-                      ("K:Edor", "0 2# dorian"),
-                      ("K:F lyd", "0 no #/b lydian"),
-                      ("K:Ab aeolian", "0 7b aeolian"),
-                      ("K:none", "0 no #/b none"),
-                      ("K:D ^g", "0 3#"),                 // extra accidentals: no mode
-                      ("K:D =c", "0 1#"),
-                      ("K:D ^d", "0 F# C# D#"),           // custom: no mode
-                      ("K:C exp _b ^f", "0 Bb F#")])
+    @Test(arguments: [("K:D", "0 D major"),
+                      ("K:Bm", "0 B minor"),
+                      ("K:Edor", "0 E dorian"),
+                      ("K:F lyd", "0 F lydian"),
+                      ("K:Ab aeolian", "0 Ab minor"),       // aeolian is minor
+                      ("K:G ionian", "0 G major"),          // ionian is major
+                      ("K:none", "0 Atonal"),
+                      ("K:D ^g", "0 F# C# G#"),             // extra accidentals: no mode
+                      ("K:D =c", "0 F#"),
+                      ("K:D ^d", "0 F# C# D#"),             // custom
+                      ("K:C exp _b ^f", "0 Bb F#"),
+                      ("K:C exp ^f", "0 F#")])              // diatonic set: no mode
     func import_keyField(_ field: String, _ summary: String) throws {
         let work = try readABC("X:1\nT:T\nL:1/4\n\(field)\nC D E F|\n")
 
-        #expect(keySummary(work.keySignatureTable) == [summary])
+        #expect(keySummary(work.keyTable) == [summary])
     }
 
     @Test
@@ -50,23 +52,51 @@ extension ABCKeySignatureTests {
             """)
 
         // The repeat restates G at 3/2: dropped.
-        #expect(keySummary(work.keySignatureTable) == ["0 no #/b major", "1/2 1# major", "2 2b major"])
+        #expect(keySummary(work.keyTable) == ["0 C major", "1/2 G major", "2 Bb major"])
     }
 
     @Test
     func import_doubleAccidentalKeyIsDropped() throws {
         let work = try readABC("X:1\nT:T\nL:1/4\nK:C\nC D|[K:C exp ^^f] E F|\n")
 
-        #expect(keySummary(work.keySignatureTable) == ["0 no #/b major"])
+        #expect(keySummary(work.keyTable) == ["0 C major"])
     }
 
     // MARK: Export
 
     @Test
+    func export_atonalWritesKNone() throws {
+        let table = try keyTable([(0, .atonal)])
+        let abc = try writeABC(keyedStandardWork(table, pitches: [.fSharp4, .f4]))
+
+        #expect(abc.contains("K:none"))
+        #expect(abc.contains("^F=F"))
+    }
+
+    @Test
+    func export_modes() throws {
+        let table = try keyTable([(0, key(2, .dorian)), (1, key(-3, .minor))])
+        let abc = try writeABC(keyedStandardWork(table,
+                                                 pitches: [.e4, .fSharp4, .g4, .a4, .c5, .d5, .eFlat5, .f5],
+                                                 meterTable: meterTable([(.zero, "4/4")])))
+
+        #expect(abc.contains("K:E dorian"))
+        #expect(abc.contains("[K:C minor]"))
+    }
+
+    @Test
+    func export_noModeWritesMajor() throws {
+        let table = try keyTable([(0, key(1))])
+        let abc = try writeABC(keyedStandardWork(table, pitches: [.fSharp4]))
+
+        #expect(abc.contains("K:G major"))
+    }
+
+    @Test
     func export_accidentalsAgainstTheKeyWithinABar() throws {
         // In G: F♯ is bare, F♮ needs "=" once, then carries; the bar line
         // brings back F♯.
-        let table = try keyTable([(0, keySignature(1), "major")])
+        let table = try keyTable([(0, key(1, .major))])
         let abc = try writeABC(keyedStandardWork(table,
                                                  pitches: [.fSharp4, .f4, .f4, .g4, .fSharp4],
                                                  meterTable: meterTable([(.zero, "4/4")])))
@@ -80,7 +110,7 @@ extension ABCKeySignatureTests {
         // ^F carries to f for ABC.Importer (by letter), but not for a reader
         // that carries it by octave, so f natural is written "=f", and F
         // natural "=F".
-        let abc = try writeABC(keyedStandardWork(KeySignatureTable(),
+        let abc = try writeABC(keyedStandardWork(KeyTable(),
                                                  pitches: [.fSharp4, .f5, .f4, .c4],
                                                  meterTable: meterTable([(.zero, "4/4")])))
 
@@ -89,7 +119,7 @@ extension ABCKeySignatureTests {
 
     @Test
     func export_customKeyWritesExplicit() throws {
-        let table = try keyTable([(0, customKeySignature([.fSharp, .bFlat]), nil)])
+        let table = try keyTable([(0, customKey([.fSharp, .bFlat]))])
         let abc = try writeABC(keyedStandardWork(table,
                                                  pitches: [.bFlat4, .b4, .fSharp4, .f4],
                                                  meterTable: meterTable([(.zero, "4/4")])))
@@ -100,7 +130,7 @@ extension ABCKeySignatureTests {
 
     @Test
     func export_emptyTableWritesKC() throws {
-        let abc = try writeABC(keyedStandardWork(KeySignatureTable(), pitches: [.bFlat4, .b4]))
+        let abc = try writeABC(keyedStandardWork(KeyTable(), pitches: [.bFlat4, .b4]))
 
         #expect(abc.contains("K:C major"))
         #expect(abc.contains("_B=B"))
@@ -110,7 +140,7 @@ extension ABCKeySignatureTests {
     func export_keyChangeIsInlineAndResetsTheBar() throws {
         // D at 0, B♭ at 1/2 (mid-bar in 4/4): the inline field restarts the
         // bar's accidentals, as ABC.Importer reads it.
-        let table = try keyTable([(0, keySignature(2), "major"), (frac(1, 2), keySignature(-2), "major")])
+        let table = try keyTable([(0, key(2, .major)), (frac(1, 2), key(-2, .major))])
         let abc = try writeABC(keyedStandardWork(table,
                                                  pitches: [.fSharp4, .cSharp5, .bFlat4, .eFlat4],
                                                  meterTable: meterTable([(.zero, "4/4")])))
@@ -129,7 +159,7 @@ extension ABCKeySignatureTests {
 
         noteTable.insert(attack: .zero, duration: .half, pitch: .c4)
 
-        let table = try keyTable([(0, keySignature(1), "major"), (frac(1, 4), keySignature(-1), "major")])
+        let table = try keyTable([(0, key(1, .major)), (frac(1, 4), key(-1, .major))])
         let work = Work(name: "Keyed",
                         content: .standardBeat([Part(name: "Piano", noteTable: noteTable)], TempoMap(), MeterTable(), table))
         let recovered = try roundTrip(work,
@@ -138,16 +168,16 @@ extension ABCKeySignatureTests {
                                       fileFormat: .abc)
         let notes = try namedStandardPart(recovered, "Piano").noteTable
 
-        #expect(keySummary(recovered.keySignatureTable) == ["0 1# major", "1/4 1b major"])
+        #expect(keySummary(recovered.keyTable) == ["0 G major", "1/4 F major"])
         #expect(notes.count == 1)
         #expect(notes.first?.duration == .half)
     }
 
     @Test
     func roundTrip_keysModesAndPitches() throws {
-        let table = try keyTable([(0, keySignature(-3), "minor"),
-                                  (1, customKeySignature([.gSharp, .fSharp]), nil),
-                                  (2, keySignature(4), "mixolydian")])
+        let table = try keyTable([(0, key(-3, .minor)),
+                                  (1, customKey([.gSharp, .fSharp])),
+                                  (2, key(4, .mixolydian))])
         let pitches: [Pitch] = [.c4,
                                 .eFlat4,
                                 .e4,
@@ -177,7 +207,7 @@ extension ABCKeySignatureTests {
                                          meterTable: meterTable([(.zero, "4/4")]))
         let recovered = try readABC(writeABC(work))
 
-        #expect(keySummary(recovered.keySignatureTable) == ["0 3b minor", "1 F# G#", "2 4# mixolydian"])
+        #expect(keySummary(recovered.keyTable) == ["0 C minor", "1 F# G#", "2 B mixolydian"])
 
         // ABC.Importer respells every pitch with sharps, so compare what sounds.
         #expect(try namedStandardPart(recovered, "Piano").noteTable.map { semitones($0.startPitch) } == pitches.map(semitones))
@@ -185,10 +215,30 @@ extension ABCKeySignatureTests {
 
     @Test
     func roundTrip_noKeysGivesKC() throws {
-        let work = keyedStandardWork(KeySignatureTable(), pitches: [.c4, .fSharp4])
+        let work = keyedStandardWork(KeyTable(), pitches: [.c4, .fSharp4])
         let recovered = try readABC(writeABC(work))
 
-        #expect(keySummary(recovered.keySignatureTable) == ["0 no #/b major"])
+        #expect(keySummary(recovered.keyTable) == ["0 C major"])
+    }
+
+    @Test
+    func roundTrip_atonalAndNoMode() throws {
+        // Atonal survives; no mode comes back as major, since ABC always
+        // names a tonic.
+        let table = try keyTable([(0, .atonal), (1, key(2))])
+        let work = try keyedStandardWork(table,
+                                         pitches: [.c4, .fSharp4, .f4, .c4, .d4, .fSharp4, .cSharp5, .d5],
+                                         meterTable: meterTable([(.zero, "4/4")]))
+        let recovered = try readABC(writeABC(work))
+
+        #expect(keySummary(recovered.keyTable) == ["0 Atonal", "1 D major"])
+    }
+
+    @Test
+    func roundTrip_normalizesModeNames() throws {
+        let recovered = try readABC(writeABC(readABC("X:1\nT:T\nL:1/4\nK:Aaeo\nA B c d|\n")))
+
+        #expect(keySummary(recovered.keyTable) == ["0 A minor"])
     }
 
     private func semitones(_ pitch: Pitch) -> Int {

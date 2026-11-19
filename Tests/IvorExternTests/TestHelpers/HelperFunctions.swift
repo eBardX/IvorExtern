@@ -102,7 +102,7 @@ internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
 // note-level output, not tempo.
 internal func standardBeatWork(parts: [Part<BeatTime, Pitch>]) -> Work {
     Work(name: "Test",
-         content: .standardBeat(parts, TempoMap(), MeterTable(), KeySignatureTable()))
+         content: .standardBeat(parts, TempoMap(), MeterTable(), KeyTable()))
 }
 
 // Looks a part up by name rather than by index, so an ABC round trip stays
@@ -766,7 +766,7 @@ internal func sampleMIDIWork() -> Work {
                     instrumentTable: instrumentTable)
 
     return Work(name: "Sketch",
-                content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()),
+                content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 dedication: "To my teacher\nwith thanks",
@@ -837,7 +837,7 @@ internal func sampleMusicXMLWork() -> Work {
                                      instrumentTable: instrumentTable)
 
     return Work(name: "Collected Pieces: Aubade",
-                content: .standardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()),
+                content: .standardBeat([part], TempoMap(), MeterTable(), KeyTable()),
                 info: Work.Info(title: "Aubade",
                                 subtitles: ["Dawn Song"],
                                 alternateTitles: ["Morning Piece"],
@@ -1225,7 +1225,7 @@ internal func midiExportedPedalEvents(_ pedals: [Pedal: PedalTable<BeatTime>]) t
     noteTable.insert(attack: 0, duration: 1, pitch: NoteNumber(60))
 
     let part = Part<BeatTime, NoteNumber>(name: "Piano", noteTable: noteTable, pedals: pedals)
-    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable())))
+    let sequence = try MIDI.Exporter().convert(Work(name: "Test", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable())))
 
     return sequence.tracks.flatMap(\.events).compactMap { event in
         guard case let .midi(eventTime, .controlChange(_, controller, value)) = event,
@@ -1451,7 +1451,7 @@ internal func meteredKeyboardWork(_ meterTable: MeterTable,
                 content: .keyboardBeat([Part(name: "Piano", noteTable: noteTable)],
                                        TempoMap(),
                                        meterTable,
-                                       KeySignatureTable()))
+                                       KeyTable()))
 }
 
 // A one-part standard-beat work with the given meter table, whose music is
@@ -1468,7 +1468,7 @@ internal func meteredStandardWork(_ meterTable: MeterTable,
                 content: .standardBeat([Part(name: "Piano", noteTable: noteTable)],
                                        TempoMap(),
                                        meterTable,
-                                       KeySignatureTable()))
+                                       KeyTable()))
 }
 
 // A rational number as a simple fraction (`3/2`), or a whole number (`2`).

@@ -54,7 +54,7 @@ extension MusicXML.Importer {
                         content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
                                                _makeTempoMap(results.flatMap(\.tempoEvents)),
                                                makeMeterTable(results.first?.barlines ?? []),
-                                               makeKeySignatureTable(results.first?.keySignatureEvents ?? [])),
+                                               makeKeyTable(results.first?.keyEvents ?? [])),
                         info: determineWorkInfo(score))
     }
 

@@ -42,11 +42,10 @@ internal import XestiTools
 // `<time>` written in that measure — what `makeMeterTable(_:)` builds the
 // work's meter table from.
 //
-// `keySignatureEvents` holds each `<key>` for the part's first staff (or all
-// its staves) as it's met, along the play order, with the key signature and
-// mode name `convertToKeySignature(_:)` gives it — what
-// `makeKeySignatureTable(_:)` builds the work's key signature table from. A
-// key it can't represent is left out.
+// `keyEvents` holds each `<key>` for the part's first staff (or all
+// its staves) as it's met, along the play order, with the key
+// `convertToKey(_:)` gives it — what `makeKeyTable(_:)` builds the work's
+// key table from. A key it can't represent is left out.
 //
 // `lastDirectionDynamic` is the dynamic level in effect as of the most
 // recently recorded `directionDynamicEvents` entry, used as a wedge's
@@ -69,7 +68,7 @@ extension MusicXML.Importer {
         internal var barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = []
         internal var cursor: MusicXML.Duration = .zero
         internal var directionDynamicEvents: [DynamicEvent] = []
-        internal var keySignatureEvents: [(beatTime: BeatTime, keySignature: KeySignature, mode: String?)] = []
+        internal var keyEvents: [(beatTime: BeatTime, key: Key)] = []
         internal var lastDirectionDynamic: Dynamic = .mp
         internal var lastDuration: MusicXML.Duration = .zero
         internal var measureAdvance: MusicXML.Duration = .zero
@@ -123,17 +122,16 @@ extension MusicXML.Importer.Context {
     // `discontinue` ends a line *without* the lift `stop` represents, and
     // `resume` starts one *without* the downstroke `start` represents, so
     // none of the three changes the level.
-    // Records the key signature of each `<key>` here (see
-    // `keySignatureEvents`). Only the first staff's key counts, or one for
-    // every staff; a part whose staves differ keeps its first staff's.
-    internal mutating func recordKeySignatures(_ keys: [MXLKey]) {
-        for key in keys where (key.number?.uintValue ?? 1) == 1 {
-            guard let converted = convertToKeySignature(key)
+    // Records the key of each `<key>` here (see `keyEvents`). Only the first
+    // staff's key counts, or one for every staff; a part whose staves differ
+    // keeps its first staff's.
+    internal mutating func recordKeys(_ mxlKeys: [MXLKey]) {
+        for mxlKey in mxlKeys where (mxlKey.number?.uintValue ?? 1) == 1 {
+            guard let key = convertToKey(mxlKey)
             else { continue }
 
-            keySignatureEvents.append((beatTime: convertToBeatTime(measureStart + cursor),
-                                       keySignature: converted.keySignature,
-                                       mode: converted.mode))
+            keyEvents.append((beatTime: convertToBeatTime(measureStart + cursor),
+                              key: key))
         }
     }
 

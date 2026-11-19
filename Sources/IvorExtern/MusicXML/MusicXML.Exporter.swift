@@ -130,7 +130,7 @@ extension MusicXML.Exporter {
     }
 
     private static func _convert(work: Work) throws(MusicXML.Error) -> MusicXML.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable, keySignatureTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw MusicXML.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -141,7 +141,7 @@ extension MusicXML.Exporter {
         let bars = exportBars(meterTable,
                               through: work.beatTimeRange?.upperBound ?? .zero)
         let divisions = _divisions(parts: parts, tempoMap: tempoMap, bars: bars)
-        let keys = placeMusicXMLKeys(keySignatureTable, in: bars)
+        let keys = placeMusicXMLKeys(keyTable, in: bars)
 
         let hiddenPedals = repeatedPedals(parts.map(\.pedals))
         var scoreParts: [MusicXML.ScorePart] = []

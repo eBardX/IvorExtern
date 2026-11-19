@@ -9,9 +9,9 @@ extension ABC.Exporter {
 
     // MARK: Internal Nested Types
 
-    // What a reader takes a bare note to be at a point in a voice: the key
-    // signature in force, overridden by any accidental written earlier in
-    // the bar. It starts in the key signature the `K:` header field writes
+    // What a reader takes a bare note to be at a point in a voice: the
+    // signature of the key in force, overridden by any accidental written
+    // earlier in the bar. It starts in the key the `K:` header field writes
     // (the table's entry at time 0, or none, for `K:C`), and hands out an
     // inline `[K:…]` field for each later entry as the voice reaches it.
     //
@@ -25,19 +25,19 @@ extension ABC.Exporter {
 
         // MARK: Internal Initializers
 
-        internal init(keySignatureTable: KeySignatureTable) {
-            let first = keySignatureTable.first.flatMap { $0.beatTime == .zero ? $0 : nil }
+        internal init(keyTable: KeyTable) {
+            let first = keyTable.first.flatMap { $0.beatTime == .zero ? $0 : nil }
 
-            self.keyChanges = keySignatureTable.filter { $0.beatTime > .zero }
-            self.keySignature = first?.keySignature
+            self.keyChanges = keyTable.filter { $0.beatTime > .zero }
+            self.key = first?.key
         }
 
         // MARK: Private Instance Properties
 
         private var byLetter: [Pitch.Letter: Pitch.Accidental] = [:]
         private var byPitch: [Pitch.Letter: [Int: Pitch.Accidental]] = [:]     // by octave
-        private var keyChanges: [KeySignatureTable.Entry]
-        private var keySignature: KeySignature?
+        private var key: Key?
+        private var keyChanges: [KeyTable.Entry]
     }
 }
 
@@ -52,7 +52,8 @@ extension ABC.Exporter.AccidentalState {
     // then carried through the rest of the bar.
     internal mutating func abcPitch(for pitch: Pitch) throws(ABC.Error) -> ABCPitch {
         let written = try convertToABCPitch(pitch)
-        let keyAccidental = keySignature?.accidental(for: pitch.letter) ?? .natural
+        let keyAccidental = accidental(for: pitch.letter,
+                                       in: key)
         let octave = pitch.octave.intValue
 
         if (byLetter[pitch.letter] ?? keyAccidental) == pitch.accidental,
@@ -68,18 +69,17 @@ extension ABC.Exporter.AccidentalState {
         return written
     }
 
-    // The inline `[K:…]` field for each key signature change at or before
-    // `beatTime` not yet written. Each brings a new key signature and, as
+    // The inline `[K:…]` field for each key change at or before `beatTime`
+    // not yet written. Each brings a new key signature and, as
     // `ABC.Importer` reads it, a fresh start for the bar's accidentals.
     internal mutating func keyChangeSymbols(through beatTime: BeatTime) -> [ABCSymbol] {
         var symbols: [ABCSymbol] = []
 
         while let entry = keyChanges.first,
               entry.beatTime <= beatTime {
-            symbols.append(.inlineField(.key(convertToABCKeySignature(entry.keySignature,
-                                                                      mode: stringValue(entry.extras, .keySignatureMode)))))
+            symbols.append(.inlineField(.key(convertToABCKeySignature(entry.key))))
             keyChanges.removeFirst()
-            keySignature = entry.keySignature
+            key = entry.key
 
             startBar()
         }

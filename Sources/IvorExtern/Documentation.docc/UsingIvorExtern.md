@@ -83,22 +83,23 @@ let file = try midi.write(works: [work])   // a FileWrapper
 ``ExportFileFormat/write(works:options:)`` writes one or more works to a `FileWrapper`,
 ready to save or share.
 
-### Key signatures
+### Keys
 
-A beat-time work’s key signature table comes in from every format that has key
-signatures and goes back out to it. Where a format names the key’s mode, the
-mode is kept as a `keySignatureMode` extra and written back. A key signature a
-format records but Ivor can’t represent (one with a double sharp or flat, or a
-microtonal alteration) is left out on import, and so is one that only repeats
-the key before it.
+A beat-time work’s key table comes in from every format that has keys and goes
+back out to it. Each entry is a `Key`: atonal, diatonic (with the mode the
+source names, or none where it names none), or custom. A key a format records
+but Ivor can’t represent (one with a double sharp or flat, or a microtonal
+alteration) is left out on import, and so is one that only repeats the key
+before it. Mode names are normalized on round trip: ABC’s `K:Aaeo` comes back
+as `K:Am`, and MusicXML’s `<mode>ionian</mode>` as `<mode>major</mode>`.
 
  Format      | Reads                                       | Writes                                      | Loses
 :------      |:-----                                       |:------                                      |:-----
- MIDI        | Key signature meta events of the first track that has any | A meta event at each key, on the first track | A custom key signature, written as its nearest diatonic one; modes other than major and minor
- MusicXML    | `<key>` of each part’s first staff, traditional or not, along the play order | `<key>` at each key, at a measure’s start or in the middle | `<key-octave>`
- ABC         | `K:` fields, in the header and inline, along the play order | `K:` and inline `[K:…]`, with every note’s accidental written against the key and the bar | No key at all, written as `K:C`
- Guido       | `\key`: a number of fifths, a key name, or a free key | `\key`: a key name for major or minor, a number of fifths for another mode, or a free key for a custom signature | Modes other than major and minor
- JohnnySonic | —                                           | —                                           | Every key signature
+ MIDI        | Key signature meta events of the first track that has any, each as major or minor | A meta event at each key, on the first track | A custom key, written as its nearest diatonic signature; modes other than minor, and no mode, which read back as major; an atonal key, written as C major
+ MusicXML    | `<key>` of each part’s first staff, traditional or not, along the play order; `<mode>none</mode>` as atonal | `<key>` at each key, at a measure’s start or in the middle | `<key-octave>`
+ ABC         | `K:` fields, in the header and inline, along the play order; `K:none` as atonal | `K:` and inline `[K:…]`, with every note’s accidental written against the key and the bar | No mode, written as major; no key at all, written as `K:C`
+ Guido       | `\key`: a number of fifths (no mode), a key name (major or minor), or a free key | `\key`: a key name for major or minor, a number of fifths otherwise, or a free key for a custom key | Modes other than major and minor; an atonal key, written as no sharps or flats
+ JohnnySonic | —                                           | —                                           | Every key
 
 ``ExportOptions`` adjusts how a format writes. For now its only options are
 the ``MIDIExportOptions`` of a Standard MIDI File: the ticks per quarter note

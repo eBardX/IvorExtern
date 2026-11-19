@@ -55,7 +55,7 @@ extension MusicXML.Importer.Walker {
 
             results.append(WalkResult(barlines: context.barlines,
                                       directionDynamicEvents: context.directionDynamicEvents,
-                                      keySignatureEvents: context.keySignatureEvents,
+                                      keyEvents: context.keyEvents,
                                       panEvents: context.panEvents,
                                       part: MusicXML.Part(part: scorePart, voices: Self._voices(from: context)),
                                       pedalEvents: context.pedalEvents,
@@ -91,7 +91,7 @@ extension MusicXML.Importer.Walker {
             context.times[time.number?.uintValue] = time
         }
 
-        context.recordKeySignatures(attributes.key)
+        context.recordKeys(attributes.key)
 
         if case let .transpose(transposes) = attributes.content {
             for transpose in transposes {

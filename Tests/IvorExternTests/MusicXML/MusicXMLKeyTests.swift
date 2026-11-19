@@ -11,33 +11,38 @@ import XestiNumbers
 import XestiTools
 
 //
-// Key signatures through MusicXML: `<key>` in `<attributes>` in, key
-// signature table entries out, and back.
+// Keys through MusicXML: `<key>` in `<attributes>` in, key table entries
+// out, and back.
 //
 
-struct MusicXMLKeySignatureTests {
+struct MusicXMLKeyTests {
 }
 
 // MARK: -
 
-extension MusicXMLKeySignatureTests {
+extension MusicXMLKeyTests {
+    @Test
+    func export_atonalWritesModeNone() throws {
+        #expect(try exportedKeys(keyTable([(0, .atonal)])) == ["1@0 0 none"])
+    }
+
     @Test
     func export_customKeyIsNonTraditional() throws {
-        let keys = try exportedKeys(keyTable([(0, customKeySignature([.fSharp, .bFlat]), nil)]))
+        let keys = try exportedKeys(keyTable([(0, customKey([.fSharp, .bFlat]))]))
 
         #expect(keys == ["1@0 Bb F#"])
     }
 
     @Test
     func export_emptyTableWritesNoKey() throws {
-        #expect(try exportedKeys(KeySignatureTable()).isEmpty)
+        #expect(try exportedKeys(KeyTable()).isEmpty)
     }
 
     @Test
     func export_keyAtBarStartAndMidBar() throws {
-        let table = try keyTable([(0, keySignature(2), "major"),
-                                  (1, keySignature(-1), "minor"),         // bar 2's start
-                                  (frac(3, 2), keySignature(0), nil)])    // halfway through bar 2
+        let table = try keyTable([(0, key(2, .major)),
+                                  (1, key(-1, .minor)),         // bar 2's start
+                                  (frac(3, 2), key(0))])        // halfway through bar 2, no mode
 
         #expect(try exportedKeys(table) == ["1@0 2 major", "2@0 -1 minor", "2@8 0"])
     }
@@ -47,7 +52,7 @@ extension MusicXMLKeySignatureTests {
         let work = try readMusicXMLMeteredMeasures([(nontraditional([("F", "1"), ("G", "2")]), musicXMLNote("C")),
                                                     (nontraditional([("B", "-0.5")]), musicXMLNote("C"))])
 
-        #expect(keySummary(work.keySignatureTable).isEmpty)
+        #expect(keySummary(work.keyTable).isEmpty)
     }
 
     @Test
@@ -56,7 +61,7 @@ extension MusicXMLKeySignatureTests {
                                                     (nontraditional([("C", "1"), ("F", "1")]), musicXMLNote("C"))])
 
         // The second is the usual two sharps, so it's diatonic, with no mode.
-        #expect(keySummary(work.keySignatureTable) == ["0 Bb F#", "1 2#"])
+        #expect(keySummary(work.keyTable) == ["0 Bb F#", "1 F# C#"])
     }
 
     @Test
@@ -65,7 +70,7 @@ extension MusicXMLKeySignatureTests {
                                                     (traditional(3, mode: "minor"), musicXMLNote("C")),
                                                     (traditional(3, mode: "major"), musicXMLNote("C"))])
 
-        #expect(keySummary(work.keySignatureTable) == ["0 3# minor", "2 3# major"])
+        #expect(keySummary(work.keyTable) == ["0 F# minor", "2 A major"])
     }
 
     @Test
@@ -73,16 +78,21 @@ extension MusicXMLKeySignatureTests {
         let keys = #"<key number="2"><fifths>-2</fifths></key><key number="1"><fifths>1</fifths></key>"#
         let work = try readMusicXMLMeteredMeasures([(keys, musicXMLNote("C"))])
 
-        #expect(keySummary(work.keySignatureTable) == ["0 1#"])
+        #expect(keySummary(work.keyTable) == ["0 F#"])
     }
 
     @Test
     func import_traditionalKeyFoldsAndKeepsMode() throws {
         let work = try readMusicXMLMeteredMeasures([(traditional(9, mode: "Dorian"), musicXMLNote("C")),
                                                     (traditional(0, mode: "none"), musicXMLNote("C")),
-                                                    (traditional(-2, mode: "bogus"), musicXMLNote("C"))])
+                                                    (traditional(-2, mode: "bogus"), musicXMLNote("C")),
+                                                    (traditional(1, mode: "ionian"), musicXMLNote("C")),
+                                                    (traditional(0, mode: "aeolian"), musicXMLNote("C")),
+                                                    (traditional(0), musicXMLNote("C"))])
 
-        #expect(keySummary(work.keySignatureTable) == ["0 3b dorian", "1 no #/b none", "2 2b"])
+        // 9♯ folds to 3♭; "none" is atonal; an unknown mode is no mode; ionian
+        // and aeolian are major and minor.
+        #expect(keySummary(work.keyTable) == ["0 F dorian", "1 Atonal", "2 Bb Eb", "3 G major", "4 A minor", "5 (no accidentals)"])
     }
 
     @Test
@@ -92,7 +102,7 @@ extension MusicXMLKeySignatureTests {
                                                         + "<attributes>\(traditional(-3))</attributes>"
                                                         + musicXMLNote("D", duration: 2))])
 
-        #expect(keySummary(work.keySignatureTable) == ["0 1#", "1/2 3b"])
+        #expect(keySummary(work.keyTable) == ["0 F#", "1/2 Bb Eb Ab"])
     }
 
     @Test
@@ -102,7 +112,7 @@ extension MusicXMLKeySignatureTests {
                                                      musicXMLNote("C") + #"<barline location="right"><repeat direction="backward"/></barline>"#),
                                                     (traditional(-1), musicXMLNote("C"))])
 
-        #expect(keySummary(work.keySignatureTable) == ["0 2#", "2 1b"])
+        #expect(keySummary(work.keyTable) == ["0 F# C#", "2 Bb"])
     }
 
     @Test
@@ -113,7 +123,7 @@ extension MusicXMLKeySignatureTests {
 
         noteTable.insert(attack: .zero, duration: .half, pitch: .c4)
 
-        let table = try keyTable([(0, keySignature(1), "major"), (frac(1, 4), keySignature(-1), "major")])
+        let table = try keyTable([(0, key(1, .major)), (frac(1, 4), key(-1, .major))])
         let work = Work(name: "Keyed",
                         content: .standardBeat([Part(name: "Piano", noteTable: noteTable)], TempoMap(), MeterTable(), table))
         let recovered = try roundTrip(work,
@@ -122,41 +132,44 @@ extension MusicXMLKeySignatureTests {
                                       fileFormat: .musicXML)
         let notes = try namedStandardPart(recovered, "Piano").noteTable
 
-        #expect(keySummary(recovered.keySignatureTable) == ["0 1# major", "1/4 1b major"])
+        #expect(keySummary(recovered.keyTable) == ["0 G major", "1/4 F major"])
         #expect(notes.count == 1)
         #expect(notes.first?.duration == .half)
     }
 
     @Test
     func roundTrip_keysAndModes() throws {
-        let table = try keyTable([(0, keySignature(-3), "minor"),
-                                  (1, customKeySignature([.gSharp, .fSharp]), nil),
-                                  (frac(5, 2), keySignature(4), "mixolydian")])
+        let table = try keyTable([(0, key(-3, .minor)),
+                                  (1, customKey([.gSharp, .fSharp])),
+                                  (frac(5, 2), key(4, .mixolydian)),
+                                  (3, .atonal),
+                                  (frac(7, 2), key(2))])
         let work = keyedStandardWork(table, pitches: Array(repeating: .c4, count: 16))
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
                                       importer: MusicXML.Importer(),
                                       fileFormat: .musicXML)
 
-        #expect(keySummary(recovered.keySignatureTable) == ["0 3b minor", "1 F# G#", "5/2 4# mixolydian"])
+        // MusicXML loses nothing: modes, no mode, custom and atonal all survive.
+        #expect(keySummary(recovered.keyTable) == ["0 C minor", "1 F# G#", "5/2 B mixolydian", "3 Atonal", "7/2 F# C#"])
     }
 
     @Test
     func roundTrip_noKeysStaysEmpty() throws {
-        let work = keyedStandardWork(KeySignatureTable(), pitches: [.c4, .d4])
+        let work = keyedStandardWork(KeyTable(), pitches: [.c4, .d4])
         let recovered = try roundTrip(work,
                                       exporter: MusicXML.Exporter(),
                                       importer: MusicXML.Importer(),
                                       fileFormat: .musicXML)
 
-        #expect(recovered.keySignatureTable?.isEmpty == true)
+        #expect(recovered.keyTable?.isEmpty == true)
     }
 
     // Each `<key>` the first exported part writes, as
     // `"<measure>@<position> <fifths> <mode>"` for a traditional key or
     // `"<measure>@<position> <accidentals>"` for a non-traditional one, where
     // the position into the measure is in sixteenth notes.
-    private func exportedKeys(_ table: KeySignatureTable) throws -> [String] {
+    private func exportedKeys(_ table: KeyTable) throws -> [String] {
         let score = try MusicXML.Exporter().convert(keyedStandardWork(table,
                                                                       pitches: Array(repeating: .c4, count: 8),
                                                                       meterTable: meterTable([(.zero, "4/4")])))

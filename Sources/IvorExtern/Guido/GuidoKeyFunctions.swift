@@ -5,58 +5,65 @@ internal import IvorTuning
 
 // MARK: Internal Functions
 
-// The `\key` tag for a key signature. A diatonic signature in major or minor
-// is written as its key name, as guidolib reads one: the tonic's letter,
-// uppercase for major and lowercase for minor, then `#` or `&` for a sharp or
-// flat tonic (`\key<"D">`, `\key<"e&">`). Any other diatonic signature is
-// written as its number of fifths (`\key<2>`). A custom signature is written
-// as a free key, every note with its own accidental, in canonical order
+// The `\key` tag for a key. A diatonic key in major or minor is written as
+// its key name, as guidolib reads one: the tonic's letter, uppercase for
+// major and lowercase for minor, then `#` or `&` for a sharp or flat tonic
+// (`\key<"D">`, `\key<"e&">`). Any other diatonic key, in another mode or
+// with none, is written as its number of fifths (`\key<2>`), and an atonal
+// key as `\key<0>`, since Guido can't say more. A custom key is written as a
+// free key, every note with its own accidental, in canonical order
 // (`\key<"free=b&f#">`), so its meaning doesn't depend on guidolib's running
 // accidentals.
-internal func convertToGMNKey(_ keySignature: KeySignature,
-                              mode: String?) -> GMNKey {
-    guard let fifths = keySignature.fifths
-    else {
-        let spec = keySignature.accidentals.map { pitchClass in
+internal func convertToGMNKey(_ key: Key) -> GMNKey {
+    switch key {
+    case .atonal:
+        return GMNKey(key: .number(0))
+
+    case let .custom(signature):
+        let spec = signature.accidentals.map { pitchClass in
             "\(pitchClass.letter)".lowercased() + (pitchClass.accidental == .flat ? "&" : "#")
         }
 
         return GMNKey(key: .name("free=" + spec.joined()))
+
+    case let .diatonic(diatonic):
+        guard let mode = diatonic.mode,
+              mode == .major || mode == .minor,
+              let tonic = diatonic.tonic
+        else { return GMNKey(key: .number(diatonic.fifths)) }
+
+        let letter = "\(tonic.letter)"
+        let name = (mode == .minor ? letter.lowercased() : letter.uppercased()) + _guidoAccidental(tonic.accidental)
+
+        return GMNKey(key: .name(name))
     }
-
-    guard mode == "major" || mode == "minor",
-          let tonic = tonic(of: keySignature, mode: mode)
-    else { return GMNKey(key: .number(fifths)) }
-
-    let letter = "\(tonic.letter)"
-    let name = (mode == "minor" ? letter.lowercased() : letter.uppercased()) + _guidoAccidental(tonic.accidental)
-
-    return GMNKey(key: .name(name))
 }
 
-// A `\key` tag's key signature and mode name, read as guidolib's `ARKey`
-// reads it. A number is that many sharps (or flats), folded into −7…+7, with
-// no mode. A name is a key: its first letter the tonic (`H` or `B` for B),
-// uppercase for major and lowercase for minor, and a second character of `#`
-// or `&` raising or lowering it. An empty name is C major, and an unknown
-// letter C major too, as guidolib takes them. A name starting `free=`, or a
-// `free` parameter, is a free key (see `_parseFreeKey(_:)`). `nil` for a free
-// key that needs a double or microtonal alteration.
-internal func convertToKeySignature(_ key: GMNKey) -> (keySignature: KeySignature, mode: String?)? {
+// A `\key` tag's key, read as guidolib's `ARKey` reads it. A number is a
+// diatonic key with that many sharps (or flats), folded into −7…+7, and no
+// mode. A name is a major or minor key: its first letter the tonic (`H` or
+// `B` for B), uppercase for major and lowercase for minor, and a second
+// character of `#` or `&` raising or lowering it. An empty name is C major,
+// and an unknown letter C major too, as guidolib takes them. A name starting
+// `free=`, or a `free` parameter, is a free key (see `_parseFreeKey(_:)`),
+// whose accidentals give the key with no mode. `nil` for a free key that
+// needs a double or microtonal alteration.
+internal func convertToKey(_ key: GMNKey) -> Key? {
     if let free = key.free {
-        return _parseFreeKey(free).map { ($0, nil) }
+        return _parseFreeKey(free)
     }
 
     switch key.key {
     case let .name(name):
         if name.hasPrefix(freePrefix) {
-            return _parseFreeKey(String(name.dropFirst(freePrefix.count))).map { ($0, nil) }
+            return _parseFreeKey(String(name.dropFirst(freePrefix.count)))
         }
 
         return _parseKeyName(name)
 
     case let .number(fifths):
-        return diatonicKeySignature(fifths: fifths).map { ($0, nil) }
+        return Key.diatonic(fifths: foldedFifths(fifths),
+                            mode: nil)
     }
 }
 
@@ -118,7 +125,7 @@ private func _guidoAccidental(_ accidental: Pitch.Accidental) -> String {
 // it ("running accidentals"), so `b& e a` is B♭, E♭ and A♭. Reading stops at an unknown
 // name. `nil` if an alteration is anything but −1, 0 or +1 semitones, or a
 // letter comes twice.
-private func _parseFreeKey(_ spec: String) -> KeySignature? {
+private func _parseFreeKey(_ spec: String) -> Key? {
     var accidentals: [PitchClass] = []
     var current = 0.0
     var remaining = Substring(spec)
@@ -187,15 +194,13 @@ private func _parseFreeKey(_ spec: String) -> KeySignature? {
                                       accidental: accidental))
     }
 
-    return KeySignature(accidentals: accidentals)
+    return Key(accidentals: accidentals)
 }
 
-private func _parseKeyName(_ name: String) -> (keySignature: KeySignature, mode: String?)? {
-    guard let first = name.first
-    else { return KeySignature(fifths: 0).map { ($0, "major") } }
-
-    guard let base = keyNameFifths[Character(first.uppercased())]
-    else { return KeySignature(fifths: 0).map { ($0, "major") } }
+private func _parseKeyName(_ name: String) -> Key? {
+    guard let first = name.first,
+          let base = keyNameFifths[Character(first.uppercased())]
+    else { return Key.diatonic(fifths: 0, mode: .major) }
 
     let isMajor = first.isUppercase
     var fifths = isMajor ? base : base - 3
@@ -211,5 +216,6 @@ private func _parseKeyName(_ name: String) -> (keySignature: KeySignature, mode:
         break
     }
 
-    return diatonicKeySignature(fifths: fifths).map { ($0, isMajor ? "major" : "minor") }
+    return Key.diatonic(fifths: foldedFifths(fifths),
+                        mode: isMajor ? .major : .minor)
 }

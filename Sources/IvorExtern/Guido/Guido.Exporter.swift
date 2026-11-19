@@ -123,7 +123,7 @@ extension Guido.Exporter {
     }
 
     private static func _convert(work: Work) throws(Guido.Error) -> Guido.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable, keySignatureTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
         else {
             guard work.pitchNotation == .standard
             else { throw Guido.Error.unsupportedPitchNotation(work.pitchNotation) }
@@ -137,7 +137,7 @@ extension Guido.Exporter {
                                    parts: parts,
                                    bars: bars,
                                    tempoMap: tempoMap,
-                                   keySignatureTable: keySignatureTable)
+                                   keyTable: keyTable)
 
         return Guido.Score(variables: [], voices: voices)
     }
@@ -282,13 +282,13 @@ extension Guido.Exporter {
     }
 
     // Every voice opens with the first bar's meter (see
-    // `exportBars(_:through:)`), and writes every key signature, though the
+    // `exportBars(_:through:)`), and writes every key, though the
     // importer reads only the first voice's.
     private static func _makeBody(work: Work,
                                   parts: [Part<BeatTime, Pitch>],
                                   bars: [ExportBar],
                                   tempoMap: TempoMap,
-                                  keySignatureTable: KeySignatureTable) throws(Guido.Error) -> [Guido.Voice] {
+                                  keyTable: KeyTable) throws(Guido.Error) -> [Guido.Voice] {
         let firstMeter = bars.first.map { convertToGuidoMeter($0.meter, $0.extras) } ?? GMNMeter(type: "4/4")
         var voices: [Guido.Voice] = []
 
@@ -324,7 +324,7 @@ extension Guido.Exporter {
             symbols += try _makePartBody(part: parts[index],
                                          bars: bars,
                                          tempoMap: index == 0 ? tempoMap : TempoMap(),
-                                         keySignatureTable: keySignatureTable)
+                                         keyTable: keyTable)
 
             voices.append(GMNVoice(symbols: symbols))
         }
@@ -412,7 +412,7 @@ extension Guido.Exporter {
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
                                       bars: [ExportBar],
                                       tempoMap: TempoMap,
-                                      keySignatureTable: KeySignatureTable) throws(Guido.Error) -> [GMNSymbol] {
+                                      keyTable: KeyTable) throws(Guido.Error) -> [GMNSymbol] {
         let events = _events(part.noteTable)
         let directives = (_instrumentDirectives(part.instrumentTable) + _pedalDirectives(part.pedals[.sustain]))
             .enumerated()
@@ -430,9 +430,8 @@ extension Guido.Exporter {
 
         var keyTags: [BeatTime: GMNKey] = [:]
 
-        for entry in keySignatureTable where entry.beatTime < endTime || entry.beatTime == .zero {
-            keyTags[entry.beatTime] = convertToGMNKey(entry.keySignature,
-                                                      mode: stringValue(entry.extras, .keySignatureMode))
+        for entry in keyTable where entry.beatTime < endTime || entry.beatTime == .zero {
+            keyTags[entry.beatTime] = convertToGMNKey(entry.key)
         }
 
         let sortedBoundaries = _boundaries(events: events,

@@ -289,7 +289,7 @@ extension JohnnySonicImporterTests {
 
         let part = Part(name: "", noteTable: noteTable)
         let work = Work(name: "",
-                        content: .absoluteBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
+                        content: .absoluteBeat([part], TempoMap(), MeterTable(), KeyTable()))
         let written = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
         let read = try JohnnySonic.Importer().read(from: written,
@@ -334,7 +334,7 @@ extension JohnnySonicImporterTests {
 
         let part = Part(name: "", noteTable: noteTable)
         let work = Work(name: "Round Trip",
-                        content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
+                        content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
         let written = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
         let read = try JohnnySonic.Importer().read(from: written,
@@ -365,7 +365,7 @@ extension JohnnySonicImporterTests {
                           dynamic: .mp)
 
         let part = Part(name: "", noteTable: noteTable, dynamicMap: dynamicMap)
-        let work = Work(name: "", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
+        let work = Work(name: "", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
         let written = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
         let read = try JohnnySonic.Importer().read(from: written,
@@ -394,7 +394,7 @@ extension JohnnySonicImporterTests {
                         noteTable: noteTable,
                         panMap: panMap)
         let work = Work(name: "",
-                        content: .keyboardBeat([part], TempoMap(), MeterTable(), KeySignatureTable()))
+                        content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
         let written = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
         let read = try JohnnySonic.Importer().read(from: written,
@@ -427,7 +427,7 @@ extension JohnnySonicImporterTests {
                         tempo: Tempo(120))
 
         let work = Work(name: "",
-                        content: .keyboardBeat([], tempoMap, MeterTable(), KeySignatureTable()))
+                        content: .keyboardBeat([], tempoMap, MeterTable(), KeyTable()))
         let written = try JohnnySonic.Exporter().write(works: [work],
                                                        as: .dkm)
         let read = try JohnnySonic.Importer().read(from: written,

@@ -57,7 +57,7 @@ extension MIDIFormatterTests {
                             content: .keyboardBeat([part],
                                                    TempoMap(),
                                                    MeterTable(),
-                                                   KeySignatureTable()))
+                                                   KeyTable()))
 
         let exportedSequence = try MIDI.Exporter().convert(original)
         let data = try MIDI.Formatter().format(exportedSequence)
