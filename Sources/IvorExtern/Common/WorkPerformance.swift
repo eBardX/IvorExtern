@@ -45,7 +45,10 @@ private import IvorTuning
 /// velocity: a note attacking during one has a higher velocity, so it still
 /// sounds at the written level. Where an importer kept a file’s exact
 /// expression (the `expressionValue` extra of a dynamic-map entry), that is
-/// sent as it is instead.
+/// sent as it is instead. A part in ``partsWithoutExpression`` — one that
+/// plays through an output that ignores CC 11 — sends no expression, and
+/// its notes keep their plain velocities, so dynamics fall back on velocity
+/// alone.
 ///
 /// Pedals follow pan’s rule: a part sends its pedals on every channel it
 /// owns, percussion included, and a later part sharing a channel sends none,
@@ -70,12 +73,18 @@ public struct WorkPerformance {
     /// provided realization assigns its sounds, or `nil` if the work isn’t
     /// in keyboard pitch and wall time.
     ///
-    /// - Parameter work:           The work to perform.
-    /// - Parameter realization:    The realization that assigns the work’s
-    ///                             sounds, or `nil` for every instrument to
-    ///                             sound as its name picks.
+    /// - Parameter work:                       The work to perform.
+    /// - Parameter realization:                The realization that assigns
+    ///                                         the work’s sounds, or `nil` for
+    ///                                         every instrument to sound as its
+    ///                                         name picks.
+    /// - Parameter partsWithoutExpression:     The indices, in the work’s
+    ///                                         order, of the parts that send no
+    ///                                         expression (CC 11). Defaults to
+    ///                                         none.
     public init?(work: Work,
-                 realization: Realization? = nil) {
+                 realization: Realization? = nil,
+                 partsWithoutExpression: Set<Int> = []) {
         guard case let .keyboardWall(parts) = work.content
         else { return nil }
 
@@ -99,7 +108,7 @@ public struct WorkPerformance {
 
         for (index, part) in parts.enumerated() {
             let channels = partChannelSets[index].filter { ownedChannels.insert($0).inserted }
-            let expressive = channels.filter { $0 != Self.percussionChannel }
+            let expressive = partsWithoutExpression.contains(index) ? [] : channels.filter { $0 != Self.percussionChannel }
             let expression = Expression(part: part)
 
             ownedChannelSets.append(channels)
@@ -129,6 +138,7 @@ public struct WorkPerformance {
         self.ownedChannelSets = ownedChannelSets
         self.partChannels = partChannels
         self.partChannelSets = partChannelSets
+        self.partsWithoutExpression = partsWithoutExpression
     }
 
     // MARK: Public Instance Properties
@@ -155,6 +165,10 @@ public struct WorkPerformance {
     /// of its instruments sounds on, which is the part’s own unless an
     /// assignment moves the instrument.
     public let partChannelSets: [[MIDIChannel]]
+
+    /// The indices, in the work’s order, of the parts that send no
+    /// expression (CC 11), as given when the performance was made.
+    public let partsWithoutExpression: Set<Int>
 }
 
 // MARK: -
