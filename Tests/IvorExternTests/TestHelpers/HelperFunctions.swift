@@ -1563,8 +1563,8 @@ internal func midiImportedMeters(_ meters: [(tick: UInt, meter: String, marker: 
         let denominator = try #require(timeMeter.denominator)
         let timeSignature = try #require(SMFTimeSignature(numerator: timeMeter.numerators[0],
                                                           denominator: UInt(denominator.trailingZeroBitCount),
-                                                          clockRate: 24,
-                                                          beatRate: 8))
+                                                          clocksPerClick: 24,
+                                                          thirtySecondsPerQuarter: 8))
 
         events.append(.meta(SMFEventTime(entry.tick), .timeSignature(timeSignature)))
 

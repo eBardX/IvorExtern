@@ -996,8 +996,8 @@ extension MIDIExporterTests {
         let noteTicks: [UInt] = [0, 480, 960, 1_440, 2_160]
         let timeSig = try #require(SMFTimeSignature(numerator: 6,
                                                     denominator: 3,
-                                                    clockRate: 36,
-                                                    beatRate: 8))
+                                                    clocksPerClick: 36,
+                                                    thirtySecondsPerQuarter: 8))
         var events: [SMFEvent] = [.meta(.zero, .timeSignature(timeSig)),
                                   .meta(.zero, .tempo(SMFTempo(500_000)))]
 

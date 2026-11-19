@@ -1,5 +1,5 @@
 {
-  "originHash" : "8fa464bad0a396bfa2051a2692f2d49c6d65d413bad02ffcbedddd6ed81cecb0",
+  "originHash" : "d43ee32da53be6e451b21eb96d475d1515fd18177c005bedf891129be165e93e",
   "pins" : [
     {
       "identity" : "bigint",
@@ -78,8 +78,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/eBardX/IvorSMF.git",
       "state" : {
-        "revision" : "d0a9ebbe9a1b7c87b55b77116eab2e3bfba56254",
-        "version" : "0.5.0"
+        "revision" : "650e6e576bbef09c181876d56e1ddcbb58ad2e95",
+        "version" : "0.6.0"
       }
     },
     {

@@ -32,7 +32,7 @@ extension MIDIFunctionsTests {
 
     @Test
     func convertToMeter_readsAPowerOfTwoDenominator() throws {
-        let timeSignature = try #require(SMFTimeSignature(numerator: 6, denominator: 3, clockRate: 36, beatRate: 8))
+        let timeSignature = try #require(SMFTimeSignature(numerator: 6, denominator: 3, clocksPerClick: 36, thirtySecondsPerQuarter: 8))
 
         #expect(convertToMeter(timeSignature) == meter("6/8"))
     }
@@ -125,8 +125,8 @@ extension MIDIFunctionsTests {
                                              values: [.int(36), .int(8)])])
         let timeSignature = try #require(convertToMIDITimeSignature(meter("6/8"), extras))
 
-        #expect(timeSignature.clockRate == 36)
-        #expect(timeSignature.beatRate == 8)
+        #expect(timeSignature.clocksPerClick == 36)
+        #expect(timeSignature.thirtySecondsPerQuarter == 8)
     }
 
     @Test(arguments: [("4/4", "4/4"),
@@ -141,8 +141,8 @@ extension MIDIFunctionsTests {
         let timeSignature = try #require(convertToMIDITimeSignature(meter(plain), nil))
 
         #expect(convertToMeter(timeSignature) == meter(expected))
-        #expect(timeSignature.clockRate == 24)
-        #expect(timeSignature.beatRate == 8)
+        #expect(timeSignature.clocksPerClick == 24)
+        #expect(timeSignature.thirtySecondsPerQuarter == 8)
     }
 
     @Test
@@ -152,7 +152,7 @@ extension MIDIFunctionsTests {
 
     @Test
     func convertToMIDITimeSignatureExtras_keepsClocksPerClick() throws {
-        let timeSignature = try #require(SMFTimeSignature(numerator: 6, denominator: 3, clockRate: 36, beatRate: 8))
+        let timeSignature = try #require(SMFTimeSignature(numerator: 6, denominator: 3, clocksPerClick: 36, thirtySecondsPerQuarter: 8))
 
         #expect(convertToMIDITimeSignatureExtras(timeSignature)?.elements.first?.values == [.int(36), .int(8)])
     }

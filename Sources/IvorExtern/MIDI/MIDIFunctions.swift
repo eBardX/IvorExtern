@@ -109,34 +109,34 @@ internal func convertToMIDITimeSignature(_ meter: Meter,
     else { return nil }
 
     let values = extras?.elements.first { $0.name == Extra.midiTimeSignature.name }?.values ?? []
-    var clockRate: UInt = 24
-    var beatRate: UInt = 8
+    var clocksPerClick: UInt = 24
+    var thirtySecondsPerQuarter: UInt = 8
 
     if values.count == 2,
        case let .int(clocks) = values[0],
        case let .int(notes) = values[1],
        let clocks = UInt(exactly: clocks),
        let notes = UInt(exactly: notes) {
-        clockRate = clocks
-        beatRate = notes
+        clocksPerClick = clocks
+        thirtySecondsPerQuarter = notes
     }
 
     return MIDI.TimeSignature(numerator: numerator,
                               denominator: exponent,
-                              clockRate: clockRate,
-                              beatRate: beatRate)
+                              clocksPerClick: clocksPerClick,
+                              thirtySecondsPerQuarter: thirtySecondsPerQuarter)
 }
 
 // The `midiTimeSignature` extra for an imported time signature: its clocks
 // per click and 32nds per quarter, or `nil` when they're the defaults (24
 // and 8) that the exporter writes anyway.
 internal func convertToMIDITimeSignatureExtras(_ timeSignature: MIDI.TimeSignature) -> Extras? {
-    guard timeSignature.clockRate != 24 || timeSignature.beatRate != 8
+    guard timeSignature.clocksPerClick != 24 || timeSignature.thirtySecondsPerQuarter != 8
     else { return nil }
 
     return Extras(elements: [Extra(name: Extra.midiTimeSignature.name,
-                                   values: [.int(Int(timeSignature.clockRate)),
-                                            .int(Int(timeSignature.beatRate))])])
+                                   values: [.int(Int(timeSignature.clocksPerClick)),
+                                            .int(Int(timeSignature.thirtySecondsPerQuarter))])])
 }
 
 internal func convertToNoteNumber(_ noteNumber: MIDI.NoteNumber) -> NoteNumber {

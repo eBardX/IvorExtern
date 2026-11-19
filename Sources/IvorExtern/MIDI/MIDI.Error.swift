@@ -16,7 +16,6 @@ extension MIDI {
         case emptyBeatMap
         case formatFailure((any EnhancedError)?)
         case invalidBeatDuration(BeatDuration)
-        case invalidClockRate(UInt)
         case invalidEventTime(EventTime)
         case invalidNoteNumber(IvorTuning.NoteNumber)
         case invalidTempo(UInt)
@@ -70,9 +69,6 @@ extension MIDI.Error: EnhancedError {
 
         case let .invalidBeatDuration(beatDuration):
             "Invalid beat duration: \(beatDuration)"
-
-        case let .invalidClockRate(clockRate):
-            "Invalid SMF time signature clock rate: \(clockRate)"
 
         case let .invalidEventTime(eventTime):
             "Invalid SMF event time: \(eventTime)"

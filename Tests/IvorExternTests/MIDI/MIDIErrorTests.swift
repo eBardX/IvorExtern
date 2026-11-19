@@ -69,13 +69,6 @@ extension MIDIErrorTests {
     }
 
     @Test
-    func invalidClockRate_message() {
-        let error = MIDI.Error.invalidClockRate(0)
-
-        #expect(error.message == "Invalid SMF time signature clock rate: 0")
-    }
-
-    @Test
     func invalidEventTime_message() {
         let error = MIDI.Error.invalidEventTime(SMFEventTime(100))
 
