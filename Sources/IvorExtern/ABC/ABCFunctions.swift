@@ -77,17 +77,11 @@ internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? 
     case Extra.downBow.name:
         "downbow"
 
-    case Extra.fermata.name:
-        "fermata"
-
     case Extra.harmonic.name:
         "harmonic"
 
     case Extra.marcato.name:
         "marcato"
-
-    case Extra.mordent.name:
-        "mordent"
 
     case Extra.pizzicato.name:
         "snap"
@@ -97,9 +91,6 @@ internal func convertToABCDecorationName(_ extra: Extra) -> ABCDecoration.Name? 
 
     case Extra.tenuto.name:
         "tenuto"
-
-    case Extra.trill.name:
-        "trill"
 
     case Extra.turn.name:
         "turn"
@@ -217,18 +208,9 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
     case "downbow":
         .downBow
 
-    case "fermata",
-         "invertedfermata":
-        .fermata
-
     case "harmonic",
          "open":
         .harmonic
-
-    case "lowermordent",
-         "mordent",
-         "uppermordent":
-        .mordent
 
     case "marcato":
         .marcato
@@ -242,9 +224,6 @@ internal func convertToArticulationExtra(_ name: ABCDecoration.Name) -> Extra? {
 
     case "tenuto":
         .tenuto
-
-    case "trill":
-        .trill
 
     case "turn":
         .turn
@@ -322,6 +301,22 @@ internal func convertToDynamic(_ name: ABCDecoration.Name) -> Dynamic? {
     default:
         nil
     }
+}
+
+// How many flags or beams a written note of `duration` has: none for a quarter
+// or longer, one for an eighth, two for a sixteenth, and so on (a dotted value
+// counts as its undotted base). A measured tremolo's strokes are its marks
+// plus these (resolution 8 of the grace-notes plan).
+internal func convertToFlagCount(_ duration: BeatDuration) -> UInt {
+    var length = duration.numberValue
+    var flags: UInt = 0
+
+    while length < Number(numerator: 1, denominator: 4), flags < 8 {
+        length *= 2
+        flags += 1
+    }
+
+    return flags
 }
 
 // abc2midi's `%%MIDI program [channel] program-number` directive is the

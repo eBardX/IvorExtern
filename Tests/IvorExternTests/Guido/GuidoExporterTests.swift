@@ -40,7 +40,7 @@ extension GuidoExporterTests {
     }
 
     @Test
-    func convert_chordGrouping_differingDurationsStaySeparate() throws {
+    func convert_chordGrouping_differingDurationsSplitAndTie() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -49,9 +49,18 @@ extension GuidoExporterTests {
         let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
         let score = try Guido.Exporter().convert(work)
         let symbols = symbols(in: score)
+        let ties = symbols.compactMap { symbol -> String? in
+            guard case let .tag(.tie(tie)) = symbol
+            else { return nil }
 
-        #expect(!symbols.contains { if case .chord = $0 { true } else { false } })
-        #expect(symbols.filter { if case .note = $0 { true } else { false } }.count == 2)
+            return "\(tie.span == .begin ? "begin" : "end"):\(tie.ident.map { "\($0.uintValue)" } ?? "-")"
+        }
+
+        // `{ c, \tieBegin:1 e } { e \tieEnd:1 }`: only the E is tied, into a
+        // one-tone chord that can hold the closing tag.
+        #expect(symbols.filter { if case .chord = $0 { true } else { false } }.count == 2)
+        #expect(symbols.filter { if case .note = $0 { true } else { false } }.count == 3)
+        #expect(ties == ["begin:1", "end:1"])
     }
 
     @Test
@@ -521,6 +530,24 @@ extension GuidoExporterTests {
         #expect(instruments.contains { $0.stringValue == "Acoustic Grand Piano" })
     }
 
+    // guidolib's default `\mordent` (`type="prall"`) is the upper mordent;
+    // `type="inverted"` is the lower one, drawn with the vertical stroke.
+    @Test
+    func roundTrip_lowerMordent_keepsItsDirection() throws {
+        let work = try readGuido(#"[ \mordent<type="inverted">( c1/4 ) d ]"#)
+        let score = try Guido.Exporter().convert(work)
+        let mordents = symbols(in: score).compactMap { symbol -> GMNOrnament? in
+            guard case let .tag(.ornament(ornament)) = symbol,
+                  ornament.kind == .mordent
+            else { return nil }
+
+            return ornament
+        }
+
+        #expect(mordents.count == 1)
+        #expect(mordents.first?.type == "inverted")
+    }
+
     @Test(arguments: [("4/4", "common", "C"),
                       ("2/2", "cut", "C/")])
     func roundTrip_meterSymbol_isKept(_ plain: String,
@@ -647,6 +674,52 @@ extension GuidoExporterTests {
         #expect(meterSummary(recovered.meterTable) == ["pickup 1/4", "0 3/4", "5/4 4/4", "2 3/4"])
         #expect(notes.map(\.attack) == [.zero])
         #expect(notes.map(\.duration) == [dur(5, 2)])
+    }
+
+    @Test
+    func roundTrip_overlappingNotes_keepANoteUnderAHeldNote() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "C4")
+        table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_overlappingNotes_keepTheirTimes() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test(arguments: OverlapCase.allCases)
+    func roundTrip_overlappingNotes_splitAndTie(_ overlap: OverlapCase) throws {
+        let work = try overlap.work()
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: recovered)?.first).noteTable,
+                                  #require(standardBeatParts(of: work)?.first).noteTable)
     }
 
     @Test

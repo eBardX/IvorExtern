@@ -1,10 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
-public import Foundation
 public import IvorModel
 public import IvorTiming
 public import IvorTuning
 
+internal import Foundation
 internal import XestiTools
 
 /// A value that encapsulates a file format supported for exporting works.
@@ -122,16 +122,23 @@ extension ExportFileFormat {
     /// - Parameter options:    The options to write with. Any this format doesn’t use (see
     ///                         ``supportedOptions``) are ignored.
     ///
-    /// - Returns:  A `FileWrapper` containing the exported data.
+    /// - Returns:  The exported file, with warnings for anything the format’s writer couldn’t
+    ///             carry over exactly.
     ///
     /// - Throws:   ``Error/writeFailure(_:)`` if the works cannot be written
     ///             to a file, including when an option this format uses is out of range.
     public func write(works: [Work],
-                      options: ExportOptions = .default) throws(Error) -> FileWrapper {
+                      options: ExportOptions = .default) throws(Error) -> ExportResult {
+        let warnings = WarningCollector()
+
         do {
-            return try exporter.write(works: works,
-                                      as: fileFormat,
-                                      options: options)
+            let file = try exporter.write(works: works,
+                                          as: fileFormat,
+                                          options: options,
+                                          warnings: warnings)
+
+            return ExportResult(file: file,
+                                warnings: warnings.warnings)
         } catch let error as any EnhancedError {
             throw Error.writeFailure(error)
         } catch {

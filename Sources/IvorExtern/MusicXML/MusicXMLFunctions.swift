@@ -236,7 +236,8 @@ internal func convertToMusicXMLDynamics(mark: String) -> MXLDynamics.Item {
 }
 
 // The reverse of `MusicXML.Importer.Walker._noteExtras(_:)`/
-// `_articulationExtras(_:)`/`_ornamentExtra(_:)`/`_technicalExtras(_:)` —
+// `_articulationExtras(_:)`/`_ornamentExtra(_:)`/`_technicalExtras(_:)` (its
+// turns; trills, mordents, tremolos and fermatas are ornamentation) —
 // one Tier 1 flag/`fingering` converts to one `<notations>` item (position/
 // font/color/placement all default), matching that side's own closed
 // vocabulary case for case. The `articulation` catch-all round-trips
@@ -587,7 +588,8 @@ private func _convertToMusicXMLAlter(_ accidental: Pitch.Accidental) -> MusicXML
 }
 
 // The reverse of `MusicXML.Importer.Walker._noteExtras(_:)`/
-// `_articulationExtras(_:)`/`_ornamentExtra(_:)`/`_technicalExtras(_:)` —
+// `_articulationExtras(_:)`/`_ornamentExtra(_:)`/`_technicalExtras(_:)` (its
+// turns; trills, mordents, tremolos and fermatas are ornamentation) —
 // one Tier 1 flag/`fingering` converts to one `<notations>` item (position/
 // font/color/placement all default), matching that side's own closed
 // vocabulary case for case. The `articulation` catch-all round-trips
@@ -613,9 +615,6 @@ private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.It
     case Extra.downBow.name:
         .technical(MXLTechnical(items: [.downBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
-    case Extra.fermata.name:
-        .fermata(MXLFermata(value: .normal))
-
     case Extra.fingering.name:
         if case let .string(text)? = element.values.first {
             .technical(MXLTechnical(items: [.fingering(MXLFingering(value: text))]))
@@ -629,9 +628,6 @@ private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.It
     case Extra.marcato.name:
         .articulations(MXLArticulations(items: [.strongAccent(MXLStrongAccent())]))
 
-    case Extra.mordent.name:
-        .ornaments(MXLOrnaments(content: .mordent(MXLMordent())))
-
     case Extra.pizzicato.name:
         .technical(MXLTechnical(items: [.snapPizzicato(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
@@ -641,11 +637,8 @@ private func _convertToMusicXMLNotationItem(_ element: Extra) -> MXLNotations.It
     case Extra.tenuto.name:
         .articulations(MXLArticulations(items: [.tenuto(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))
 
-    case Extra.trill.name:
-        .ornaments(MXLOrnaments(content: .trillMark(MXLEmptyTrillSound())))
-
     case Extra.turn.name:
-        .ornaments(MXLOrnaments(content: .turn(MXLHorizontalTurn())))
+        .ornaments(MXLOrnaments(entries: [.init(content: .turn(MXLHorizontalTurn()))]))
 
     case Extra.upBow.name:
         .technical(MXLTechnical(items: [.upBow(position: MXLPosition(), font: MXLFont(), color: nil, placement: nil)]))

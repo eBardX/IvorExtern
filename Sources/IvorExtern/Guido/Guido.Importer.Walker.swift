@@ -5,23 +5,22 @@ internal import IvorGMN
 internal import IvorModel
 internal import IvorTiming
 
-private import XestiNumbers
 private import XestiTools
 
 // One pass per voice over its `GMNSymbol`s, walking the note/chord/rest
 // cases directly against the AST: duration resolution (sticky base,
 // non-sticky dots) and pitch resolution (sticky octave, context-free
 // accidental) inline, `$variable` reference splicing
-// inline with a cycle guard (`_expandVariable`/`_expandedSymbols`), and tied
+// inline with a cycle guard (`_expandVariable`/`expandedSymbols`), and tied
 // notes/chords coalesced into a single table entry via `Context`'s
 // `pendingNote`/`tieArmed` slots rather than as a separate post-pass over an
-// intermediate event stream. Grace notes and cue notes remain out of scope —
-// each carries its notes as a body, like `\beam`/`\tuplet`/`\lyrics` and
-// friends do, but their timing/staging semantics aren't implemented, so both
-// stay inert, contributing nothing beyond closing out whatever note/chord
-// they interrupt. Every other bodied tag is a transparent wrapper: its body
-// is walked as if the tag weren't there, so the notes it covers land in the
-// table same as unwrapped ones.
+// intermediate event stream. A `\grace` body becomes a grace figure, and the
+// ornament, tremolo, roll and fermata tags shape the ornaments of the notes
+// they cover (see `Guido.Importer.Walker+Ornaments`). Cue notes remain out
+// of scope: they stay inert, contributing nothing beyond closing out
+// whatever note/chord they interrupt. Every other bodied tag is a
+// transparent wrapper: its body is walked as if the tag weren't there, so
+// the notes it covers land in the table same as unwrapped ones.
 //
 // `$variable` expansion has no access to `GMNVariable`'s declaration-time
 // symbol stash (an `internal` property of `IvorGMN`, invisible outside
@@ -57,12 +56,31 @@ extension Guido.Importer.Walker {
 
     // MARK: Internal Instance Methods
 
-    internal func walk(_ voice: Guido.Voice) throws(Guido.Error) -> Guido.Importer.Context {
+    internal func expandedSymbols(_ name: GMNVariable.Name) -> [GMNSymbol] {
+        guard case let .string(text)? = variables[name]?.value,
+              let (score, _) = try? Guido.BaseParser().parse(Data("\(declarationsText) [ \(text) ]".utf8)),
+              let voice = score.voices.first
+        else { return [] }
+
+        return voice.symbols
+    }
+
+    // Rolled chords are numbered from `firstArpeggioGroup`, so that each
+    // voice's rolls stay apart from the others'.
+    internal func walk(_ voice: Guido.Voice,
+                       firstArpeggioGroup: UInt = 1) throws(Guido.Error) -> Guido.Importer.Context {
         var context = Guido.Importer.Context()
         var inProgressVariableNames: Set<GMNVariable.Name> = []
 
+        context.nextArpeggioGroup = firstArpeggioGroup
+
         try _walk(voice.symbols, &context, &inProgressVariableNames)
-        try Self._flushPendingNote(&context)
+
+        Self.moveGraceAfterPending(&context)
+
+        try context.flushPendingNote()
+
+        context.heldTies.end(in: &context.noteTable)
 
         return context
     }
@@ -76,23 +94,8 @@ extension Guido.Importer.Walker {
 
     // MARK: Private Type Methods
 
-    private static func _applyDots(_ base: Guido.Duration,
-                                   _ count: GMNDuration.DotCount?) -> Guido.Duration {
-        guard let count
-        else { return base }
-
-        var addend = base.numberValue
-        var total = base.numberValue
-
-        for _ in 0..<count.uintValue {
-            addend *= Number(numerator: 1, denominator: 2)
-            total += addend
-        }
-
-        return Guido.Duration(numberValue: total)
-    }
-
-    private static func _articulationExtra(_ articulation: GMNArticulation) -> Extra {
+    // A fermata is ornamentation, not an extra (see `_handleTag`).
+    private static func _articulationExtra(_ articulation: GMNArticulation) -> Extra? {
         switch articulation.kind {
         case .accent:
             .accent
@@ -111,7 +114,7 @@ extension Guido.Importer.Walker {
             }
 
         case .fermata:
-            .fermata
+            nil
 
         case .harmonic:
             .harmonic
@@ -156,27 +159,6 @@ extension Guido.Importer.Walker {
         context.lastDynamic = endDynamic
     }
 
-    private static func _considerTie(_ notes: [Guido.Note],
-                                     _ attackTime: BeatTime,
-                                     _ context: inout Guido.Importer.Context) throws(Guido.Error) {
-        if context.tieArmed,
-           let pending = context.pendingNote,
-           _pitchesMatch(pending.notes, notes) {
-            context.pendingNote = (attackTime: pending.attackTime,
-                                   notes: zip(pending.notes, notes).map {
-                                       Guido.Note(duration: Guido.Duration(numberValue: $0.duration.numberValue + $1.duration.numberValue),
-                                                  pitch: $0.pitch)
-                                   },
-                                   extras: pending.extras)
-        } else {
-            try _flushPendingNote(&context)
-            context.pendingNote = (attackTime: attackTime, notes: notes, extras: context.pendingNoteExtras)
-            context.pendingNoteExtras = []
-        }
-
-        context.tieArmed = false
-    }
-
     private static func _declarationsText(_ variables: [GMNVariable.Name: GMNVariable]) -> String {
         variables.values.map { _declarationText($0) }.joined(separator: " ")
     }
@@ -201,31 +183,18 @@ extension Guido.Importer.Walker {
             .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
-    private static func _flushPendingNote(_ context: inout Guido.Importer.Context) throws(Guido.Error) {
-        guard let pending = context.pendingNote
-        else { return }
-
-        let extras: Extras? = pending.extras.isEmpty ? nil : Extras(elements: pending.extras)
-
-        for note in pending.notes where note.pitch.name != .empty {
-            let pit = try convertToStandardPitch(note.pitch)
-
-            context.noteTable.insert(attack: pending.attackTime,
-                                     duration: convertToBeatDuration(note.duration),
-                                     pitch: pit,
-                                     extras: extras)
-        }
-
-        context.pendingNote = nil
-    }
-
     private static func _handleChord(_ chord: GMNChord,
                                      _ context: inout Guido.Importer.Context) throws(Guido.Error) {
         let attackTime = context.currentBeatTime
-        let resolved = try Guido.Chord(notes: _resolveChordMembers(chord, &context))
-        let maxDuration = resolved.notes.map { convertToBeatDuration($0.duration) }.max() ?? .zero
+        let members = try resolveChordMembers(chord, &context)
+        var notes = Guido.Chord(notes: members.map(\.note)).notes
+        let ornaments = takeOrnaments(&notes, &context)
+        let maxDuration = notes.map { convertToBeatDuration($0.duration) }.max() ?? .zero
 
-        try _considerTie(resolved.notes, attackTime, &context)
+        try context.considerTie(notes,
+                                tiedIndices: Set(members.indices.filter { members[$0].isTied }),
+                                attackTime: attackTime,
+                                ornaments: ornaments)
 
         context.advance(maxDuration)
     }
@@ -251,198 +220,31 @@ extension Guido.Importer.Walker {
     private static func _handleNote(_ note: GMNNote,
                                     _ context: inout Guido.Importer.Context) throws(Guido.Error) {
         let attackTime = context.currentBeatTime
-        let resolved = try _resolveNote(note, &context)
-        let bdur = convertToBeatDuration(resolved.duration)
+        var notes = try [resolveNote(note, &context)]
+        let ornaments = takeOrnaments(&notes, &context)
+        let bdur = convertToBeatDuration(notes[0].duration)
 
-        try _considerTie([resolved], attackTime, &context)
+        try context.considerTie(notes,
+                                attackTime: attackTime,
+                                ornaments: ornaments)
 
         context.advance(bdur)
     }
 
     private static func _handleRest(_ rest: GMNRest,
                                     _ context: inout Guido.Importer.Context) throws(Guido.Error) {
-        let resolved = try Guido.Rest(duration: _resolveRestDuration(rest, &context))
+        let resolved = try Guido.Rest(duration: resolveRestDuration(rest, &context))
+        let duration = convertToBeatDuration(resolved.duration)
 
-        try _flushPendingNote(&context)
+        placeBeforeRest(duration: duration, &context)
 
+        try context.flushPendingNote()
+
+        context.heldTies.end(in: &context.noteTable)
+
+        context.lastEvent = (attack: context.currentBeatTime, duration: duration)
         context.tieArmed = false
-        context.advance(convertToBeatDuration(resolved.duration))
-    }
-
-    private static func _ornamentExtra(_ ornament: GMNOrnament) -> Extra {
-        switch ornament.kind {
-        case .mordent:
-            .mordent
-
-        case .trill:
-            .trill
-
-        case .turn:
-            .turn
-        }
-    }
-
-    private static func _pitchesMatch(_ lhs: [Guido.Note],
-                                      _ rhs: [Guido.Note]) -> Bool {
-        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { $0.pitch == $1.pitch }
-    }
-
-    private static func _resolveBase(_ duration: GMNDuration?,
-                                     _ context: inout Guido.Importer.Context) throws(Guido.Error) -> Guido.Duration {
-        guard let duration
-        else { return context.lastDuration }
-
-        if let milliseconds = duration.milliseconds {
-            throw Guido.Error.unrepresentableDuration("\(milliseconds)ms")
-        }
-
-        guard let numerator = duration.numerator,
-              let denominator = duration.denominator
-        else { return context.lastDuration }
-
-        let resolved = Guido.Duration(numberValue: Number(numerator: numerator,
-                                                          denominator: denominator))
-
-        context.lastDuration = resolved
-
-        return resolved
-    }
-
-    private static func _resolveChordMembers(_ chord: GMNChord,
-                                             _ context: inout Guido.Importer.Context) throws(Guido.Error) -> [Guido.Note] {
-        var notes: [Guido.Note] = []
-
-        for segment in chord.segments {
-            if let note = try _resolveChordSegmentNote(segment.symbols, &context) {
-                notes.append(note)
-            }
-        }
-
-        return notes
-    }
-
-    // Threads sticky duration/octave state through a segment's symbols and
-    // returns the segment's own note, if it has one — matching the
-    // parser-level invariant that a segment carries at most one music
-    // symbol. A tag or `$variable` reference nested inside a chord segment
-    // is out of scope (see the type-level comment) and so is simply
-    // skipped, along with a tablature symbol.
-    private static func _resolveChordSegmentNote(_ symbols: [GMNSymbol],
-                                                 _ context: inout Guido.Importer.Context) throws(Guido.Error) -> Guido.Note? {
-        var result: Guido.Note?
-
-        for symbol in symbols {
-            switch symbol {
-            case let .note(note):
-                result = try _resolveNote(note, &context)
-
-            case let .rest(rest):
-                _ = try _resolveRestDuration(rest, &context)
-
-            default:
-                break
-            }
-        }
-
-        return result
-    }
-
-    private static func _resolvedAccidental(_ accidental: GMNPitch.Accidental) -> Guido.Pitch.Accidental {
-        switch accidental {
-        case .doubleFlat:
-            .doubleFlat
-
-        case .doubleSharp:
-            .doubleSharp
-
-        case .flat:
-            .flat
-
-        case .impliedSharp,
-             .sharp:
-            .sharp
-
-        case .omitted:
-            .natural
-        }
-    }
-
-    private static func _resolvedName(_ name: GMNPitch.Name) -> Guido.Pitch.Name {
-        switch name {
-        case .a,
-             .ais,
-             .la:
-            .a
-
-        case .b,
-             .h,
-             .si,
-             .ti:
-            .b
-
-        case .c,
-             .cis,
-             .do:
-            .c
-
-        case .d,
-             .dis,
-             .re:
-            .d
-
-        case .e,
-             .mi:
-            .e
-
-        case .empty:
-            .empty
-
-        case .f,
-             .fa,
-             .fis:
-            .f
-
-        case .g,
-             .gis,
-             .sol:
-            .g
-        }
-    }
-
-    private static func _resolveDuration(_ duration: GMNDuration?,
-                                         _ context: inout Guido.Importer.Context) throws(Guido.Error) -> Guido.Duration {
-        let base = try _resolveBase(duration, &context)
-
-        return _applyDots(base, duration?.dots)
-    }
-
-    private static func _resolveNote(_ note: GMNNote,
-                                     _ context: inout Guido.Importer.Context) throws(Guido.Error) -> Guido.Note {
-        let pitch = _resolvePitch(note.pitch, &context)
-        let duration = try _resolveDuration(note.duration, &context)
-
-        return Guido.Note(duration: duration, pitch: pitch)
-    }
-
-    private static func _resolvePitch(_ pitch: GMNPitch,
-                                      _ context: inout Guido.Importer.Context) -> Guido.Pitch {
-        let octave: GMNPitch.Octave
-
-        if let written = pitch.octave {
-            octave = written
-            context.lastOctave = written
-        } else {
-            octave = context.lastOctave
-        }
-
-        return Guido.Pitch(accidental: _resolvedAccidental(pitch.accidental),
-                           name: _resolvedName(pitch.name),
-                           octave: octave)
-    }
-
-    private static func _resolveRestDuration(_ rest: GMNRest,
-                                             _ context: inout Guido.Importer.Context) throws(Guido.Error) -> Guido.Duration {
-        try _resolveDuration(rest.duration, &context)
+        context.advance(duration)
     }
 
     // One step along `dynamicScale` in the given direction, clamped at
@@ -468,15 +270,6 @@ extension Guido.Importer.Walker {
 
     // MARK: Private Instance Methods
 
-    private func _expandedSymbols(_ name: GMNVariable.Name) -> [GMNSymbol] {
-        guard case let .string(text)? = variables[name]?.value,
-              let (score, _) = try? Guido.BaseParser().parse(Data("\(declarationsText) [ \(text) ]".utf8)),
-              let voice = score.voices.first
-        else { return [] }
-
-        return voice.symbols
-    }
-
     private func _expandVariable(_ name: GMNVariable.Name,
                                  _ context: inout Guido.Importer.Context,
                                  _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
@@ -487,7 +280,7 @@ extension Guido.Importer.Walker {
 
         defer { inProgressVariableNames.remove(name) }
 
-        try _walk(_expandedSymbols(name), &context, &inProgressVariableNames)
+        try _walk(expandedSymbols(name), &context, &inProgressVariableNames)
     }
 
     // A ramp's own two endpoints, since `GMNDynamicRamp` carries only a
@@ -532,6 +325,41 @@ extension Guido.Importer.Walker {
         }
     }
 
+    // An ornament, tremolo, roll or fermata tag: one with a body applies to
+    // every note or chord in it, as does one opening a span (`\trillBegin`)
+    // until its end; a bodiless one waits for the next note or chord, except
+    // a fermata, which marks the last event (see
+    // `placeBodilessFermata(_:_:)`).
+    private func _handleOrnamentTag(_ tag: GMNTag,
+                                    _ context: inout Guido.Importer.Context,
+                                    _ inProgressVariableNames: inout Set<GMNVariable.Name>) throws(Guido.Error) {
+        switch tag.span {
+        case .begin:
+            context.activeOrnamentTags.append(tag)
+
+        case .end:
+            Self.closeOrnamentSpan(tag, &context)
+
+        case .whole where tag.body.isEmpty:
+            if case let .articulation(fermata) = tag {
+                Self.placeBodilessFermata(fermata, &context)
+            } else {
+                context.stagedOrnamentTags.append(tag)
+            }
+
+        case .whole:
+            let depth = context.activeOrnamentTags.count
+
+            context.activeOrnamentTags.append(tag)
+
+            try _walk(tag.body, &context, &inProgressVariableNames)
+
+            if context.activeOrnamentTags.count > depth {
+                context.activeOrnamentTags.remove(at: depth)
+            }
+        }
+    }
+
     // Not `static`, unlike its neighbors: a `\crescendo`/`\diminuendo` in
     // `.whole` span form owns its covered notes as its own tag body, which
     // has to be walked through the very same `_walk` (for `$variable`
@@ -549,39 +377,59 @@ extension Guido.Importer.Walker {
         // — a real gap fixed after the export side first exposed it via a
         // round-trip crash: without this, a body-wrapped note was never
         // reached at all.
+        case let .articulation(articulation) where articulation.kind == .fermata:
+            try _handleOrnamentTag(tag, &context, &inProgressVariableNames)
+
         case let .articulation(articulation):
-            context.pendingNoteExtras.append(Self._articulationExtra(articulation))
+            if let extra = Self._articulationExtra(articulation) {
+                context.pendingNoteExtras.append(extra)
+            }
 
             try _walk(articulation.body, &context, &inProgressVariableNames)
+
+        case .arpeggio,
+             .tremolo:
+            try _handleOrnamentTag(tag, &context, &inProgressVariableNames)
 
         // A bar line, a meter (which starts a bar) and a key signature are
         // the only bodiless tags that leave the pending note and its tie
         // alone: the exporter writes them between the two halves of a note
         // tied across a bar line (or a key change), and the tie has to
-        // survive them.
+        // survive them. A fermata on a bar line is a mark over the last
+        // event before it.
         case .barLine:
             if let meter = context.meter {
                 context.barlines.append((context.currentBeatTime, meter, nil))
             }
+
+            Self.placeAtBarLine(&context)
 
         case let .breathMark(breathMark):
             context.pendingNoteExtras.append(.breathMark)
 
             try _walk(breathMark.body, &context, &inProgressVariableNames)
 
-        // A grace note's body would advance `currentBeatTime` like any other
-        // note if walked here, which is wrong for a grace note (it borrows
-        // time rather than taking its own), and a cue note's body is an
-        // alternate, non-sounding passage — so both stay inert, same as
-        // before this stage.
-        case .cue,
-             .grace:
-            try Self._flushPendingNote(&context)
+        // A cue note's body is an alternate, non-sounding passage, so it
+        // stays inert. It ends any tie it interrupts.
+        case .cue:
+            try context.flushPendingNote()
+
+            context.heldTies.end(in: &context.noteTable)
 
             context.tieArmed = false
 
+        // A grace figure takes no time of its own: its body becomes the
+        // figure before the next note (see `stageGrace(_:_:_:)`). It breaks
+        // a tie it interrupts, but leaves the pending note pending, so that a
+        // figure before a rest can still follow it.
+        case let .grace(grace):
+            context.pendingTiedIndices = []
+            context.tieArmed = false
+
+            try stageGrace(grace, &context, &inProgressVariableNames)
+
         case let .dynamicRamp(ramp):
-            try Self._flushPendingNote(&context)
+            try context.flushPendingNote()
 
             context.tieArmed = false
 
@@ -593,7 +441,7 @@ extension Guido.Importer.Walker {
             try _walk(fingering.body, &context, &inProgressVariableNames)
 
         case let .instrument(instrument):
-            try Self._flushPendingNote(&context)
+            try context.flushPendingNote()
 
             context.tieArmed = false
 
@@ -606,7 +454,7 @@ extension Guido.Importer.Walker {
             }
 
         case let .intensity(intensity):
-            try Self._flushPendingNote(&context)
+            try context.flushPendingNote()
 
             context.tieArmed = false
 
@@ -618,10 +466,13 @@ extension Guido.Importer.Walker {
         case let .meter(meter):
             context.recordMeter(meter)
 
-        case let .ornament(ornament):
-            context.pendingNoteExtras.append(Self._ornamentExtra(ornament))
+        case let .ornament(ornament) where ornament.kind == .turn:
+            context.pendingNoteExtras.append(.turn)
 
             try _walk(ornament.body, &context, &inProgressVariableNames)
+
+        case .ornament:
+            try _handleOrnamentTag(tag, &context, &inProgressVariableNames)
 
         // Guido has only the damper pedal: `\pedalOn` and `\pedalOff` put it
         // down and let it up at the current beat. A body, if any, is walked
@@ -648,10 +499,9 @@ extension Guido.Importer.Walker {
 
             try _walk(slur.body, &context, &inProgressVariableNames)
 
-            if let pending = context.pendingNote {
-                context.pendingNote = (attackTime: pending.attackTime,
-                                       notes: pending.notes,
-                                       extras: pending.extras + [.slurEnd])
+            if var pending = context.pendingNote {
+                pending.extras.append(.slurEnd)
+                context.pendingNote = pending
             }
 
         case let .slur(slur) where slur.span == .begin:
@@ -661,14 +511,13 @@ extension Guido.Importer.Walker {
             // The note this closes is still `pendingNote` (mirrors ABC's own
             // slur-end handling) — appended directly rather than staged for
             // the next note.
-            if let pending = context.pendingNote {
-                context.pendingNote = (attackTime: pending.attackTime,
-                                       notes: pending.notes,
-                                       extras: pending.extras + [Self._slurExtra(.slurEnd, ident: slur.ident)])
+            if var pending = context.pendingNote {
+                pending.extras.append(Self._slurExtra(.slurEnd, ident: slur.ident))
+                context.pendingNote = pending
             }
 
         case let .tempo(tempo):
-            try Self._flushPendingNote(&context)
+            try context.flushPendingNote()
 
             context.tieArmed = false
 
@@ -693,7 +542,7 @@ extension Guido.Importer.Walker {
             if !tag.body.isEmpty {
                 try _walk(tag.body, &context, &inProgressVariableNames)
             } else {
-                try Self._flushPendingNote(&context)
+                try context.flushPendingNote()
 
                 context.tieArmed = false
             }

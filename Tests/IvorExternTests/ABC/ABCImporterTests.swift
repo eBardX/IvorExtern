@@ -853,6 +853,38 @@ extension ABCImporterTests {
     }
 
     @Test
+    func read_tieAcrossDecoration_staysOneNote() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            C- !accent! C|]
+            """)
+        let notes = try notes(in: #require(standardBeatParts(of: work)?.first))
+
+        #expect(notes.map(\.duration) == [dur(1, 2)])
+    }
+
+    @Test
+    func read_tieOnOneToneOfAChord_continuesOnlyThatTone() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            [C-E] [CG]|]
+            """)
+        var expected = NoteTable<BeatTime, Pitch>()
+
+        expected.insert(attack: .zero, duration: dur(1, 2), pitch: "C4")
+        expected.insert(attack: .zero, duration: .quarter, pitch: "E4")
+        expected.insert(attack: BeatTime.zero + .quarter, duration: .quarter, pitch: "G4")
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: work)?.first).noteTable, expected)
+    }
+
+    @Test
     func read_tuneWithoutVoiceField_producesEmptyPartName() throws {
         let abc = """
             X:1
@@ -877,6 +909,24 @@ extension ABCImporterTests {
         #expect(throws: (any Error).self) {
             try ABC.Importer().read(from: wrapper, as: .midi)
         }
+    }
+
+    @Test
+    func read_untiedToneOfAChord_isAttackedAgain() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            [CE-] [CE]|]
+            """)
+        var expected = NoteTable<BeatTime, Pitch>()
+
+        expected.insert(attack: .zero, duration: .quarter, pitch: "C4")
+        expected.insert(attack: .zero, duration: dur(1, 2), pitch: "E4")
+        expected.insert(attack: BeatTime.zero + .quarter, duration: .quarter, pitch: "C4")
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: work)?.first).noteTable, expected)
     }
 
     @Test

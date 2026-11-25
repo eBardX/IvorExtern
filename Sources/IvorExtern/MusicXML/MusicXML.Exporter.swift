@@ -20,25 +20,17 @@ extension MusicXML {
     // swiftformat:disable:next enumNamespaces
     internal struct Exporter { // swiftlint:disable:this convenience_type
 
+        // MARK: Private Type Aliases
+
+        // Makes a part's ornament writer from its slices' starts and its bar
+        // times.
+        private typealias WriterFactory = (Set<BeatTime>, Set<BeatTime>) -> OrnamentWriter
+
         // MARK: Private Nested Types
 
         private enum DynamicAnnotation {
             case mark(time: BeatTime, dynamic: Dynamic, mark: String?)
             case ramp(start: BeatTime, startDynamic: Dynamic, end: BeatTime, endDynamic: Dynamic, kind: MXLWedge.Kind)
-        }
-
-        private struct Event {
-
-            // MARK: Fileprivate Instance Properties
-
-            fileprivate let attack: BeatTime
-            fileprivate let duration: BeatDuration
-            fileprivate var extrasList: [Extras?]
-            fileprivate var pitches: [IvorTuning.Pitch]
-
-            fileprivate var end: BeatTime {
-                BeatTime(attack.numberValue + duration.numberValue)
-            }
         }
 
         private struct Ramp {
@@ -59,9 +51,13 @@ extension MusicXML.Exporter {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ work: Work) throws(MusicXML.Error) -> MusicXML.Score {
+    internal func convert(_ work: Work,
+                          workIndex: Int? = nil,
+                          warnings: WarningCollector = WarningCollector()) throws(MusicXML.Error) -> MusicXML.Score {
         do {
-            return try Self._convert(work: work)
+            return try Self._convert(work: work,
+                                     workIndex: workIndex,
+                                     warnings: warnings)
         } catch let error as any EnhancedError {
             throw MusicXML.Error.convertFailure(error)
         } catch {
@@ -90,7 +86,7 @@ extension MusicXML.Exporter {
     // a tempo change, pan change, or dynamic mark/wedge boundary land exactly
     // where the model says it should, and what lets a note crossing a bar
     // line split into per-measure, tied segments.
-    private static func _boundaries(events: [Event],
+    private static func _boundaries(tones: [ExportTone],
                                     tempos: [(BeatTime, Tempo)],
                                     directions: [(BeatTime, MXLDirection)],
                                     annotations: [DynamicAnnotation],
@@ -102,9 +98,9 @@ extension MusicXML.Exporter {
             boundaries.insert(barTime)
         }
 
-        for event in events {
-            boundaries.insert(event.attack)
-            boundaries.insert(event.end)
+        for tone in tones {
+            boundaries.insert(tone.attack)
+            boundaries.insert(tone.end)
         }
 
         for (time, _) in tempos {
@@ -129,7 +125,9 @@ extension MusicXML.Exporter {
         return boundaries.sorted()
     }
 
-    private static func _convert(work: Work) throws(MusicXML.Error) -> MusicXML.Score {
+    private static func _convert(work: Work,
+                                 workIndex: Int?,
+                                 warnings: WarningCollector) throws(MusicXML.Error) -> MusicXML.Score {
         guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
         else {
             guard work.pitchNotation == .standard
@@ -144,6 +142,7 @@ extension MusicXML.Exporter {
         let keys = placeMusicXMLKeys(keyTable, in: bars)
 
         let hiddenPedals = repeatedPedals(parts.map(\.pedals))
+        let sharedRolls = RollKey.sharedRolls(parts)
         var scoreParts: [MusicXML.ScorePart] = []
         var xmlParts: [MusicXML.Score.Part] = []
 
@@ -158,7 +157,15 @@ extension MusicXML.Exporter {
                                                                             bars: bars,
                                                                             divisions: divisions,
                                                                             tempoMap: tempoMap,
-                                                                            keys: keys)))
+                                                                            keys: keys) {
+                                                        OrnamentWriter(part: part,
+                                                                       partIndex: index,
+                                                                       sharedRolls: sharedRolls,
+                                                                       sliceStarts: $0,
+                                                                       barTimes: $1,
+                                                                       warnings: warnings,
+                                                                       workIndex: workIndex)
+                                                    }))
         }
 
         let info = work.info
@@ -206,6 +213,11 @@ extension MusicXML.Exporter {
             for note in part.noteTable {
                 fold(note.attack.numberValue)
                 fold(note.duration.numberValue)
+
+                // A two-note tremolo is written as two halves.
+                if case .pitches? = note.ornamentation?.ornament?.partner {
+                    fold(note.duration.numberValue / 2)
+                }
             }
         }
 
@@ -237,30 +249,6 @@ extension MusicXML.Exporter {
                       kind: endDynamic > startDynamic ? .crescendo : .diminuendo)
             }
         }
-    }
-
-    // Every note table entry is walked once, in time order. Consecutive
-    // entries sharing an attack time and a duration are a chord; anything
-    // else stays a separate event. Ending pitch is dropped — a glissando
-    // exports at its start pitch, per the module-wide rule.
-    private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
-        var events: [Event] = []
-
-        for note in noteTable {
-            if let last = events.last,
-               last.attack == note.attack,
-               last.duration == note.duration {
-                events[events.count - 1].pitches.append(note.startPitch)
-                events[events.count - 1].extrasList.append(note.extras)
-            } else {
-                events.append(Event(attack: note.attack,
-                                    duration: note.duration,
-                                    extrasList: [note.extras],
-                                    pitches: [note.startPitch]))
-            }
-        }
-
-        return events
     }
 
     // The earliest `InstrumentTable` entry only. A `<score-part>` carries at
@@ -309,7 +297,8 @@ extension MusicXML.Exporter {
     private static func _groupIntoMeasures(chunks: [(start: BeatTime, items: [MXLMusicItem])],
                                            bars: [ExportBar],
                                            divisions: Int,
-                                           barKeys: [Int: MXLKey]) -> [MusicXML.Score.Part.Measure] {
+                                           barKeys: [Int: MXLKey],
+                                           writer: OrnamentWriter) -> [MusicXML.Score.Part.Measure] {
         var itemsByMeasure: [Int: [MXLMusicItem]] = [:]
 
         for chunk in chunks {
@@ -329,6 +318,10 @@ extension MusicXML.Exporter {
                 items = [.attributes(attributes)] + items
             }
 
+            if let barline = writer.barlineItem(at: bar.end) {
+                items.append(barline)
+            }
+
             measures.append(MusicXML.Score.Part.Measure(number: String(firstNumber + index),
                                                         isImplicit: bar.isPickup ? true : nil,
                                                         items: items))
@@ -346,13 +339,13 @@ extension MusicXML.Exporter {
     // velocity found in a voice pre-empt its shared direction-level dynamic
     // map entirely, so mixing the two channels would silently drop every
     // direction-level mark once any one note carried its own velocity.
-    private static func _makeChunks(events: [Event],
+    private static func _makeChunks(slices: [ExportSlice],
                                     tempos: [(BeatTime, Tempo)],
                                     directions: [(BeatTime, MXLDirection)],
                                     annotations: [DynamicAnnotation],
                                     midBarKeys: [BeatTime: MXLMusicItem],
-                                    sortedBoundaries: [BeatTime],
-                                    divisions: Int) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
+                                    divisions: Int,
+                                    writer: OrnamentWriter) throws(MusicXML.Error) -> [(start: BeatTime, items: [MXLMusicItem])] {
         var chunks: [(start: BeatTime, items: [MXLMusicItem])] = []
         var tempoIndex = 0
         var directionIndex = 0
@@ -364,13 +357,8 @@ extension MusicXML.Exporter {
             }
         }
 
-        for index in 0..<(sortedBoundaries.count - 1) {
-            let start = sortedBoundaries[index]
-            let end = sortedBoundaries[index + 1]
-
-            guard start < end
-            else { continue }
-
+        for slice in slices {
+            let start = slice.start
             var items = midBarKeys[start].map { [$0] } ?? []
 
             items += _makeDirectionItems(at: start,
@@ -381,7 +369,7 @@ extension MusicXML.Exporter {
                                          annotations: annotations,
                                          ramps: ramps)
 
-            items += try _makeSegmentItems(events: events, start: start, end: end, divisions: divisions)
+            items += try makeSegmentItems(slice: slice, divisions: divisions, writer: writer)
 
             chunks.append((start, items))
         }
@@ -438,77 +426,11 @@ extension MusicXML.Exporter {
         MXLDirection(kind: [MXLDirection.Kind(content: .dynamics([MXLDynamics(items: [item])]))])
     }
 
-    // One `<note>` per pitch — the first carrying `isChord: false`, every
-    // later one `isChord: true`, per the MusicXML convention that a chord's
-    // duration and tie state is repeated on each of its notes even though
-    // only the first one advances the musical position within the measure.
-    // Both the sound tie (`MXLTie`, inside `content`) and the notated tie
-    // (`MXLTied`, inside `notations`) are written together, since MusicXML
-    // keeps the two independent and an importer or renderer may read either.
-    // `extrasList` (per-pitch, parallel to the pitches this event's
-    // segments share) only contributes articulation/ornament/technical/
-    // fingering items on the segment where `isFirstSegment` is true (a
-    // tied-from-previous continuation never repeats them) and a
-    // `slurStart`/`slurEnd` item on whichever of `isFirstSegment`/
-    // `isLastSegment` matches — the same first/last-segment gating
-    // `ABC.Exporter`/`Guido.Exporter` use, adapted to MusicXML's one-
-    // `<notations>`-block-per-note shape instead of a symbol stream.
-    // Every pitch in a chord shares the same union of markers — see
-    // `ABC.Exporter._unionElements(_:)` for why a chord-wide union, not a
-    // per-pitch split, is this vocabulary's accepted chord simplification.
-    // A pitch's own `releaseVelocity` is the exception: it's per-note data,
-    // not a marker, so it's written as that pitch's `end-dynamics`, on the
-    // segment where `isLastSegment` is true.
-    private static func _makeNoteItems(pitches: [Pitch],
-                                       duration: MXLPositiveDivisions,
-                                       tiedFromPrevious: Bool,
-                                       tiedToNext: Bool,
-                                       extrasList: [Extras?],
-                                       isFirstSegment: Bool,
-                                       isLastSegment: Bool) throws(MusicXML.Error) -> [MXLMusicItem] {
-        var items: [MXLMusicItem] = []
-        let elements = extrasList.compactMap { $0?.elements }.flatMap { $0 }
-
-        for (index, pitch) in pitches.enumerated() {
-            let mxlPitch = try convertToMusicXMLPitch(pitch)
-
-            var ties: [MXLTie] = []
-            var notationItems: [MXLNotations.Item] = []
-
-            if tiedFromPrevious {
-                ties.append(MXLTie(kind: .stop))
-                notationItems.append(.tied(MXLTied(kind: .stop)))
-            }
-
-            if tiedToNext {
-                ties.append(MXLTie(kind: .start))
-                notationItems.append(.tied(MXLTied(kind: .start)))
-            }
-
-            if isFirstSegment {
-                notationItems += convertToMusicXMLNotationItems(elements)
-                notationItems += convertToMusicXMLSlurStartItems(elements)
-            }
-
-            if isLastSegment {
-                notationItems += convertToMusicXMLSlurEndItems(elements)
-            }
-
-            let note = MXLNote(content: .regularNote(fullNote: MXLFullNote(isChord: index > 0, content: .pitch(mxlPitch)),
-                                                     duration: duration,
-                                                     tie: ties),
-                               notations: notationItems.isEmpty ? [] : [MXLNotations(items: notationItems)],
-                               endDynamics: isLastSegment ? convertToMusicXMLEndDynamics(extrasList[index]) : nil)
-
-            items.append(.note(note))
-        }
-
-        return items
-    }
-
     // Lays one part's notes onto the work's bars (see
-    // `exportBars(_:through:)`), with a note crossing a measure boundary
-    // split into tied segments and gaps rest-filled. Tempo is score-wide, not per-part, but
+    // `exportBars(_:through:)`), one note, chord or rest per piece between
+    // boundaries (see `ExportSlice`), with a note crossing a measure
+    // boundary, or held across another note's attack or release, split into
+    // tied pieces. Tempo is score-wide, not per-part, but
     // `MusicXML.Importer` flattens every part's tempo events into one
     // `TempoMap` (`results.flatMap(\.tempoEvents)`), so only the first part
     // carries it; pan, like the model's own `PanMap`, is per-part, and so are
@@ -520,28 +442,32 @@ extension MusicXML.Exporter {
                                       bars: [ExportBar],
                                       divisions: Int,
                                       tempoMap: TempoMap,
-                                      keys: MusicXMLKeyPlacement) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
-        let events = _events(part.noteTable)
+                                      keys: MusicXMLKeyPlacement,
+                                      makeWriter: WriterFactory) throws(MusicXML.Error) -> [MusicXML.Score.Part.Measure] {
+        let tones = ExportTone.tones(of: part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directions = _playbackDirections(part, hiddenPedals: hiddenPedals)
         let tempos = index == 0 ? _tempoDirectives(tempoMap) : []
         let barTimes = bars.dropFirst().map(\.start)
         let endTime = bars.last?.end ?? .zero
-        let sortedBoundaries = _boundaries(events: events,
+        let sortedBoundaries = _boundaries(tones: tones,
                                            tempos: tempos,
                                            directions: directions,
                                            annotations: annotations,
                                            barTimes: barTimes + keys.midBarKeys.keys,
                                            endTime: endTime)
-        let chunks = try _makeChunks(events: events,
+        let slices = ExportSlice.slices(of: tones,
+                                        at: sortedBoundaries)
+        let writer = makeWriter(Set(slices.map(\.start)), Set(barTimes).union([endTime]))
+        let chunks = try _makeChunks(slices: slices,
                                      tempos: tempos,
                                      directions: directions,
                                      annotations: annotations,
                                      midBarKeys: keys.midBarKeys,
-                                     sortedBoundaries: sortedBoundaries,
-                                     divisions: divisions)
+                                     divisions: divisions,
+                                     writer: writer)
 
-        return _groupIntoMeasures(chunks: chunks, bars: bars, divisions: divisions, barKeys: keys.barKeys)
+        return _groupIntoMeasures(chunks: chunks, bars: bars, divisions: divisions, barKeys: keys.barKeys, writer: writer)
     }
 
     // A part's own name is its `<part-name>` — `determinePartName(_:)` reads
@@ -611,30 +537,6 @@ extension MusicXML.Exporter {
                                   name: MXLPartName(value: part.name, text: MXLPartName.Text()),
                                   instrument: instruments,
                                   group2: group2)
-    }
-
-    // The note/chord or rest item(s) covering one boundary interval.
-    private static func _makeSegmentItems(events: [Event],
-                                          start: BeatTime,
-                                          end: BeatTime,
-                                          divisions: Int) throws(MusicXML.Error) -> [MXLMusicItem] {
-        let segmentDuration = BeatDuration(end.numberValue - start.numberValue)
-        let mxlDuration = convertToMusicXMLDivisions(segmentDuration, divisions).require()
-
-        guard let event = events.first(where: { $0.attack <= start && $0.end >= end })
-        else {
-            return [.note(MXLNote(content: .regularNote(fullNote: MXLFullNote(isChord: false, content: .rest(MXLRest())),
-                                                        duration: mxlDuration,
-                                                        tie: [])))]
-        }
-
-        return try _makeNoteItems(pitches: event.pitches,
-                                  duration: mxlDuration,
-                                  tiedFromPrevious: event.attack != start,
-                                  tiedToNext: event.end != end,
-                                  extrasList: event.extrasList,
-                                  isFirstSegment: event.attack == start,
-                                  isLastSegment: event.end == end)
     }
 
     // A `<direction>` requires at least one `<direction-type>` child even
@@ -722,7 +624,8 @@ extension MusicXML.Exporter: ExporterProtocol {
 
     internal func write(works: [Work],
                         as fileFormat: FileFormat,
-                        options: ExportOptions = .default) throws(MusicXML.Error) -> FileWrapper {
+                        options: ExportOptions = .default,
+                        warnings: WarningCollector = WarningCollector()) throws(MusicXML.Error) -> FileWrapper {
         switch fileFormat {
         case .musicXML,
              .mxl:
@@ -733,7 +636,7 @@ extension MusicXML.Exporter: ExporterProtocol {
                   works.count == 1
             else { throw MusicXML.Error.multipleWorksNotSupported }
 
-            let score = try convert(work)
+            let score = try convert(work, workIndex: 0, warnings: warnings)
             let document = MusicXML.Document(content: .scorePartwise(score))
             let data = try MusicXML.Formatter().format(document,
                                                        compressed: fileFormat == .mxl)

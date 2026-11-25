@@ -27,20 +27,6 @@ extension Guido {
             case ramp(start: BeatTime, startDynamic: Dynamic, end: BeatTime, endDynamic: Dynamic, direction: GMNDynamicRamp.Direction)
         }
 
-        private struct Event {
-
-            // MARK: Fileprivate Instance Properties
-
-            fileprivate let attack: BeatTime
-            fileprivate let duration: BeatDuration
-            fileprivate var extrasList: [Extras?]
-            fileprivate var pitches: [IvorTuning.Pitch]
-
-            fileprivate var end: BeatTime {
-                BeatTime(attack.numberValue + duration.numberValue)
-            }
-        }
-
         private struct Ramp {
 
             // MARK: Fileprivate Instance Properties
@@ -59,9 +45,13 @@ extension Guido.Exporter {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ work: Work) throws(Guido.Error) -> Guido.Score {
+    internal func convert(_ work: Work,
+                          workIndex: Int? = nil,
+                          warnings: WarningCollector = WarningCollector()) throws(Guido.Error) -> Guido.Score {
         do {
-            return try Self._convert(work: work)
+            return try Self._convert(work: work,
+                                     workIndex: workIndex,
+                                     warnings: warnings)
         } catch let error as any EnhancedError {
             throw Guido.Error.convertFailure(error)
         } catch {
@@ -78,7 +68,7 @@ extension Guido.Exporter {
     // note at one of these — even one with no note of its own — is what lets a
     // tempo change, instrument change, pedal change, or dynamic mark/ramp boundary land
     // exactly where the model says it should.
-    private static func _boundaries(events: [Event],
+    private static func _boundaries(tones: [ExportTone],
                                     directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
@@ -95,9 +85,9 @@ extension Guido.Exporter {
             boundaries.insert(keyTime)
         }
 
-        for event in events {
-            boundaries.insert(event.attack)
-            boundaries.insert(event.end)
+        for tone in tones {
+            boundaries.insert(tone.attack)
+            boundaries.insert(tone.end)
         }
 
         for (time, _) in directives {
@@ -122,7 +112,9 @@ extension Guido.Exporter {
         return boundaries.sorted()
     }
 
-    private static func _convert(work: Work) throws(Guido.Error) -> Guido.Score {
+    private static func _convert(work: Work,
+                                 workIndex: Int?,
+                                 warnings: WarningCollector) throws(Guido.Error) -> Guido.Score {
         guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
         else {
             guard work.pitchNotation == .standard
@@ -137,7 +129,9 @@ extension Guido.Exporter {
                                    parts: parts,
                                    bars: bars,
                                    tempoMap: tempoMap,
-                                   keyTable: keyTable)
+                                   keyTable: keyTable,
+                                   warnings: warnings,
+                                   workIndex: workIndex)
 
         return Guido.Score(variables: [], voices: voices)
     }
@@ -158,30 +152,6 @@ extension Guido.Exporter {
                       direction: endDynamic > startDynamic ? .crescendo : .diminuendo)
             }
         }
-    }
-
-    // Every note table entry is walked once, in time order. Consecutive
-    // entries sharing an attack time and a duration are a chord; anything
-    // else stays a separate event. Ending pitch is dropped — a glissando
-    // exports at its start pitch, per the module-wide rule.
-    private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
-        var events: [Event] = []
-
-        for note in noteTable {
-            if let last = events.last,
-               last.attack == note.attack,
-               last.duration == note.duration {
-                events[events.count - 1].pitches.append(note.startPitch)
-                events[events.count - 1].extrasList.append(note.extras)
-            } else {
-                events.append(Event(attack: note.attack,
-                                    duration: note.duration,
-                                    extrasList: [note.extras],
-                                    pitches: [note.startPitch]))
-            }
-        }
-
-        return events
     }
 
     // The tags opening the first voice (see `determineWorkInfo(_:)` for
@@ -263,8 +233,8 @@ extension Guido.Exporter {
     }
 
     // A `\slurBegin:n` marker, written immediately before a note/chord's
-    // own symbol(s) (and any articulation wrapping above) — only called
-    // for an event's *first* segment. A `slurStart` extra with no
+    // own symbol(s) (and any articulation wrapping above), from the tones
+    // attacked there. A `slurStart` extra with no
     // parseable `.string` id (e.g. one that originated from ABC's bare-flag
     // convention, carried across a cross-format conversion) is dropped
     // rather than guessed at: Guido's own slur pairing is ident-based, not
@@ -288,8 +258,11 @@ extension Guido.Exporter {
                                   parts: [Part<BeatTime, Pitch>],
                                   bars: [ExportBar],
                                   tempoMap: TempoMap,
-                                  keyTable: KeyTable) throws(Guido.Error) -> [Guido.Voice] {
+                                  keyTable: KeyTable,
+                                  warnings: WarningCollector,
+                                  workIndex: Int?) throws(Guido.Error) -> [Guido.Voice] {
         let firstMeter = bars.first.map { convertToGuidoMeter($0.meter, $0.extras) } ?? GMNMeter(type: "4/4")
+        let sharedRolls = RollKey.sharedRolls(parts)
         var voices: [Guido.Voice] = []
 
         for index in parts.indices {
@@ -322,9 +295,13 @@ extension Guido.Exporter {
             // voice would multiply each entry once per part. Only the first
             // voice carries it.
             symbols += try _makePartBody(part: parts[index],
+                                         partIndex: index,
                                          bars: bars,
                                          tempoMap: index == 0 ? tempoMap : TempoMap(),
-                                         keyTable: keyTable)
+                                         keyTable: keyTable,
+                                         sharedRolls: sharedRolls,
+                                         warnings: warnings,
+                                         workIndex: workIndex)
 
             voices.append(GMNVoice(symbols: symbols))
         }
@@ -333,10 +310,13 @@ extension Guido.Exporter {
     }
 
     // Lays one part's notes onto the work's bars (see
-    // `exportBars(_:through:)`): a note or chord crossing a barline splits
-    // into segments tied by a bare `\tieEnd` marker, gaps become rests, and
-    // every bar sums to its actual length, so a pickup or a short bar is
-    // written short. A bar whose meter is written (other than the first,
+    // `exportBars(_:through:)`): each piece between boundaries (see
+    // `ExportSlice`) is one note, chord or rest, and every bar sums to its
+    // actual length, so a pickup or a short bar is written short. A note or
+    // chord whose every tone continues into the next piece (across a
+    // barline, say) is tied by a bare `\tieEnd` marker after it. When only
+    // some tones continue, each is tied on its own, guidolib's way:
+    // `{ \tieBegin:1 c, e } { c \tieEnd:1, g }`, an ident per open tie. A bar whose meter is written (other than the first,
     // whose `\meter` opens the voice) starts with a `\meter` tag, and a key
     // signature is a `\key` tag at its own time.
     //
@@ -346,25 +326,22 @@ extension Guido.Exporter {
     // of the same tied note without breaking the tie. A segment boundary
     // with nothing but a barline (and perhaps a meter) is where a tie
     // continues; any other boundary has no tied note across it.
-    private static func _makeChunks(events: [Event],
+    private static func _makeChunks(slices: [ExportSlice],
                                     directives: [(BeatTime, GMNTag)],
                                     tempos: [(BeatTime, GMNTempo)],
                                     annotations: [DynamicAnnotation],
                                     barTimes: Set<BeatTime>,
                                     meterTags: [BeatTime: GMNMeter],
                                     keyTags: [BeatTime: GMNKey],
-                                    sortedBoundaries: [BeatTime]) throws(Guido.Error) -> [(start: BeatTime, symbols: [GMNSymbol])] {
+                                    writer: inout OrnamentWriter) throws(Guido.Error) -> [(start: BeatTime, symbols: [GMNSymbol])] {
         var chunks: [(start: BeatTime, symbols: [GMNSymbol])] = []
         var directiveIndex = 0
         var tempoIndex = 0
+        var tieIdents: [Int: GMNTag.Ident] = [:]
 
-        for index in 0..<(sortedBoundaries.count - 1) {
-            let start = sortedBoundaries[index]
-            let end = sortedBoundaries[index + 1]
-
-            guard start < end
-            else { continue }
-
+        for slice in slices {
+            let start = slice.start
+            let end = slice.end
             var symbols: [GMNSymbol] = meterTags[start].map { [.tag(.meter($0))] } ?? []
 
             symbols += keyTags[start].map { [.tag(.key($0))] } ?? []
@@ -386,21 +363,22 @@ extension Guido.Exporter {
             }
 
             let segmentDuration = BeatDuration(end.numberValue - start.numberValue)
-            var tiedToNext = false
 
-            if let event = events.first(where: { $0.attack <= start && $0.end >= end }) {
-                tiedToNext = event.end != end
-                symbols += try _segmentSymbols(event: event, start: start, end: end, duration: segmentDuration)
+            if slice.tones.isEmpty {
+                symbols += try writer.wrapRest(_makeRestSymbols(duration: segmentDuration), at: start)
             } else {
-                symbols += try _makeRestSymbols(duration: segmentDuration)
+                symbols += try _segmentSymbols(slice: slice,
+                                               duration: segmentDuration,
+                                               tieIdents: &tieIdents,
+                                               writer: &writer)
             }
 
-            if tiedToNext {
+            if slice.isWhollyTied {
                 symbols.append(.tag(.tie(GMNTie(span: .end).require())))
             }
 
             if barTimes.contains(end) {
-                symbols.append(.tag(.barLine(GMNBarLine(kind: .single))))
+                symbols.append(writer.barLineSymbol(GMNBarLine(kind: .single), at: end))
             }
 
             chunks.append((start, symbols))
@@ -410,10 +388,14 @@ extension Guido.Exporter {
     }
 
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
+                                      partIndex: Int,
                                       bars: [ExportBar],
                                       tempoMap: TempoMap,
-                                      keyTable: KeyTable) throws(Guido.Error) -> [GMNSymbol] {
-        let events = _events(part.noteTable)
+                                      keyTable: KeyTable,
+                                      sharedRolls: [RollKey: Int],
+                                      warnings: WarningCollector,
+                                      workIndex: Int?) throws(Guido.Error) -> [GMNSymbol] {
+        let tones = ExportTone.tones(of: part.noteTable)
         let directives = (_instrumentDirectives(part.instrumentTable) + _pedalDirectives(part.pedals[.sustain]))
             .enumerated()
             .sorted { ($0.element.0, $0.offset) < ($1.element.0, $1.offset) }
@@ -434,25 +416,34 @@ extension Guido.Exporter {
             keyTags[entry.beatTime] = convertToGMNKey(entry.key)
         }
 
-        let sortedBoundaries = _boundaries(events: events,
+        let sortedBoundaries = _boundaries(tones: tones,
                                            directives: directives,
                                            tempos: tempos,
                                            annotations: annotations,
                                            barTimes: barTimes,
                                            keyTimes: Array(keyTags.keys),
                                            endTime: endTime)
-        let chunks = try _makeChunks(events: events,
+        let slices = ExportSlice.slices(of: tones,
+                                        at: sortedBoundaries)
+        var writer = OrnamentWriter(markTable: part.markTable,
+                                    partIndex: partIndex,
+                                    sharedRolls: sharedRolls,
+                                    sliceStarts: Set(slices.map(\.start)),
+                                    barTimes: barTimes.union([endTime]),
+                                    warnings: warnings,
+                                    workIndex: workIndex)
+        let chunks = try _makeChunks(slices: slices,
                                      directives: directives,
                                      tempos: tempos,
                                      annotations: annotations,
                                      barTimes: barTimes,
                                      meterTags: meterTags,
                                      keyTags: keyTags,
-                                     sortedBoundaries: sortedBoundaries)
+                                     writer: &writer)
 
         var body = _wrapDynamicRamps(chunks: chunks, annotations: annotations)
 
-        body.append(.tag(.barLine(GMNBarLine(kind: .final))))
+        body.append(writer.barLineSymbol(GMNBarLine(kind: .final), at: endTime))
 
         return body
     }
@@ -464,23 +455,40 @@ extension Guido.Exporter {
         return [.rest(GMNRest(duration: length))]
     }
 
-    private static func _makeSymbols(pitches: [Pitch],
-                                     duration: BeatDuration) throws(Guido.Error) -> [GMNSymbol] {
+    // A tone in `beginIdents` gets a `\tieBegin` before it, and one in
+    // `endIdents` a `\tieEnd` after it, both keyed by the tone's index; only
+    // a chord segment can hold them, so a lone tone with either is written
+    // as a one-tone chord.
+    private static func _makeSymbols(tones: [ExportTone],
+                                     duration: BeatDuration,
+                                     beginIdents: [Int: GMNTag.Ident],
+                                     endIdents: [Int: GMNTag.Ident]) throws(Guido.Error) -> [GMNSymbol] {
         guard let length = convertToGuidoDuration(duration)
         else { throw Guido.Error.unrepresentableDuration("\(duration)") }
 
-        if pitches.count == 1 {
-            let pitch = try convertToGuidoPitch(pitches[0])
+        if tones.count == 1, beginIdents.isEmpty, endIdents.isEmpty {
+            let pitch = try convertToGuidoPitch(tones[0].pitch)
 
             return [.note(GMNNote(pitch: pitch, duration: length))]
         }
 
         var segments: [GMNChord.Segment] = []
 
-        for pitch in pitches {
-            let gPitch = try convertToGuidoPitch(pitch)
+        for tone in tones {
+            let gPitch = try convertToGuidoPitch(tone.pitch)
+            var symbols: [GMNSymbol] = []
 
-            guard let segment = GMNChord.Segment(symbols: [.note(GMNNote(pitch: gPitch, duration: length))])
+            if let ident = beginIdents[tone.index] {
+                symbols.append(.tag(.tie(GMNTie(ident: ident, span: .begin).require())))
+            }
+
+            symbols.append(.note(GMNNote(pitch: gPitch, duration: length)))
+
+            if let ident = endIdents[tone.index] {
+                symbols.append(.tag(.tie(GMNTie(ident: ident, span: .end).require())))
+            }
+
+            guard let segment = GMNChord.Segment(symbols: symbols)
             else { throw Guido.Error.unrepresentableDuration("\(duration)") }
 
             segments.append(segment)
@@ -492,9 +500,6 @@ extension Guido.Exporter {
         return [.chord(chord)]
     }
 
-    // One event's own segment symbols: articulation-wrapped note/chord
-    // symbols, with a leading `\slurBegin:n` on the event's first segment
-    // and a trailing `\slurEnd:n` on its last.
     // Guido has only the damper pedal, so only the sustain table is written,
     // thresholded at `Pedal.Level.isDown`: `\pedalOn` where it goes down,
     // `\pedalOff` where it comes up, and `\pedalOff \pedalOn` for a re-pedal.
@@ -515,22 +520,68 @@ extension Guido.Exporter {
         return directives
     }
 
-    private static func _segmentSymbols(event: Event,
-                                        start: BeatTime,
-                                        end: BeatTime,
-                                        duration: BeatDuration) throws(Guido.Error) -> [GMNSymbol] {
-        var symbols: [GMNSymbol] = []
-        var noteSymbols = try _makeSymbols(pitches: event.pitches, duration: duration)
+    // One slice's own symbols: articulation-wrapped note/chord symbols,
+    // with a leading `\slurBegin:n` from the tones attacked there and a
+    // trailing `\slurEnd:n` from the tones released there. `tieIdents`
+    // holds the ident of each tone tied on its own (see
+    // `_makePartBody(part:bars:tempoMap:keyTable:)`), by the tone's index:
+    // this closes the ones tied into `slice`, and opens one for each tone
+    // that continues past it, unless every tone does.
+    private static func _segmentSymbols(slice: ExportSlice,
+                                        duration: BeatDuration,
+                                        tieIdents: inout [Int: GMNTag.Ident],
+                                        writer: inout OrnamentWriter) throws(Guido.Error) -> [GMNSymbol] {
+        var endIdents: [Int: GMNTag.Ident] = [:]
+        var beginIdents: [Int: GMNTag.Ident] = [:]
 
-        if event.attack == start {
-            noteSymbols = _wrapArticulations(noteSymbols, event.extrasList)
-            symbols += _leadingSlurStartSymbols(event.extrasList)
+        for tone in slice.tones {
+            if let ident = tieIdents.removeValue(forKey: tone.index) {
+                endIdents[tone.index] = ident
+            }
+        }
+
+        if !slice.isWhollyTied {
+            var usedIdents = Set(tieIdents.values.map(\.uintValue)).union(endIdents.values.map(\.uintValue))
+
+            for tone in slice.tones where slice.continues(tone) {
+                let uintValue = (1...).first { !usedIdents.contains($0) } ?? 1
+                let ident = GMNTag.Ident(uintValue: uintValue).require()
+
+                usedIdents.insert(uintValue)
+                beginIdents[tone.index] = ident
+                tieIdents[tone.index] = ident
+            }
+        }
+
+        var symbols: [GMNSymbol] = []
+        let twoNoteTremolo = try writer.twoNoteTremoloSymbols(slice, duration: duration)
+        var noteSymbols: [GMNSymbol] = if let twoNoteTremolo {
+            twoNoteTremolo
+        } else {
+            try _makeSymbols(tones: slice.tones,
+                             duration: duration,
+                             beginIdents: beginIdents,
+                             endIdents: endIdents)
+        }
+        let attackedTones = slice.attackedTones
+        let releasedTones = slice.releasedTones
+
+        if !attackedTones.isEmpty {
+            noteSymbols = _wrapArticulations(noteSymbols, attackedTones.map(\.extras))
+            noteSymbols = writer.wrapOrnaments(noteSymbols,
+                                               attackedTones: attackedTones,
+                                               start: slice.start,
+                                               duration: duration,
+                                               includesOrnament: twoNoteTremolo == nil)
+            symbols += _leadingSlurStartSymbols(attackedTones.map(\.extras))
+            symbols += try writer.graceSymbols(attackedTones)
         }
 
         symbols += noteSymbols
 
-        if event.end == end {
-            symbols += _trailingSlurEndSymbols(event.extrasList)
+        if !releasedTones.isEmpty {
+            symbols += _trailingSlurEndSymbols(releasedTones.map(\.extras))
+            writer.carryFigureAfter(releasedTones)
         }
 
         return symbols
@@ -549,7 +600,7 @@ extension Guido.Exporter {
     }
 
     // A `\slurEnd:n` marker, written immediately after a note/chord's own
-    // symbol(s) — only called for an event's *last* segment. Same id-only
+    // symbol(s), from the tones released there. Same id-only
     // requirement as `_leadingArticulationSymbols(_:)`.
     private static func _trailingSlurEndSymbols(_ extrasList: [Extras?]) -> [GMNSymbol] {
         guard let idText = _unionElements(extrasList).first(where: { $0.name == Extra.slurEnd.name }),
@@ -569,10 +620,10 @@ extension Guido.Exporter {
         extrasList.compactMap { $0?.elements }.flatMap { $0 }
     }
 
-    // Wraps `symbols` (the event's own note/chord symbol(s)) one layer per
-    // Tier 1/fingering/breathMark extra present, innermost-first — only
-    // called for an event's *first* segment (a tie-continuation's own
-    // segments carry no repeated wrapping). `body:`-form tags are the only
+    // Wraps `symbols` (a slice's own note/chord symbol(s)) one layer per
+    // Tier 1/fingering/breathMark extra present, innermost-first, from the
+    // tones attacked there (a tie-continuation carries no repeated
+    // wrapping). `body:`-form tags are the only
     // shape guidolib's own template gives most of these kinds — see
     // `convertToGuidoTag(_:body:)`.
     private static func _wrapArticulations(_ symbols: [GMNSymbol], _ extrasList: [Extras?]) -> [GMNSymbol] {
@@ -660,7 +711,8 @@ extension Guido.Exporter: ExporterProtocol {
 
     internal func write(works: [Work],
                         as fileFormat: FileFormat,
-                        options: ExportOptions = .default) throws(Guido.Error) -> FileWrapper {
+                        options: ExportOptions = .default,
+                        warnings: WarningCollector = WarningCollector()) throws(Guido.Error) -> FileWrapper {
         switch fileFormat {
         case .gmn:
             guard !works.isEmpty
@@ -670,7 +722,7 @@ extension Guido.Exporter: ExporterProtocol {
                   works.count == 1
             else { throw Guido.Error.multipleWorksNotSupported }
 
-            let score = try convert(work)
+            let score = try convert(work, workIndex: 0, warnings: warnings)
             let data = try Guido.Formatter().format(score)
 
             return FileWrapper(regularFileWithContents: data)

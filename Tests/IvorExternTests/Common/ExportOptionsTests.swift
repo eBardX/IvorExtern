@@ -1,6 +1,7 @@
 // © 2026 John Gary Pusey (see LICENSE.md)
 
 import IvorExtern
+import IvorModel
 import Testing
 
 struct ExportOptionsTests {
@@ -11,8 +12,14 @@ struct ExportOptionsTests {
 extension ExportOptionsTests {
     @Test
     func default_changesNothing() {
+        #expect(ExportOptions.default.fermataMode == .tempoChanges)
         #expect(ExportOptions.default.midi == MIDIExportOptions())
         #expect(ExportOptions.default == ExportOptions())
+    }
+
+    @Test
+    func equatable_comparesFermataModes() {
+        #expect(ExportOptions(fermataMode: .notRealized) != ExportOptions())
     }
 
     @Test

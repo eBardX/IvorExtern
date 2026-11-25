@@ -42,7 +42,7 @@ extension ABCExporterTests {
     }
 
     @Test
-    func convert_chordGrouping_differingDurationsStaySeparate() throws {
+    func convert_chordGrouping_differingDurationsSplitAndTie() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -51,9 +51,27 @@ extension ABCExporterTests {
         let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
         let tune = try ABC.Exporter().convert(work)
         let symbols = symbols(in: tune)
+        let chords = symbols.compactMap { symbol -> ABCChord? in
+            guard case let .chord(chord) = symbol
+            else { return nil }
 
-        #expect(!symbols.contains { if case .chord = $0 { true } else { false } })
-        #expect(symbols.filter { if case .note = $0 { true } else { false } }.count == 2)
+            return chord
+        }
+        let notes = symbols.compactMap { symbol -> ABCNote? in
+            guard case let .note(note) = symbol
+            else { return nil }
+
+            return note
+        }
+
+        // `[CE-] E`: only the E is tied, into a note of its own.
+        let chord = try #require(chords.first)
+
+        #expect(chords.count == 1)
+        #expect(chord.tie == nil)
+        #expect(chord.notes.map { $0.tie != nil } == [false, true])
+        #expect(notes.count == 1)
+        #expect(notes.first?.tie == nil)
     }
 
     @Test
@@ -886,6 +904,52 @@ extension ABCExporterTests {
     }
 
     @Test
+    func roundTrip_overlappingNotes_keepANoteUnderAHeldNote() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "C4")
+        table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_overlappingNotes_keepTheirTimes() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test(arguments: OverlapCase.allCases)
+    func roundTrip_overlappingNotes_splitAndTie(_ overlap: OverlapCase) throws {
+        let work = try overlap.work()
+        let recovered = try roundTrip(work,
+                                      exporter: ABC.Exporter(),
+                                      importer: ABC.Importer(),
+                                      fileFormat: .abc)
+
+        try expectNoteTablesMatch(namedStandardPart(recovered, "Piano").noteTable,
+                                  namedStandardPart(work, "Piano").noteTable)
+    }
+
+    @Test
     func roundTrip_pedals() throws {
         let work = try readABC(Fixtures.pedalABC)
         let pedals = try pedalSummary(standardBeatParts(of: work))
@@ -1024,6 +1088,21 @@ extension ABCExporterTests {
         let part = try #require(standardBeatParts(of: recovered)?.first)
 
         #expect(part.noteTable.map(\.duration) == [BeatDuration(sixth)])
+    }
+
+    @Test
+    func roundTrip_upperMordent_keepsItsDirection() throws {
+        let work = try readABC("""
+            X:1
+            T:Tune
+            L:1/4
+            K:C
+            !uppermordent!C D
+            """)
+        let tune = try ABC.Exporter().convert(work)
+        let names = decorations(in: tune).map { $0.name.stringValue.lowercased() }
+
+        #expect(names.contains { $0 == "uppermordent" || $0 == "pralltriller" })
     }
 
     @Test

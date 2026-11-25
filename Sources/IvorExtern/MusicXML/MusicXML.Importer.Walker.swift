@@ -29,10 +29,10 @@ extension MusicXML.Importer {
         internal init() {
         }
 
-        // MARK: Private Instance Properties
+        // MARK: Internal Instance Properties
 
-        private let rhythm = MusicXML.Importer.Rhythm()
-        private let transposer = MusicXML.Importer.Transposer()
+        internal let rhythm = MusicXML.Importer.Rhythm()
+        internal let transposer = MusicXML.Importer.Transposer()
     }
 }
 
@@ -40,18 +40,77 @@ extension MusicXML.Importer {
 
 extension MusicXML.Importer.Walker {
 
+    // MARK: Internal Type Methods
+
+    // The `<transpose>` active for a note's staff: the note's own staff
+    // first, falling back to the part-wide (`number`-less) transpose.
+    internal static func activeTranspose(for note: MXLNote,
+                                         in context: MusicXML.Importer.Context) -> MXLTranspose? {
+        context.transposes[note.staff?.uintValue] ?? context.transposes[nil]
+    }
+
+    // The Tier 1/catch-all articulation/ornament/technical vocabulary (see
+    // "Tier 1 — closed, shared-name bare flags" in `EXTRAS_CANDIDATES.md`),
+    // plus `fingering` and `slurStart`/`slurEnd`, read from one note's
+    // `<notations>`. Every item outside this closed set — the bulk of
+    // MusicXML's own ~60-case vocabulary, per the candidates doc's own
+    // finding — is left unattached rather than guessed at; only the
+    // `other…` free-text escape-hatch cases fall through to the
+    // `articulation` catch-all, matching how ABC's open decoration names do.
+    // The note's own `dynamics` and `end-dynamics` attributes, if any, are
+    // kept too, as its exact `attackVelocity` and `releaseVelocity`.
+    internal static func noteExtras(_ note: MXLNote) -> Extras? {
+        var elements: [Extra] = []
+
+        for notation in note.notations {
+            for item in notation.items {
+                switch item {
+                case let .articulations(articulations):
+                    elements += Self._articulationExtras(articulations.items)
+
+                case let .ornaments(ornaments):
+                    elements += ornaments.entries.compactMap { Self._ornamentExtra($0.content) }
+
+                case let .slur(slur):
+                    if let extra = Self._slurExtra(slur) {
+                        elements.append(extra)
+                    }
+
+                case let .technical(technical):
+                    elements += Self._technicalExtras(technical.items)
+
+                default:
+                    break
+                }
+            }
+        }
+
+        if let velocity = convertToAttackVelocity(note) {
+            elements.append(Extra(name: Extra.attackVelocity.name, values: [.int(velocity)]))
+        }
+
+        if let velocity = convertToReleaseVelocity(note) {
+            elements.append(Extra(name: Extra.releaseVelocity.name, values: [.int(velocity)]))
+        }
+
+        return elements.isEmpty ? nil : Extras(elements: elements)
+    }
+
     // MARK: Internal Instance Methods
 
     internal func walk(_ score: MusicXML.Score,
                        order: [Int]) throws(MusicXML.Error) -> [WalkResult] {
         let scoreParts = Self._scorePartsByID(score)
         var results: [WalkResult] = []
+        var nextArpeggioGroup: UInt = 1
 
         for part in score.parts {
             guard let scorePart = scoreParts[part.id]
             else { continue }
 
-            let context = try _walk(part, order: order)
+            let context = try _walk(part, order: order, firstArpeggioGroup: nextArpeggioGroup)
+
+            nextArpeggioGroup = context.nextArpeggioGroup
 
             results.append(WalkResult(barlines: context.barlines,
                                       directionDynamicEvents: context.directionDynamicEvents,
@@ -59,7 +118,8 @@ extension MusicXML.Importer.Walker {
                                       panEvents: context.panEvents,
                                       part: MusicXML.Part(part: scorePart, voices: Self._voices(from: context)),
                                       pedalEvents: context.pedalEvents,
-                                      tempoEvents: context.tempoEvents))
+                                      tempoEvents: context.tempoEvents,
+                                      warningCounts: context.warningCounts))
         }
 
         return results
@@ -73,13 +133,6 @@ extension MusicXML.Importer.Walker {
     private static let dynamicScale: [Dynamic] = [.pppp, .ppp, .pp, .p, .mp, .mf, .f, .ff, .fff, .ffff]
 
     // MARK: Private Type Methods
-
-    // The `<transpose>` active for a note's staff: the note's own staff
-    // first, falling back to the part-wide (`number`-less) transpose.
-    private static func _activeTranspose(for note: MXLNote,
-                                         in context: MusicXML.Importer.Context) -> MXLTranspose? {
-        context.transposes[note.staff?.uintValue] ?? context.transposes[nil]
-    }
 
     private static func _apply(_ attributes: MXLAttributes,
                                to context: inout MusicXML.Importer.Context) {
@@ -127,21 +180,6 @@ extension MusicXML.Importer.Walker {
         }
     }
 
-    private static func _flushPendingTies(_ context: inout MusicXML.Importer.Context) {
-        for (voiceID, pending) in context.pendingTies {
-            var table = context.noteTable(forVoice: voiceID)
-
-            for (pitch, entry) in pending {
-                table.insert(attack: entry.attack,
-                             duration: entry.duration,
-                             pitch: pitch,
-                             extras: entry.extras)
-            }
-
-            context.noteTables[voiceID] = table
-        }
-    }
-
     // `<wedge>` carries only a crescendo/diminuendo direction, not a target
     // level, so a wedge's own two endpoints are the level in effect when it
     // opens and one step further along `dynamicScale` in that direction —
@@ -185,82 +223,6 @@ extension MusicXML.Importer.Walker {
         }
     }
 
-    // Unions two (optional) extras bags element-wise — used to accumulate
-    // articulation/ornament/fingering/slur markers across every leg of a
-    // tied note, previously lost on every leg but the one where the note
-    // table entry actually got inserted (see `EXTRAS_CANDIDATES.md`'s own
-    // note on this gap). A mark written on the middle leg of a three-note
-    // tie now survives to the final, single `NoteTable` entry the whole
-    // tie collapses into, same as one written on the first or last leg
-    // already did.
-    private static func _mergedExtras(_ lhs: Extras?, _ rhs: Extras?) -> Extras? {
-        switch (lhs, rhs) {
-        case (nil, nil):
-            nil
-
-        case let (lhs?, nil):
-            lhs
-
-        case let (nil, rhs?):
-            rhs
-
-        case let (lhs?, rhs?):
-            Extras(elements: lhs.elements + rhs.elements)
-        }
-    }
-
-    // The Tier 1/catch-all articulation/ornament/technical vocabulary (see
-    // "Tier 1 — closed, shared-name bare flags" in `EXTRAS_CANDIDATES.md`),
-    // plus `fingering` and `slurStart`/`slurEnd`, read from one note's
-    // `<notations>`. Every item outside this closed set — the bulk of
-    // MusicXML's own ~60-case vocabulary, per the candidates doc's own
-    // finding — is left unattached rather than guessed at; only the
-    // `other…` free-text escape-hatch cases fall through to the
-    // `articulation` catch-all, matching how ABC's open decoration names do.
-    // The note's own `dynamics` and `end-dynamics` attributes, if any, are
-    // kept too, as its exact `attackVelocity` and `releaseVelocity`.
-    private static func _noteExtras(_ note: MXLNote) -> Extras? {
-        var elements: [Extra] = []
-
-        for notation in note.notations {
-            for item in notation.items {
-                switch item {
-                case let .articulations(articulations):
-                    elements += Self._articulationExtras(articulations.items)
-
-                case .fermata:
-                    elements.append(.fermata)
-
-                case let .ornaments(ornaments):
-                    if let extra = Self._ornamentExtra(ornaments.content) {
-                        elements.append(extra)
-                    }
-
-                case let .slur(slur):
-                    if let extra = Self._slurExtra(slur) {
-                        elements.append(extra)
-                    }
-
-                case let .technical(technical):
-                    elements += Self._technicalExtras(technical.items)
-
-                default:
-                    break
-                }
-            }
-        }
-
-        if let velocity = convertToAttackVelocity(note) {
-            elements.append(Extra(name: Extra.attackVelocity.name, values: [.int(velocity)]))
-        }
-
-        if let velocity = convertToReleaseVelocity(note) {
-            elements.append(Extra(name: Extra.releaseVelocity.name, values: [.int(velocity)]))
-        }
-
-        return elements.isEmpty ? nil : Extras(elements: elements)
-    }
-
     private static func _ornamentExtra(_ content: MXLOrnaments.Content) -> Extra? {
         switch content {
         case .delayedInvertedTurn,
@@ -269,15 +231,8 @@ extension MusicXML.Importer.Walker {
              .turn:
             .turn
 
-        case .invertedMordent,
-             .mordent:
-            .mordent
-
         case let .otherOrnament(text):
             Extra(name: Extra.articulation.name, values: [.string(text.value)])
-
-        case .trillMark:
-            .trill
 
         default:
             nil
@@ -393,7 +348,8 @@ extension MusicXML.Importer.Walker {
         context.voiceIDs.sorted { _voiceSortKey($0) < _voiceSortKey($1) }.map { id in
             MusicXML.Voice(id: id,
                            noteDynamicEvents: context.noteDynamicEvents[id] ?? [],
-                           noteTable: context.noteTables[id] ?? NoteTable())
+                           noteTable: context.noteTables[id] ?? NoteTable(),
+                           markTable: context.markTables[id] ?? PartMarkTable())
         }
     }
 
@@ -408,60 +364,6 @@ extension MusicXML.Importer.Walker {
     }
 
     // MARK: Private Instance Methods
-
-    // Folds a chord tone into the pitch table using its lead note's onset and
-    // duration, or inserts (or defers, via `pendingTies`) a standalone note
-    // or the lead note of a new chord.
-    private func _insert(_ pitch: IvorTuning.Pitch,
-                         attack: BeatTime,
-                         duration: BeatDuration,
-                         tie: [MXLTie],
-                         voiceID: String?,
-                         extras: Extras?,
-                         _ context: inout MusicXML.Importer.Context) {
-        let hasStart = tie.contains { $0.kind == .start }
-        let hasStop = tie.contains { $0.kind == .stop }
-
-        if hasStop,
-           var pending = context.pendingTies[voiceID]?[pitch] {
-            pending.duration += duration
-            // A tied note is attacked once and released once, so only the
-            // first note's `attackVelocity` counts, and only the last note's
-            // `releaseVelocity`; whichever of the pair comes first in the
-            // merged extras is the one read.
-            pending.extras = Self._mergedExtras(pending.extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.releaseVelocity.name }) },
-                                                extras.map { Extras(elements: $0.elements.filter { $0.name != Extra.attackVelocity.name }) })
-
-            if hasStart {
-                context.pendingTies[voiceID, default: [:]][pitch] = pending
-            } else {
-                _ = context.noteTable(forVoice: voiceID)  // registers the voice
-
-                context.noteTables[voiceID, default: NoteTable()].insert(attack: pending.attack,
-                                                                         duration: pending.duration,
-                                                                         pitch: pitch,
-                                                                         extras: pending.extras)
-                context.pendingTies[voiceID]?[pitch] = nil
-            }
-
-            return
-        }
-
-        _ = context.noteTable(forVoice: voiceID)  // registers the voice even when deferred or folded
-
-        if hasStart {
-            context.pendingTies[voiceID, default: [:]][pitch] = (attack, duration, extras)
-
-            return
-        }
-
-        // Inserts in place: copying the table out and storing it back would copy every
-        // note already in it, since the dictionary still holds the original.
-        context.noteTables[voiceID, default: NoteTable()].insert(attack: attack,
-                                                                 duration: duration,
-                                                                 pitch: pitch,
-                                                                 extras: extras)
-    }
 
     private func _resolve(_ item: MXLMusicItem,
                           measureNumber: String,
@@ -480,8 +382,10 @@ extension MusicXML.Importer.Walker {
 
             context.cursor = rewound
 
-        case .barline,
-             .bookmark,
+        case let .barline(barline):
+            Self.placeAtBarline(barline, &context)
+
+        case .bookmark,
              .figuredBass,
              .grouping,
              .harmony,
@@ -552,19 +456,13 @@ extension MusicXML.Importer.Walker {
         }
     }
 
-    // Grace notes (`.graceNote`/`.graceNoteCue`) and cue notes
-    // (`.graceNoteCue`/`.regularNoteCue`) are dropped from the note table
-    // entirely, matching how `ABC.Importer.Walker` and
-    // `Guido.Importer.Walker` both already treat their own formats'
-    // ornament/grace constructs — never inserting a table entry for them at
-    // all — rather than inventing a MusicXML-only exception. A grace note
-    // carries no notated duration of its own (there is nothing to give it
-    // but an invalid, musically meaningless zero), and a cue note is a
-    // visual reference to another part's material that isn't meant to sound
-    // here either. `context.advance(duration)` still runs for a dropped cue
-    // note (a real, nonzero notated duration) so later notes on the same
-    // voice keep their correct position; a dropped grace note's `.zero`
-    // duration makes that a no-op anyway.
+    // Grace notes gather into their voice's grace run (see
+    // `readGraceNote(_:fullNote:grace:tie:measureNumber:_:)`), taking no time.
+    // Cue notes (`.graceNoteCue`/`.regularNoteCue`) are dropped from the note
+    // table entirely: a cue note is a visual reference to another part's
+    // material that isn't meant to sound here. `context.advance(duration)`
+    // still runs for a dropped cue note (a real, nonzero notated duration) so
+    // later notes on the same voice keep their correct position.
     private func _resolve(_ note: MXLNote,
                           measureNumber: String,
                           _ context: inout MusicXML.Importer.Context) throws(MusicXML.Error) {
@@ -574,17 +472,20 @@ extension MusicXML.Importer.Walker {
         let isDropped: Bool
 
         switch note.content {
-        case let .graceNote(content, _, noteTie):
-            fullNote = content
-            duration = .zero
-            tie = noteTie
-            isDropped = true
+        case let .graceNote(content, grace, noteTie):
+            try readGraceNote(note,
+                              fullNote: content,
+                              grace: grace,
+                              tie: noteTie,
+                              measureNumber: measureNumber,
+                              &context)
 
-        case let .graceNoteCue(content, _):
-            fullNote = content
-            duration = .zero
-            tie = []
-            isDropped = true
+            return
+
+        case .graceNoteCue:
+            _ = context.noteTable(forVoice: note.voice?.voice)  // registers the voice
+
+            return
 
         case let .regularNote(content, count, noteTie):
             fullNote = content
@@ -608,7 +509,7 @@ extension MusicXML.Importer.Walker {
         switch fullNote.content {
         case let .pitch(written):
             let sounding = try transposer.transpose(written,
-                                                    by: Self._activeTranspose(for: note, in: context),
+                                                    by: Self.activeTranspose(for: note, in: context),
                                                     context: "note in measure \(measureNumber)")
             let pitch = try convertToStandardPitch(sounding)
 
@@ -624,13 +525,14 @@ extension MusicXML.Importer.Walker {
                 let base = MusicXML.Duration.subtracting(context.cursor, context.lastDuration) ?? context.cursor
                 let attack = convertToBeatTime(context.measureStart + base)
 
-                _insert(pitch,
-                        attack: attack,
-                        duration: convertToBeatDuration(context.lastDuration),
-                        tie: tie,
-                        voiceID: voiceID,
-                        extras: Self._noteExtras(note),
-                        &context)
+                insertTone(note,
+                           pitch: pitch,
+                           written: written,
+                           attack: attack,
+                           duration: convertToBeatDuration(context.lastDuration),
+                           tie: tie,
+                           isChordTone: true,
+                           &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)
 
@@ -642,13 +544,14 @@ extension MusicXML.Importer.Walker {
             } else {
                 let attack = convertToBeatTime(context.measureStart + context.cursor)
 
-                _insert(pitch,
-                        attack: attack,
-                        duration: convertToBeatDuration(duration),
-                        tie: tie,
-                        voiceID: voiceID,
-                        extras: Self._noteExtras(note),
-                        &context)
+                insertTone(note,
+                           pitch: pitch,
+                           written: written,
+                           attack: attack,
+                           duration: convertToBeatDuration(duration),
+                           tie: tie,
+                           isChordTone: false,
+                           &context)
 
                 Self._recordDynamic(note, attack: attack, voiceID: voiceID, &context)
             }
@@ -658,6 +561,15 @@ extension MusicXML.Importer.Walker {
 
         case .rest:
             _ = context.noteTable(forVoice: voiceID)  // registers the voice
+
+            if !isDropped {
+                Self.placeAtRest(note,
+                                 attack: convertToBeatTime(context.measureStart + context.cursor),
+                                 duration: convertToBeatDuration(duration),
+                                 voiceID: voiceID,
+                                 &context)
+            }
+
             context.lastDuration = duration
             context.advance(duration)
 
@@ -677,13 +589,16 @@ extension MusicXML.Importer.Walker {
     // `Expansion`'s type-level comment for why these are two passes rather
     // than one.
     private func _walk(_ part: MXLScorePartwise.Part,
-                       order: [Int]) throws(MusicXML.Error) -> MusicXML.Importer.Context {
+                       order: [Int],
+                       firstArpeggioGroup: UInt) throws(MusicXML.Error) -> MusicXML.Importer.Context {
         var expansion = MusicXML.Importer.Walker.Expansion()
         let plans = part.measures.enumerated().map { index, measure in
             expansion.plan(measure, at: index, in: part)
         }
 
         var context = MusicXML.Importer.Context()
+
+        context.nextArpeggioGroup = firstArpeggioGroup
 
         for index in order where index < part.measures.count {
             let measure = part.measures[index]
@@ -713,6 +628,8 @@ extension MusicXML.Importer.Walker {
                 context.advance(duration)
             }
 
+            Self.attachGraceRunsAtMeasureEnd(&context)
+
             if let barline = makeMusicXMLBarline(measure,
                                                  at: convertToBeatTime(context.measureStart),
                                                  times: context.times) {
@@ -722,7 +639,15 @@ extension MusicXML.Importer.Walker {
             context.measureStart += context.measureAdvance
         }
 
-        Self._flushPendingTies(&context)
+        for voiceID in Array(context.pendingTremolos.keys) {
+            Self.flushPendingTremolo(voiceID: voiceID, &context)
+        }
+
+        Self.flushPendingTies(&context)
+
+        for (voiceID, noteTable) in context.noteTables {
+            context.noteTables[voiceID] = Self.movingFiguresToLowestTones(noteTable)
+        }
 
         return context
     }

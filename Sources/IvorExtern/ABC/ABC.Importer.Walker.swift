@@ -3,6 +3,8 @@
 internal import IvorABC
 internal import IvorModel
 internal import IvorTiming
+internal import IvorTuning
+internal import XestiNumbers
 
 private import XestiTools
 
@@ -43,6 +45,10 @@ extension ABC.Importer {
         internal init() {
         }
 
+        // MARK: Internal Instance Properties
+
+        internal let pitchFolder = PitchFolder()
+
         // MARK: Private Nested Types
 
         private struct Accumulator {
@@ -64,7 +70,6 @@ extension ABC.Importer {
         // MARK: Private Instance Properties
 
         private let macroTable = MacroTable()
-        private let pitchFolder = PitchFolder()
         private let rhythm = Rhythm()
     }
 }
@@ -86,13 +91,16 @@ extension ABC.Importer.Walker {
                        fileHeader: [ABCHeaderEntry]) throws(ABC.Error) -> [(identity: ABC.Voice?, context: ABC.Importer.Context)] {
         let accumulators = Self._routed(tune, fileHeader: fileHeader)
         var results: [(identity: ABC.Voice?, context: ABC.Importer.Context)] = []
+        var nextArpeggioGroup: UInt = 1
 
         for accumulator in accumulators {
             let plan = ABC.Importer.Plan(items: accumulator.items)
             let context = try _walk(accumulator.items,
                                     plan.ranges(),
-                                    voiceClef: accumulator.identity?.clef)
+                                    voiceClef: accumulator.identity?.clef,
+                                    firstArpeggioGroup: nextArpeggioGroup)
 
+            nextArpeggioGroup = context.nextArpeggioGroup
             results.append((identity: accumulator.identity, context: context))
         }
 
@@ -336,36 +344,57 @@ extension ABC.Importer.Walker {
         }
     }
 
+    // Each tone is tied on its own (see `ABC.Importer.Context.heldTies`). A
+    // note or chord tied as a whole to a matching one has already merged
+    // with it (see `_considerTie(_:_:)`), so this is what keeps a tie on one
+    // tone of a chord (`[C-E] [CG]`), or one that a decoration or field
+    // interrupts.
     private func _commitPending(_ context: inout ABC.Importer.Context) throws(ABC.Error) {
         guard let pending = context.pendingEvent
         else { return }
 
         let extras: Extras? = pending.extras.isEmpty ? nil : Extras(elements: pending.extras)
-
-        switch pending.event {
+        let notes: [(note: ABC.Note, tie: ABCTie?)] = switch pending.event {
         case let .chord(chord):
-            for note in chord.notes {
-                let pitch = try convertToStandardPitch(note.pitch)
-
-                try context.noteTable.insert(attack: pending.attack,
-                                             duration: convertToBeatDuration(note.duration),
-                                             pitch: pitch,
-                                             extras: extras)
-            }
+            chord.notes.map { ($0, $0.tie ?? chord.tie) }
 
         case let .note(note):
-            let pitch = try convertToStandardPitch(note.pitch)
-
-            try context.noteTable.insert(attack: pending.attack,
-                                         duration: convertToBeatDuration(note.duration),
-                                         pitch: pitch,
-                                         extras: extras)
+            [(note, note.tie)]
 
         case .rest:
-            break
+            []
         }
 
-        try context.advance(convertToBeatDuration(rhythm.advanceDuration(pending.event)))
+        var tones: [HeldTies.Tone] = []
+        let pitches = try notes.map { note, _ throws(ABC.Error) in try convertToStandardPitch(note.pitch) }
+        let lowest = pitches.min()
+
+        for ((note, tie), pitch) in zip(notes, pitches) {
+            let duration = try convertToBeatDuration(note.duration)
+
+            tones.append(HeldTies.Tone(attack: pending.attack,
+                                       duration: duration,
+                                       extras: extras,
+                                       isTied: tie != nil,
+                                       ornamentation: pending.ornaments.ornamentation(isLowest: pitch == lowest,
+                                                                                      duration: duration),
+                                       pitch: pitch))
+        }
+
+        context.heldTies.commit(tones, into: &context.noteTable)
+
+        let advance = try convertToBeatDuration(rhythm.advanceDuration(pending.event))
+
+        //
+        // A rest's fermata is a part mark over the rest (resolution 4 of the grace-notes plan).
+        //
+        if case .rest = pending.event,
+           pending.ornaments.fermata {
+            Self.addFermataMark(at: pending.attack, span: advance, &context)
+        }
+
+        context.lastEvent = (pending.attack, advance)
+        context.advance(advance)
         context.pendingEvent = nil
     }
 
@@ -377,16 +406,51 @@ extension ABC.Importer.Walker {
     // was current before its predecessor had even been timed.
     private func _considerTie(_ event: ABC.Event,
                               _ context: inout ABC.Importer.Context) throws(ABC.Error) {
+        if case .rest = event {
+            Self.moveGraceAfterPending(&context)
+        }
+
         if context.tieArmed,
            let pending = context.pendingEvent,
            let merged = rhythm.merged(pending.event, event) {
-            context.pendingEvent = (attack: pending.attack, event: merged, extras: pending.extras)
+            var ornaments = pending.ornaments
+
+            ornaments.absorb(context.stagedOrnaments)
+            context.pendingEvent = ABC.Importer.PendingEvent(attack: pending.attack,
+                                                             event: merged,
+                                                             extras: pending.extras,
+                                                             ornaments: ornaments)
+        } else if let marks = context.pendingTwoNoteTremolo,
+                  let pending = context.pendingEvent,
+                  let joined = try Self.joinedTwoNoteTremolo(pending, event, marks: marks, staged: context.stagedOrnaments) {
+            context.pendingEvent = joined
         } else {
+            var ornaments = context.stagedOrnaments
+            var carried = ABC.Importer.Ornaments()
+
+            //
+            // A rest takes no grace figure: one with no note before it waits for the next note.
+            //
+            if case .rest = event {
+                carried.graceBefore = ornaments.graceBefore
+                ornaments.graceBefore = nil
+            }
+
             try _commitPending(&context)
-            context.pendingEvent = (attack: context.currentBeatTime, event: event, extras: context.pendingNoteExtras)
+            context.pendingEvent = ABC.Importer.PendingEvent(attack: context.currentBeatTime,
+                                                             event: event,
+                                                             extras: context.pendingNoteExtras,
+                                                             ornaments: ornaments)
             context.pendingNoteExtras = []
+            context.stagedOrnaments = carried
+            context.pendingTwoNoteTremolo = nil
+            context.tieArmed = event.tie != nil
+
+            return
         }
 
+        context.pendingTwoNoteTremolo = nil
+        context.stagedOrnaments = ABC.Importer.Ornaments()
         context.tieArmed = event.tie != nil
     }
 
@@ -435,7 +499,21 @@ extension ABC.Importer.Walker {
     // articulations.
     private func _handleDecoration(_ decoration: ABCDecoration,
                                    _ context: inout ABC.Importer.Context) throws(ABC.Error) {
+        //
+        // A two-note tremolo's mark sits between its notes, so the note before it stays pending
+        // until the note after it joins it (see `_considerTie(_:_:)`).
+        //
+        if let marks = Self.twoNoteTremoloMarks(decoration.name) {
+            context.pendingTwoNoteTremolo = marks
+
+            return
+        }
+
         try _commitPending(&context)
+
+        if Self.stageOrnament(decoration.name, &context) {
+            return
+        }
 
         if let dynamic = convertToDynamic(decoration.name) {
             context.dynamicEvents.append(ABC.Importer.Context.DynamicEvent(beatTime: context.currentBeatTime,
@@ -552,7 +630,6 @@ extension ABC.Importer.Walker {
         case .annotation,
              .beamBreak,
              .chordSymbol,
-             .graceNotes,
              .inlineField,
              .overlay,
              .spacer,
@@ -562,14 +639,28 @@ extension ABC.Importer.Walker {
         case .barLine:
             context.barAccidentals = [:]
 
+            try Self.attachToBarLine(&context, rhythm: rhythm)
             try _addBarline(nil, &context)
+
+        case let .graceNotes(graceNotes):
+            //
+            // A grace group between tied notes breaks the tie.
+            //
+            if context.tieArmed {
+                try _commitPending(&context)
+                context.heldTies.end(in: &context.noteTable)
+                context.tieArmed = false
+            }
+
+            try handleGraceNotes(graceNotes, &context)
 
         case let .brokenRhythm(marker):
             if let pending = context.pendingEvent {
-                context.pendingEvent = (attack: pending.attack,
-                                        event: rhythm.rescaled(pending.event,
-                                                               by: rhythm.brokenRhythmFactor(marker, isLeft: true)),
-                                        extras: pending.extras)
+                context.pendingEvent = ABC.Importer.PendingEvent(attack: pending.attack,
+                                                                 event: rhythm.rescaled(pending.event,
+                                                                                        by: rhythm.brokenRhythmFactor(marker, isLeft: true)),
+                                                                 extras: pending.extras,
+                                                                 ornaments: pending.ornaments)
             }
 
             context.pendingBrokenRhythmRight = rhythm.brokenRhythmFactor(marker, isLeft: false)
@@ -603,9 +694,10 @@ extension ABC.Importer.Walker {
             // decoration cases, which stage onto `pendingNoteExtras`
             // for the *next* note since their marker precedes it.
             if let pending = context.pendingEvent {
-                context.pendingEvent = (attack: pending.attack,
-                                        event: pending.event,
-                                        extras: pending.extras + [.slurEnd])
+                context.pendingEvent = ABC.Importer.PendingEvent(attack: pending.attack,
+                                                                 event: pending.event,
+                                                                 extras: pending.extras + [.slurEnd],
+                                                                 ornaments: pending.ornaments)
             }
 
         case .slur(.startDotted),
@@ -627,10 +719,12 @@ extension ABC.Importer.Walker {
     // walk does.
     private func _walk(_ items: [ABC.Importer.Item],
                        _ ranges: [Range<Int>],
-                       voiceClef: ABCClef?) throws(ABC.Error) -> ABC.Importer.Context {
+                       voiceClef: ABCClef?,
+                       firstArpeggioGroup: UInt) throws(ABC.Error) -> ABC.Importer.Context {
         var context = ABC.Importer.Context()
 
         context.activeClef = voiceClef
+        context.nextArpeggioGroup = firstArpeggioGroup
 
         for range in ranges {
             var index = range.lowerBound
@@ -660,7 +754,12 @@ extension ABC.Importer.Walker {
             }
         }
 
+        //
+        // Decorations left at the very end belong to the last event, as before a bar line.
+        //
+        try Self.attachToBarLine(&context, rhythm: rhythm)
         try _commitPending(&context)
+        context.heldTies.end(in: &context.noteTable)
 
         return context
     }

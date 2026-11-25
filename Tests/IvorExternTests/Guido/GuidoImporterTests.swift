@@ -248,6 +248,39 @@ extension GuidoImporterTests {
     }
 
     @Test
+    func convert_tieAcrossIntensity_staysOneNote() throws {
+        let work = try readGuido(#"[ c1/4 \tieEnd \intens<"p"> c ]"#)
+        let notes = try notes(in: #require(standardBeatParts(of: work)?.first))
+
+        #expect(notes.map(\.duration) == [dur(1, 2)])
+    }
+
+    @Test(arguments: [#"[ { \tieBegin:1 c1/4, e } { c \tieEnd:1, g } ]"#,
+                      #"[ { c1/4, e } \tieEnd { c, g } ]"#])
+    func convert_tieOnOneToneOfAChord_continuesOnlyThatTone(_ gmn: String) throws {
+        let work = try readGuido(gmn)
+        var expected = NoteTable<BeatTime, Pitch>()
+
+        expected.insert(attack: .zero, duration: dur(1, 2), pitch: "C4")
+        expected.insert(attack: .zero, duration: .quarter, pitch: "E4")
+        expected.insert(attack: BeatTime.zero + .quarter, duration: .quarter, pitch: "G4")
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: work)?.first).noteTable, expected)
+    }
+
+    @Test
+    func convert_untiedToneOfAChord_isAttackedAgain() throws {
+        let work = try readGuido(#"[ { c1/4, \tieBegin:1 e } { c, e \tieEnd:1 } ]"#)
+        var expected = NoteTable<BeatTime, Pitch>()
+
+        expected.insert(attack: .zero, duration: .quarter, pitch: "C4")
+        expected.insert(attack: .zero, duration: dur(1, 2), pitch: "E4")
+        expected.insert(attack: BeatTime.zero + .quarter, duration: .quarter, pitch: "C4")
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: work)?.first).noteTable, expected)
+    }
+
+    @Test
     func read_emptyData_throws() {
         let wrapper = FileWrapper(regularFileWithContents: Data())
 

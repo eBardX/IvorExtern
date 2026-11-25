@@ -56,6 +56,18 @@ internal import XestiTools
 // MusicXML itself distinguishes concurrent wedges, holds an open wedge's
 // starting beat, level, and kind (`.crescendo`/`.diminuendo`) until its
 // matching `.stop`.
+//
+// The ornamentation state is per voice too. `graceRuns` holds the grace
+// notes read since a voice's last regular note (see `GraceRun`);
+// `lastChords` the duration and tones of its last regular note or chord,
+// which a figure after a note follows; `lastEvents` the span of its last
+// note, chord or rest, which a fermata on a bar line spans;
+// `pendingTremolos` the first note of an open two-note tremolo; `wavyLines`
+// the trill of each open wavy line, by number; and `markTables` its
+// fermatas on rests and bar lines and its caesuras. `arpeggioGroups` gives
+// each `<arpeggiate>` number at each attack its group, shared by every
+// voice of the part, and `nextArpeggioGroup` numbers them across the
+// score. `nonArpeggiateAttacks` and `warningCounts` count what's dropped.
 extension MusicXML.Importer {
 
     // MARK: Internal Nested Types
@@ -65,25 +77,35 @@ extension MusicXML.Importer {
         // MARK: Internal Instance Properties
 
         internal var activeDivisions: Int?
+        internal var arpeggioGroups: [BeatTime: [UInt: ArpeggioGroup]] = [:]
         internal var barlines: [(beatTime: BeatTime, meter: Meter, extras: Extras?)] = []
         internal var cursor: MusicXML.Duration = .zero
         internal var directionDynamicEvents: [DynamicEvent] = []
+        internal var graceRuns: [String?: GraceRun] = [:]
         internal var keyEvents: [(beatTime: BeatTime, key: Key)] = []
+        internal var lastChords: [String?: (duration: BeatDuration, tones: [ToneRef])] = [:]
         internal var lastDirectionDynamic: Dynamic = .mp
         internal var lastDuration: MusicXML.Duration = .zero
+        internal var lastEvents: [String?: (attack: BeatTime, duration: BeatDuration)] = [:]
+        internal var markTables: [String?: PartMarkTable<BeatTime>] = [:]
         internal var measureAdvance: MusicXML.Duration = .zero
         internal var measureStart: MusicXML.Duration = .zero
+        internal var nextArpeggioGroup: UInt = 1
+        internal var nonArpeggiateAttacks: Set<BeatTime> = []
         internal var noteDynamicEvents: [String?: [(beatTime: BeatTime, dynamic: Dynamic)]] = [:]
         internal var noteTables: [String?: NoteTable<BeatTime, IvorTuning.Pitch>] = [:]
         internal var openPedals: [UInt: Pedal] = [:]
         internal var panEvents: [(beatTime: BeatTime, pan: Pan)] = []
         internal var pedalEvents: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)] = []
-        internal var pendingTies: [String?: [IvorTuning.Pitch: (attack: BeatTime, duration: BeatDuration, extras: Extras?)]] = [:]
+        internal var pendingTies: [String?: [IvorTuning.Pitch: PendingTie]] = [:]
+        internal var pendingTremolos: [String?: PendingTremolo] = [:]
         internal var pendingWedges: [MXLNumberLevel?: (beatTime: BeatTime, dynamic: Dynamic, kind: MXLWedge.Kind)] = [:]
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo)] = []
         internal var times: [UInt?: MXLTime] = [:]
         internal var transposes: [UInt?: MXLTranspose] = [:]
         internal var voiceIDs: [String?] = []
+        internal var warningCounts: [ExternWarning.Kind: Int] = [:]
+        internal var wavyLines: [String?: [UInt: NoteTable<BeatTime, IvorTuning.Pitch>.Ornament]] = [:]
     }
 }
 
@@ -92,6 +114,13 @@ extension MusicXML.Importer {
 extension MusicXML.Importer.Context {
 
     // MARK: Internal Instance Methods
+
+    // A part mark in a voice's mark table.
+    internal mutating func addMark(_ mark: PartMark<BeatTime>,
+                                   at time: BeatTime,
+                                   voiceID: String?) {
+        markTables[voiceID, default: PartMarkTable()].insert(time: time, mark: mark)
+    }
 
     internal mutating func advance(_ duration: MusicXML.Duration) {
         cursor += duration
@@ -205,6 +234,10 @@ extension MusicXML.Importer.Context {
         }
 
         return pedals
+    }
+
+    internal mutating func report(_ kind: ExternWarning.Kind) {
+        warningCounts[kind, default: 0] += 1
     }
 
     // MARK: Private Type Methods

@@ -31,17 +31,6 @@ internal func foldedFifths(_ fifths: Int) -> Int {
     return folded
 }
 
-// The tonic a format that always names one writes for a diatonic key: its
-// own when it has a mode, otherwise its major tonic. `nil` for an atonal or
-// custom key.
-internal func writtenTonic(of key: Key) -> PitchClass? {
-    guard case let .diatonic(diatonic) = key
-    else { return nil }
-
-    return diatonic.tonic ?? Key.Diatonic(fifths: diatonic.fifths,
-                                          mode: .major)?.tonic
-}
-
 // Builds an imported work's key table from the keys its source declares, in
 // time order. Two at the same time: the later one wins. An entry that
 // repeats the key in effect before it is dropped (MusicXML restates keys
@@ -68,4 +57,15 @@ internal func makeKeyTable(_ changes: [(beatTime: BeatTime, key: Key)]) -> KeyTa
     }
 
     return table
+}
+
+// The tonic a format that always names one writes for a diatonic key: its
+// own when it has a mode, otherwise its major tonic. `nil` for an atonal or
+// custom key.
+internal func writtenTonic(of key: Key) -> PitchClass? {
+    guard case let .diatonic(diatonic) = key
+    else { return nil }
+
+    return diatonic.tonic ?? Key.Diatonic(fifths: diatonic.fifths,
+                                          mode: .major)?.tonic
 }

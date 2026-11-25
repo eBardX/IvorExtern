@@ -62,6 +62,10 @@ internal func convertToKey(_ abcKeySignature: ABCKeySignature) -> Key? {
         let accidental: Pitch.Accidental
 
         switch abcAccidental {
+        case .doubleFlat,
+             .doubleSharp:
+            return nil
+
         case .flat:
             accidental = .flat
 
@@ -71,10 +75,6 @@ internal func convertToKey(_ abcKeySignature: ABCKeySignature) -> Key? {
 
         case .sharp:
             accidental = .sharp
-
-        case .doubleFlat,
-             .doubleSharp:
-            return nil
         }
 
         accidentals.append(PitchClass(letter: convertToPitchLetter(letter),

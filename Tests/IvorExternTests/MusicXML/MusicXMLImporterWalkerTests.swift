@@ -397,8 +397,8 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
-    func walk_fermata_becomesItsExtra() throws {
-        #expect(try hasFlag(walkedExtras(notations: "<fermata/>"), .fermata))
+    func walk_fermata_becomesTheNotesFermata() throws {
+        #expect(try walkedOrnamentation(notations: "<fermata/>")?.fermata == Fermata())
     }
 
     @Test
@@ -430,7 +430,7 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
-    func walk_graceNote_isDroppedFromNoteTable() throws {
+    func walk_graceNote_becomesAFigureNotANote() throws {
         let musicXML = """
             <?xml version="1.0" encoding="UTF-8"?>
             <score-partwise version="4.0">
@@ -465,9 +465,10 @@ extension MusicXMLImporterWalkerTests {
             notes.append((note.attack, note.startPitch))
         }
 
-        // D4 never appears, and — carrying no duration — doesn't shift C4.
+        // D4 is no note of its own, and — carrying no duration — doesn't shift C4.
         #expect(notes.count == 1)
         #expect(notes.first?.attack == .zero)
+        #expect(voice.noteTable.first?.ornamentation?.graceBefore?.pitches == [.d4])
         #expect(notes.first?.pitch == "C4")
     }
 
@@ -555,9 +556,12 @@ extension MusicXMLImporterWalkerTests {
         #expect(results.first?.tempoEvents.first?.tempo == Tempo(96))
     }
 
-    @Test(arguments: ["inverted-mordent", "mordent"])
-    func walk_mordentOrnaments_becomeMordentExtra(element: String) throws {
-        #expect(try hasFlag(walkedExtras(notations: "<ornaments><\(element)/></ornaments>"), .mordent))
+    @Test(arguments: [("inverted-mordent", PartnerSide.above), ("mordent", .below)])
+    func walk_mordentOrnaments_becomeMordents(element: String, side: PartnerSide) throws {
+        let ornament = try walkedOrnamentation(notations: "<ornaments><\(element)/></ornaments>")?.ornament
+
+        #expect(ornament?.sign == .mordent)
+        #expect(ornament?.partner == .step(side, written: nil))
     }
 
     @Test
@@ -1049,8 +1053,11 @@ extension MusicXMLImporterWalkerTests {
     }
 
     @Test
-    func walk_trillMark_becomesTrillExtra() throws {
-        #expect(try hasFlag(walkedExtras(notations: "<ornaments><trill-mark/></ornaments>"), .trill))
+    func walk_trillMark_becomesATrill() throws {
+        let ornament = try walkedOrnamentation(notations: "<ornaments><trill-mark/></ornaments>")?.ornament
+
+        #expect(ornament?.sign == .trill)
+        #expect(ornament?.partner == .step(.above, written: nil))
     }
 
     @Test(arguments: ["delayed-inverted-turn", "delayed-turn", "inverted-turn", "turn"])

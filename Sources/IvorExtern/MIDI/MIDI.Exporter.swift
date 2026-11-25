@@ -25,8 +25,14 @@ extension MIDI.Exporter {
 
     // MARK: Internal Instance Methods
 
+    // The work is rendered first, in its own time basis (see
+    // `Work.rendered(options:)`): its ornaments become the notes that sound,
+    // and its fermata holds and caesura pauses become time as `fermataMode`
+    // says. A beat work's lead-in grows its pickup, which is written as
+    // any pickup is. A marker meta event marks each fermata, in every mode.
     internal func convert(_ work: Work,
-                          options: MIDIExportOptions = MIDIExportOptions()) throws(MIDI.Error) -> MIDI.Sequence {
+                          options: MIDIExportOptions = MIDIExportOptions(),
+                          fermataMode: RenderingOptions.FermataMode = .tempoChanges) throws(MIDI.Error) -> MIDI.Sequence {
         guard let tickRate = MIDI.TickRate(uintValue: options.ticksPerQuarterNote)
         else { throw MIDI.Error.invalidTickRate(options.ticksPerQuarterNote) }
 
@@ -35,7 +41,10 @@ extension MIDI.Exporter {
         else { throw MIDI.Error.invalidTimeCode(options.timeCodeFrameRate, options.ticksPerFrame) }
 
         do {
-            return try Self._convert(work: work,
+            let rendering = try work.rendered(options: RenderingOptions(fermataMode: fermataMode))
+
+            return try Self._convert(work: rendering.work,
+                                     fermataTimes: rendering.fermataTimes,
                                      tickRate: tickRate,
                                      exportTimeCode: exportTimeCode)
         } catch let error as any EnhancedError {
@@ -48,6 +57,7 @@ extension MIDI.Exporter {
     // MARK: Private Type Properties
 
     private static let defaultKeyVelocity = MIDI.KeyVelocity(64)
+    private static let fermataMarker = MIDI.Text(stringValue: "Fermata")
 
     // MARK: Private Type Methods
 
@@ -107,40 +117,6 @@ extension MIDI.Exporter {
         return channels
     }
 
-    // A beat-time work imported from a file with a timecode division (see
-    // `determineTimeCode`) is written back with the same division; every
-    // other beat-time work gets a metrical division at `tickRate`.
-    // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
-    // meta event (see `_smpteOffset`), and its title (or name) and info on
-    // the first track.
-    private static func _convert(work: Work,
-                                 parts: [Part<BeatTime, NoteNumber>],
-                                 tempoMap: TempoMap,
-                                 meterTable: MeterTable,
-                                 keyTable: KeyTable,
-                                 timeCode: MIDI.TimeCode?,
-                                 tickRate: MIDI.TickRate) throws(MIDI.Error) -> MIDI.Sequence {
-        let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(tickRate)
-        let tempoChanges = _tempoChanges(from: tempoMap)
-        let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: tickRate)
-        var tracks: [MIDI.Track] = []
-
-        try tracks.append(_convert(name: work.info.title ?? work.name,
-                                   info: work.info,
-                                   smpteOffset: _smpteOffset(work.smpteStartTime, division),
-                                   tempoChanges: tempoChanges,
-                                   meterTable: meterTable,
-                                   keyTable: keyTable,
-                                   tickMap: tickMap))
-
-        tracks += try _convert(parts: parts,
-                               tickMap: tickMap)
-
-        return MIDI.Sequence(format: .format1,
-                             division: division,
-                             tracks: tracks)
-    }
-
     // A wall-time work is always written with a timecode division, since a
     // metrical one would need a tempo to measure wall time by: the one it
     // was imported with (see `determineTimeCode`), if any, otherwise
@@ -151,15 +127,17 @@ extension MIDI.Exporter {
     private static func _convert(name: String,
                                  info: Work.Info,
                                  parts: [Part<WallTime, NoteNumber>],
+                                 fermataTimes: [WallTime],
                                  timeCode: MIDI.TimeCode?,
                                  exportTimeCode: MIDI.TimeCode,
                                  smpteStartTime: SMPTETime) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = timeCode ?? exportTimeCode
         let tickMap = MIDI.WallTickMap(timeCode: timeCode)
-        var tracks = [MIDI.Track(events: _headerEvents(name: name,
-                                                       info: info,
-                                                       smpteOffset: _smpteOffset(smpteStartTime,
-                                                                                 .timeCode(timeCode))))]
+        let headerEvents = _headerEvents(name: name,
+                                         info: info,
+                                         smpteOffset: _smpteOffset(smpteStartTime,
+                                                                   .timeCode(timeCode)))
+        var tracks = [MIDI.Track(events: headerEvents + _fermataMarkerEvents(fermataTimes, tickMap: tickMap))]
 
         tracks += try _convert(parts: parts,
                                tickMap: tickMap)
@@ -175,6 +153,7 @@ extension MIDI.Exporter {
                                  tempoChanges: [(beatTime: BeatTime, tempo: MIDI.Tempo)],
                                  meterTable: MeterTable,
                                  keyTable: KeyTable,
+                                 fermataTimes: [BeatTime],
                                  tickMap: MIDI.TickMap) throws(MIDI.Error) -> MIDI.Track {
         var events = _headerEvents(name: name,
                                    info: info,
@@ -185,6 +164,9 @@ extension MIDI.Exporter {
 
         events += _keyEvents(keyTable,
                              tickMap: tickMap)
+
+        events += _fermataMarkerEvents(fermataTimes,
+                                       tickMap: tickMap)
 
         for (beatTime, tempo) in tempoChanges {
             if let eventTime = tickMap[beatTime] {
@@ -262,6 +244,7 @@ extension MIDI.Exporter {
     }
 
     private static func _convert(work: Work,
+                                 fermataTimes: [WorkTime],
                                  tickRate: MIDI.TickRate,
                                  exportTimeCode: MIDI.TimeCode) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = determineTimeCode(work)
@@ -273,6 +256,7 @@ extension MIDI.Exporter {
                                 tempoMap: tempoMap,
                                 meterTable: meterTable,
                                 keyTable: keyTable,
+                                fermataTimes: fermataTimes.compactMap { if case let .beat(time) = $0 { time } else { nil } },
                                 timeCode: timeCode,
                                 tickRate: tickRate)
 
@@ -280,6 +264,7 @@ extension MIDI.Exporter {
             return try _convert(name: work.info.title ?? work.name,
                                 info: work.info,
                                 parts: parts,
+                                fermataTimes: fermataTimes.compactMap { if case let .wall(time) = $0 { time } else { nil } },
                                 timeCode: timeCode,
                                 exportTimeCode: exportTimeCode,
                                 smpteStartTime: work.smpteStartTime)
@@ -287,6 +272,42 @@ extension MIDI.Exporter {
         default:
             throw MIDI.Error.unsupportedPitchNotation(work.pitchNotation)
         }
+    }
+
+    // A beat-time work imported from a file with a timecode division (see
+    // `determineTimeCode`) is written back with the same division; every
+    // other beat-time work gets a metrical division at `tickRate`.
+    // The work's SMPTE start time is written as an SMPTE Offset (`FF 54`)
+    // meta event (see `_smpteOffset`), and its title (or name) and info on
+    // the first track.
+    private static func _convert(work: Work,
+                                 parts: [Part<BeatTime, NoteNumber>],
+                                 tempoMap: TempoMap,
+                                 meterTable: MeterTable,
+                                 keyTable: KeyTable,
+                                 fermataTimes: [BeatTime],
+                                 timeCode: MIDI.TimeCode?,
+                                 tickRate: MIDI.TickRate) throws(MIDI.Error) -> MIDI.Sequence {
+        let division: MIDI.Division = timeCode.map { .timeCode($0) } ?? .metrical(tickRate)
+        let tempoChanges = _tempoChanges(from: tempoMap)
+        let tickMap = timeCode.map { MIDI.TickMap(timeCode: $0, tempoChanges: tempoChanges) } ?? MIDI.TickMap(tickRate: tickRate)
+        var tracks: [MIDI.Track] = []
+
+        try tracks.append(_convert(name: work.info.title ?? work.name,
+                                   info: work.info,
+                                   smpteOffset: _smpteOffset(work.smpteStartTime, division),
+                                   tempoChanges: tempoChanges,
+                                   meterTable: meterTable,
+                                   keyTable: keyTable,
+                                   fermataTimes: fermataTimes,
+                                   tickMap: tickMap))
+
+        tracks += try _convert(parts: parts,
+                               tickMap: tickMap)
+
+        return MIDI.Sequence(format: .format1,
+                             division: division,
+                             tracks: tracks)
     }
 
     // `expressionValue` is additive expressive data with no rounding
@@ -320,6 +341,18 @@ extension MIDI.Exporter {
     // only home for any of them, with the role or label spelled out (see
     // `describeDedication(_:)`); and the SMPTE Offset, if any. Nothing
     // holds a subtitle, alternate title, or parent work title.
+    // A marker meta event, "Fermata", where each fermata's held span starts
+    // (see `Work.Rendering.fermataTimes`), whether or not it was realized.
+    private static func _fermataMarkerEvents<TickMap: MIDI.ExportTimeMap>(_ times: [TickMap.TimeType],
+                                                                          tickMap: TickMap) -> [MIDI.Event] {
+        guard let marker = fermataMarker
+        else { return [] }
+
+        return times.compactMap { time in
+            tickMap.eventTime(at: time).map { .meta($0, .marker(marker)) }
+        }
+    }
+
     private static func _headerEvents(name: String,
                                       info: Work.Info,
                                       smpteOffset: SMPTETime?) -> [MIDI.Event] {
@@ -616,7 +649,7 @@ extension MIDI.Exporter: ExporterProtocol {
     // MARK: Internal Instance Properties
 
     internal var supportedOptions: Set<ExportOptions.Key> {
-        [.midiTicksPerQuarterNote, .midiTimeCode]
+        [.fermataMode, .midiTicksPerQuarterNote, .midiTimeCode]
     }
 
     internal var writableFileFormats: [FileFormat] {
@@ -627,7 +660,8 @@ extension MIDI.Exporter: ExporterProtocol {
 
     internal func write(works: [Work],
                         as fileFormat: FileFormat,
-                        options: ExportOptions = .default) throws(MIDI.Error) -> FileWrapper {
+                        options: ExportOptions = .default,
+                        warnings: WarningCollector = WarningCollector()) throws(MIDI.Error) -> FileWrapper {
         switch fileFormat {
         case .midi:
             guard !works.isEmpty
@@ -638,7 +672,8 @@ extension MIDI.Exporter: ExporterProtocol {
             else { throw MIDI.Error.multipleWorksNotSupported }
 
             let sequence = try convert(work,
-                                       options: options.midi)
+                                       options: options.midi,
+                                       fermataMode: options.fermataMode)
             let data = try MIDI.Formatter().format(sequence)
 
             return FileWrapper(regularFileWithContents: data)

@@ -23,9 +23,10 @@ extension MusicXML.Importer {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ document: MusicXML.Document) throws(MusicXML.Error) -> Work {
+    internal func convert(_ document: MusicXML.Document,
+                          warnings: WarningCollector = WarningCollector()) throws(MusicXML.Error) -> Work {
         do {
-            return try Self._convert(document)
+            return try Self._convert(document, warnings: warnings)
         } catch let error as any EnhancedError {
             throw MusicXML.Error.convertFailure(error)
         } catch {
@@ -35,7 +36,9 @@ extension MusicXML.Importer {
 
     // MARK: Private Type Methods
 
-    private static func _convert(_ document: MusicXML.Document) throws -> Work {
+    // What the walk drops is reported against the one work.
+    private static func _convert(_ document: MusicXML.Document,
+                                 warnings: WarningCollector) throws -> Work {
         let (normalized, _) = MusicXML.Normalizer().normalize(document)
         let (validated, issues) = try MusicXML.Validator().validate(normalized)
         let fatalIssues = issues.filter(_isFatal)
@@ -48,6 +51,11 @@ extension MusicXML.Importer {
 
         let plan = try Plan(score)
         let results = try Walker().walk(score, order: plan.order)
+
+        for (kind, count) in results.flatMap(\.warningCounts) {
+            warnings.add(kind, count: count, workIndex: 0)
+        }
+
         let groupNames = _groupNames(score)
 
         return try Work(name: determineWorkName(score),
@@ -100,6 +108,7 @@ extension MusicXML.Importer {
                         instrumentTable: instrumentTable,
                         panMap: panMap,
                         pedals: pedals,
+                        markTable: voice.markTable,
                         extras: extras)
         }
     }
@@ -419,10 +428,11 @@ extension MusicXML.Importer {
     }
 
     private func _read(_ file: FileWrapper,
-                       _ compressed: Bool) throws -> [Work] {
+                       _ compressed: Bool,
+                       _ warnings: WarningCollector) throws -> [Work] {
         let document = try _parse(file, compressed)
 
-        return try [convert(document)]
+        return try [convert(document, warnings: warnings)]
     }
 }
 
@@ -444,13 +454,14 @@ extension MusicXML.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws -> [Work] {
+                       as fileFormat: FileFormat,
+                       warnings: WarningCollector = WarningCollector()) throws -> [Work] {
         switch fileFormat {
         case .musicXML:
-            return try _read(file, false)
+            return try _read(file, false, warnings)
 
         case .mxl:
-            return try _read(file, true)
+            return try _read(file, true, warnings)
 
         default:
             throw MusicXML.Error.unsupportedFileFormat(fileFormat.displayName)

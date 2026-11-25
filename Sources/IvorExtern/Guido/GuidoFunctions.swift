@@ -162,8 +162,35 @@ internal func convertToGuidoPitch(_ pitch: Pitch) throws(Guido.Error) -> GMNPitc
                     octave: octave)
 }
 
+// A pitch as Guido writes it inside a tag parameter: `\trill<note="b&">`
+// takes only the letter and accidental, `\tremolo<pitch="g#1">` the octave
+// too. A natural has no sign.
+internal func convertToGuidoPitchText(_ pitch: Pitch,
+                                      includesOctave: Bool) -> String {
+    let accidental = switch pitch.pitchClass.accidental {
+    case .doubleFlat:
+        "&&"
+
+    case .doubleSharp:
+        "##"
+
+    case .flat:
+        "&"
+
+    case .natural:
+        ""
+
+    case .sharp:
+        "#"
+    }
+
+    let octave = includesOctave ? "\(pitch.octave.intValue - 3)" : ""
+
+    return "\(pitch.pitchClass.letter)".lowercased() + accidental + octave
+}
+
 // The reverse of `Guido.Importer.Walker._articulationExtra(_:)`/
-// `_ornamentExtra(_:)`/`_slurExtra(_:_:)` — one Tier 1 flag (see
+// `_slurExtra(_:_:)` and its `\turn` — one Tier 1 flag (see
 // `EXTRAS_CANDIDATES.md`) converts to one Guido tag, scoped over `body`
 // (the note/chord symbol(s) it covers). Every `GMNArticulation`/
 // `GMNOrnament` kind but `\stacc` only has guidolib's bracketing `.whole`
@@ -194,9 +221,6 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
     case Extra.downBow.name:
         GMNArticulation(kind: .bow, type: "down", body: body).map { GMNTag.articulation($0) }
 
-    case Extra.fermata.name:
-        GMNArticulation(kind: .fermata, body: body).map { GMNTag.articulation($0) }
-
     case Extra.fingering.name:
         if case let .string(text)? = extra.values.first {
             GMNTag.fingering(GMNFingering(text: text, body: body))
@@ -210,9 +234,6 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
     case Extra.marcato.name:
         GMNArticulation(kind: .marcato, body: body).map { GMNTag.articulation($0) }
 
-    case Extra.mordent.name:
-        GMNOrnament(kind: .mordent, body: body).map { GMNTag.ornament($0) }
-
     case Extra.pizzicato.name:
         GMNArticulation(kind: .pizzicato, body: body).map { GMNTag.articulation($0) }
 
@@ -221,9 +242,6 @@ internal func convertToGuidoTag(_ extra: Extra, body: [GMNSymbol]) -> GMNTag? {
 
     case Extra.tenuto.name:
         GMNArticulation(kind: .tenuto, body: body).map { GMNTag.articulation($0) }
-
-    case Extra.trill.name:
-        GMNOrnament(kind: .trill, body: body).map { GMNTag.ornament($0) }
 
     case Extra.turn.name:
         GMNOrnament(kind: .turn, body: body).map { GMNTag.ornament($0) }

@@ -22,9 +22,10 @@ extension Guido.Importer {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ score: Guido.Score) throws(Guido.Error) -> Work {
+    internal func convert(_ score: Guido.Score,
+                          warnings: WarningCollector = WarningCollector()) throws(Guido.Error) -> Work {
         do {
-            return try Self._convert(score)
+            return try Self._convert(score, warnings: warnings)
         } catch let error as any EnhancedError {
             throw Guido.Error.convertFailure(error)
         } catch {
@@ -34,7 +35,10 @@ extension Guido.Importer {
 
     // MARK: Private Type Methods
 
-    private static func _convert(_ score: Guido.Score) throws -> Work {
+    // Rolled chords are numbered across every voice, and what the walk
+    // drops is reported against the one work.
+    private static func _convert(_ score: Guido.Score,
+                                 warnings: WarningCollector) throws -> Work {
         let (normalized, _) = Guido.Normalizer().normalize(score)
         let (validated, issues) = try Guido.Validator().validate(normalized)
 
@@ -43,7 +47,20 @@ extension Guido.Importer {
 
         let variables = Dictionary(validated.variables.map { ($0.name, $0) }) { _, latest in latest }
         let walker = Walker(variables: variables)
-        let contexts = try validated.voices.map { try walker.walk($0) }
+        var contexts: [Context] = []
+        var nextArpeggioGroup: UInt = 1
+
+        for voice in validated.voices {
+            let context = try walker.walk(voice, firstArpeggioGroup: nextArpeggioGroup)
+
+            nextArpeggioGroup = context.nextArpeggioGroup
+            contexts.append(context)
+
+            for (kind, count) in context.warningCounts {
+                warnings.add(kind, count: count, workIndex: 0)
+            }
+        }
+
         // The walk's own `instrumentName` sees through `$variable` splicing;
         // `determinePartName` is kept as the fallback for an `\instrument`
         // tag nested inside a chord segment, which the walk never visits.
@@ -53,7 +70,8 @@ extension Guido.Importer {
                  dynamicMap: _makeDynamicMap(context.dynamicEvents),
                  instrumentTable: _makeInstrumentTable(context.instrumentEvents,
                                                        firstAttack: context.noteTable.timeRange?.lowerBound),
-                 pedals: [.sustain: context.sustainTable])
+                 pedals: [.sustain: context.sustainTable],
+                 markTable: context.markTable)
         }
 
         return Work(name: determineWorkName(validated),
@@ -211,14 +229,15 @@ extension Guido.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws(Guido.Error) -> [Work] {
+                       as fileFormat: FileFormat,
+                       warnings: WarningCollector = WarningCollector()) throws(Guido.Error) -> [Work] {
         switch fileFormat {
         case .gmn:
             guard let data = file.regularFileContents
             else { throw Guido.Error.parseFailure(nil) }
 
             let score = try Guido.Parser().parse(data)
-            let work = try convert(score)
+            let work = try convert(score, warnings: warnings)
 
             return [work]
 

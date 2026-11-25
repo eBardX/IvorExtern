@@ -16,7 +16,8 @@ extension ImporterProtocolTests {
         let importer: any ImporterProtocol = ABC.Importer()
         let file = FileWrapper(regularFileWithContents: Data("X:1\nT:Tune\nK:C\nC D E F|\n".utf8))
         let works = try importer.read(from: file,
-                                      as: .abc)
+                                      as: .abc,
+                                      warnings: WarningCollector())
 
         #expect(works.map(\.name) == ["Tune"])
     }
@@ -28,7 +29,8 @@ extension ImporterProtocolTests {
 
         #expect(throws: (any Error).self) {
             try importer.read(from: file,
-                              as: .gmn)
+                              as: .gmn,
+                              warnings: WarningCollector())
         }
     }
 }

@@ -14,5 +14,6 @@ internal protocol ExporterProtocol: Sendable {
 
     func write(works: [Work],
                as fileFormat: FileFormat,
-               options: ExportOptions) throws -> FileWrapper
+               options: ExportOptions,
+               warnings: WarningCollector) throws -> FileWrapper
 }

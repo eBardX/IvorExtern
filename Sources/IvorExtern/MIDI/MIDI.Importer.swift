@@ -643,7 +643,8 @@ extension MIDI.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws(MIDI.Error) -> [Work] {
+                       as fileFormat: FileFormat,
+                       warnings: WarningCollector = WarningCollector()) throws(MIDI.Error) -> [Work] {
         switch fileFormat {
         case .midi:
             guard let data = file.regularFileContents

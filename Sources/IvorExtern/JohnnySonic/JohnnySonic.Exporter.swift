@@ -31,9 +31,16 @@ extension JohnnySonic.Exporter {
     // context that produced them is permanently lost. Reconstructing it
     // would require the model to retain the originating scale, which is
     // out of scope — documented, not fixed.
-    internal func convert(_ work: Work) throws(JohnnySonic.Error) -> JohnnySonic.Score {
+    //
+    // The work is rendered first (see `Work.rendered(options:)`): its
+    // ornaments become the notes that sound, and its fermata holds and
+    // caesura pauses become time as `fermataMode` says. In the default
+    // tempo-changes mode, a hold is a step down in the tempo map and back,
+    // which the tempo lines follow.
+    internal func convert(_ work: Work,
+                          fermataMode: RenderingOptions.FermataMode = .tempoChanges) throws(JohnnySonic.Error) -> JohnnySonic.Score {
         do {
-            return try Self._convert(work: work)
+            return try Self._convert(work: work.rendered(options: RenderingOptions(fermataMode: fermataMode)).work)
         } catch let error as any EnhancedError {
             throw JohnnySonic.Error.convertFailure(error)
         } catch {
@@ -287,7 +294,7 @@ extension JohnnySonic.Exporter: ExporterProtocol {
     // MARK: Internal Instance Properties
 
     internal var supportedOptions: Set<ExportOptions.Key> {
-        []
+        [.fermataMode]
     }
 
     internal var writableFileFormats: [FileFormat] {
@@ -298,7 +305,8 @@ extension JohnnySonic.Exporter: ExporterProtocol {
 
     internal func write(works: [Work],
                         as fileFormat: FileFormat,
-                        options: ExportOptions = .default) throws(JohnnySonic.Error) -> FileWrapper {
+                        options: ExportOptions = .default,
+                        warnings: WarningCollector = WarningCollector()) throws(JohnnySonic.Error) -> FileWrapper {
         switch fileFormat {
         case .dkm:
             guard !works.isEmpty
@@ -308,7 +316,7 @@ extension JohnnySonic.Exporter: ExporterProtocol {
                   works.count == 1
             else { throw JohnnySonic.Error.multipleWorksNotSupported }
 
-            let score = try convert(work)
+            let score = try convert(work, fermataMode: options.fermataMode)
             let data = try JohnnySonic.Formatter().format(score)
 
             return FileWrapper(regularFileWithContents: data)

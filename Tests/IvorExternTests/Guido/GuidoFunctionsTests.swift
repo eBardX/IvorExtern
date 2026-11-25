@@ -104,6 +104,17 @@ extension GuidoFunctionsTests {
         }
     }
 
+    @Test(arguments: [(Pitch.bFlat4, false, "b&"),
+                      (.fSharp4, true, "f#1"),
+                      (.c5, true, "c2"),
+                      (Pitch(pitchClass: PitchClass(letter: .e, accidental: .doubleFlat), octave: 3), true, "e&&0"),
+                      (Pitch(pitchClass: PitchClass(letter: .g, accidental: .doubleSharp), octave: 4), false, "g##")])
+    func convertToGuidoPitchText_writesLetterAccidentalAndOctave(_ pitch: Pitch,
+                                                                 _ includesOctave: Bool,
+                                                                 _ expected: String) {
+        #expect(convertToGuidoPitchText(pitch, includesOctave: includesOctave) == expected)
+    }
+
     @Test
     func convertToGuidoTag_fingering_roundTripsItsText() throws {
         let extra = Extra(name: Extra.fingering.name, values: [.string("3")])
@@ -123,14 +134,11 @@ extension GuidoFunctionsTests {
     @Test(arguments: [Extra.accent,
                       .breathMark,
                       .downBow,
-                      .fermata,
                       .harmonic,
                       .marcato,
-                      .mordent,
                       .pizzicato,
                       .staccato,
                       .tenuto,
-                      .trill,
                       .turn,
                       .upBow])
     func convertToGuidoTag_tier1Flag_roundTripsThroughTheWalker(extra: Extra) throws {

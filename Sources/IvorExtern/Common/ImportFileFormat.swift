@@ -1,10 +1,10 @@
 // © 2025–2026 John Gary Pusey (see LICENSE.md)
 
 public import Foundation
-public import IvorModel
 public import IvorTiming
 public import IvorTuning
 
+internal import IvorModel
 internal import XestiTools
 
 /// A value that encapsulates a file format supported for importing works.
@@ -110,21 +110,26 @@ extension ImportFileFormat {
     /// - Parameter options:    The options to read with. Any this format doesn’t use (see
     ///                         ``supportedOptions``) are ignored.
     ///
-    /// - Returns:  The array of works decoded from the file.
+    /// - Returns:  The works decoded from the file, with warnings for anything the format’s
+    ///             reader couldn’t carry over exactly.
     ///
     /// - Throws:   ``Error/readFailure(_:)`` if the works cannot be read from
     ///             the file.
     public func read(from file: FileWrapper,
-                     options: ImportOptions = .default) throws(Error) -> [Work] {
+                     options: ImportOptions = .default) throws(Error) -> ImportResult {
+        let warnings = WarningCollector()
+
         do {
             let works = try importer.read(from: file,
-                                          as: fileFormat)
+                                          as: fileFormat,
+                                          warnings: warnings)
 
             guard let mode = options.pedalSimplification,
                   importer.supportedOptions.contains(.pedalSimplification)
-            else { return works }
+            else { return ImportResult(works: works, warnings: warnings.warnings) }
 
-            return try works.map { try simplifyingPedals(of: $0, mode) }
+            return try ImportResult(works: works.map { try simplifyingPedals(of: $0, mode) },
+                                    warnings: warnings.warnings)
         } catch let error as any EnhancedError {
             throw Error.readFailure(error)
         } catch {

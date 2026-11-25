@@ -53,9 +53,16 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_articulationTag_fermata_becomesTheNotesFermata() throws {
+        let articulation = try #require(GMNArticulation(kind: .fermata, body: [.note(makeGMNNote())]))
+        let context = try walkGMN([.tag(.articulation(articulation))])
+
+        #expect(context.noteTable.first?.ornamentation?.fermata == Fermata())
+    }
+
+    @Test
     func walk_articulationTag_kinds_becomeTheirFlags() throws {
-        let kinds: [(GMNArticulation.Kind, Extra)] = [(.fermata, .fermata),
-                                                      (.harmonic, .harmonic),
+        let kinds: [(GMNArticulation.Kind, Extra)] = [(.harmonic, .harmonic),
                                                       (.marcato, .marcato),
                                                       (.staccato, .staccato),
                                                       (.tenuto, .tenuto)]
@@ -234,6 +241,30 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
+    func walk_fermataTag_onABarLine_staysOffTheNextNote() throws {
+        let work = try readGuido(#"[ c1/4 d e f \fermata(\bar) g ]"#)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        let notes = Array(part.noteTable)
+
+        #expect(notes.count == 5)
+        #expect(notes[4].ornamentation?.fermata == nil)
+        #expect(part.markTable.map(\.time) == [beat(3, 4)])
+        #expect(try part.markTable.map(\.mark) == [.fermata(Fermata(), span: #require(PositiveDuration(dur(1, 4))))])
+    }
+
+    @Test
+    func walk_fermataTag_onARest_staysOffTheNextNote() throws {
+        let work = try readGuido(#"[ c1/4 \fermata(_/4) d e ]"#)
+        let part = try #require(standardBeatParts(of: work)?.first)
+        let notes = Array(part.noteTable)
+
+        #expect(notes.count == 3)
+        #expect(notes[1].ornamentation?.fermata == nil)
+        #expect(part.markTable.map(\.time) == [beat(1, 4)])
+        #expect(try part.markTable.map(\.mark) == [.fermata(Fermata(), span: #require(PositiveDuration(dur(1, 4))))])
+    }
+
+    @Test
     func walk_fingeringTag_attachesTextAndWalksBody() throws {
         let fingering = try GMNFingering(text: "3", body: [.note(makeGMNNote())])
         let context = try walkGMN([.tag(.fingering(fingering))])
@@ -242,12 +273,13 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
-    func walk_graceTag_staysInertAndBreaksATie() throws {
+    func walk_graceTag_gracesTheNextNoteAndBreaksATie() throws {
         let tie = try #require(GMNTie(span: .end))
         let grace = try GMNGrace(body: [.note(makeGMNNote())])
         let context = try walkGMN([.note(makeGMNNote()), .tag(.tie(tie)), .tag(.grace(grace)), .note(makeGMNNote())])
 
         #expect(context.noteTable.map(\.attack) == [.zero, beat(1, 4)])
+        #expect(context.noteTable.map { $0.ornamentation?.graceBefore?.pitches } == [nil, [.c4]])
     }
 
     @Test
@@ -382,10 +414,21 @@ extension GuidoImporterWalkerTests {
     }
 
     @Test
-    func walk_ornamentTag_kinds_becomeTheirFlags() throws {
-        let kinds: [(GMNOrnament.Kind, Extra)] = [(.mordent, .mordent),
-                                                  (.trill, .trill),
-                                                  (.turn, .turn)]
+    func walk_ornamentTag_trillAndMordent_becomeOrnaments() throws {
+        let kinds: [(GMNOrnament.Kind, BeatNotes.Ornament.Sign)] = [(.mordent, .mordent), (.trill, .trill)]
+
+        for (kind, sign) in kinds {
+            let ornament = try #require(GMNOrnament(kind: kind, body: [.note(makeGMNNote())]))
+            let context = try walkGMN([.tag(.ornament(ornament))])
+
+            #expect(context.noteTable.first?.ornamentation?.ornament?.sign == sign)
+            #expect(context.noteTable.first?.ornamentation?.ornament?.partner == .step(.above, written: nil))
+        }
+    }
+
+    @Test
+    func walk_ornamentTag_turn_becomesItsFlag() throws {
+        let kinds: [(GMNOrnament.Kind, Extra)] = [(.turn, .turn)]
 
         for (kind, extra) in kinds {
             let ornament = try #require(GMNOrnament(kind: kind, body: [.note(makeGMNNote())]))

@@ -76,6 +76,40 @@ extension JohnnySonicExporterTests {
         #expect(notes[0].volume == 5.0)
     }
 
+    @Test(arguments: [RenderingOptions.FermataMode.notRealized, .stretchedNotes, .tempoChanges])
+    func convert_fermata_eachMode(_ mode: RenderingOptions.FermataMode) throws {
+        let held = KeyNotes.Ornamentation(fermata: Fermata())
+        let score = try exportJohnnySonicScore([(0, 60, held), (beat(1, 4), 62, nil)], fermataMode: mode)
+        let starts = johnnySonicNotes(score).map(\.startBeat)
+        let tempos = johnnySonicTempoLines(score)
+
+        switch mode {
+        case .notRealized:
+            #expect(starts == [0, 1])
+            #expect(Set(tempos.map(\.startTempo)).count == 1)
+
+        case .stretchedNotes:
+            #expect(starts.count == 2)
+            #expect(starts[1] > 1)
+            #expect(Set(tempos.map(\.startTempo)).count == 1)
+
+        case .tempoChanges:
+            #expect(starts == [0, 1])
+            #expect(Set(tempos.map(\.startTempo)).count > 1)
+            #expect(tempos.allSatisfy { $0.startTempo == $0.endTempo })
+        }
+    }
+
+    @Test
+    func convert_grace_beforeANote_isWrittenAsANote() throws {
+        let event = try #require(KeyNotes.GraceFigure.Event(pitches: [NoteNumber(62)]))
+        let figure = try #require(KeyNotes.GraceFigure(events: [event]))
+        let score = try exportJohnnySonicScore([(beat(1, 4), 60, .init(graceBefore: figure))])
+
+        #expect(johnnySonicNotes(score).count == 2)
+        #expect(johnnySonicNotes(score).first?.startBeat == 1)
+    }
+
     @Test
     func convert_instrument_emittedOnNote() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
@@ -151,6 +185,28 @@ extension JohnnySonicExporterTests {
     }
 
     @Test
+    func convert_ornaments_areWrittenAsTheirNotes() throws {
+        let event = try #require(KeyNotes.GraceFigure.Event(pitches: [NoteNumber(62)]))
+        let after = try #require(KeyNotes.GraceFigure(events: [event]))
+        let mordent = try #require(KeyNotes.Ornament(sign: .mordent, partner: .step(.below, written: nil)))
+        let strokes = try #require(TremoloStrokes(uintValue: 2))
+        let tremolo = try #require(KeyNotes.Ornament(sign: .tremolo(.measured(strokes)), partner: .repeat))
+        let roll = KeyNotes.Ornamentation(arpeggio: KeyNotes.Arpeggio(group: 1))
+        let cases: [(ornamentation: KeyNotes.Ornamentation, expected: Int)] = [(.init(graceAfter: after), 2),
+                                                                               (.init(ornament: mordent), 3),
+                                                                               (.init(ornament: tremolo), 4)]
+
+        for (ornamentation, expected) in cases {
+            #expect(try johnnySonicNotes(exportJohnnySonicScore([(0, 60, ornamentation)])).count == expected)
+        }
+
+        let rolled = try johnnySonicNotes(exportJohnnySonicScore([(0, 60, roll), (0, 64, roll)]))
+
+        #expect(rolled.map(\.startBeat).count == 2)
+        #expect(rolled[0].startBeat < rolled[1].startBeat)
+    }
+
+    @Test
     func convert_pan_emittedOnNote() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
@@ -221,6 +277,15 @@ extension JohnnySonicExporterTests {
         #expect(trailingSegment.startBeat == 4.0)
         #expect(trailingSegment.startTempo == 140.0)
         #expect(trailingSegment.endTempo == 140.0)
+    }
+
+    @Test
+    func convert_trill_isWrittenAsItsNotes() throws {
+        let trill = try #require(KeyNotes.Ornament(sign: .trill, partner: .step(.above, written: nil)))
+        let score = try exportJohnnySonicScore([(0, 60, .init(ornament: trill))])
+
+        #expect(johnnySonicNotes(score).count > 2)
+        #expect(Set(johnnySonicNotes(score).map(\.startPitch)).count == 2)
     }
 
     @Test

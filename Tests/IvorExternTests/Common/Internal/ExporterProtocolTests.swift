@@ -17,7 +17,8 @@ extension ExporterProtocolTests {
         let exporter: any ExporterProtocol = ABC.Exporter()
         let file = try exporter.write(works: [standardBeatWork(parts: [])],
                                       as: .abc,
-                                      options: .default)
+                                      options: .default,
+                                      warnings: WarningCollector())
 
         #expect(file.regularFileContents?.isEmpty == false)
     }
@@ -29,7 +30,8 @@ extension ExporterProtocolTests {
         #expect(throws: (any Error).self) {
             try exporter.write(works: [standardBeatWork(parts: [])],
                                as: .gmn,
-                               options: .default)
+                               options: .default,
+                               warnings: WarningCollector())
         }
     }
 }

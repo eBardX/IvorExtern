@@ -21,6 +21,17 @@ struct MIDIExporterTests {
 
 extension MIDIExporterTests {
     @Test
+    func convert_arpeggio_rollsTheChordUpward() throws {
+        let roll = KeyNotes.Ornamentation(arpeggio: KeyNotes.Arpeggio(group: 1))
+        let sequence = try exportMIDISequence([(0, 60, roll), (0, 64, roll), (0, 67, roll)])
+        let attacks = midiNoteOns(sequence)
+
+        #expect(attacks.map(\.key) == [60, 64, 67])
+        #expect(attacks.map(\.tick) == attacks.map(\.tick).sorted())
+        #expect(Set(attacks.map(\.tick)).count == 3)
+    }
+
+    @Test
     func convert_channelIdentity_duplicateClaim_fallsBackToLowestUnclaimed() throws {
         var table = NoteTable<BeatTime, NoteNumber>()
 
@@ -125,11 +136,69 @@ extension MIDIExporterTests {
         #expect(Set(controllers) == [64, 65, 66, 67, 68])
     }
 
+    @Test(arguments: [RenderingOptions.FermataMode.notRealized, .stretchedNotes, .tempoChanges])
+    func convert_fermata_eachMode(_ mode: RenderingOptions.FermataMode) throws {
+        let held = KeyNotes.Ornamentation(fermata: Fermata())
+        let sequence = try exportMIDISequence([(0, 60, held), (beat(1, 4), 62, nil)], fermataMode: mode)
+        let dAttack = try #require(midiNoteOns(sequence).first { $0.key == 62 }?.tick)
+
+        #expect(midiFermataMarkers(sequence) == [(0, "Fermata")].map { MIDIFermataMarker(tick: $0.0, text: $0.1) })
+
+        switch mode {
+        case .notRealized:
+            #expect(dAttack == 480)
+            #expect(midiTempoTicks(sequence) == [0])
+
+        case .stretchedNotes:
+            #expect(dAttack > 480)
+            #expect(midiTempoTicks(sequence) == [0])
+
+        case .tempoChanges:
+            #expect(dAttack == 480)
+            #expect(midiTempoTicks(sequence).count > 1)
+        }
+    }
+
+    @Test
+    func convert_fermataMark_onARest_isMarkedToo() throws {
+        var part = Part<BeatTime, NoteNumber>(name: "P")
+
+        part.noteTable.insert(attack: 0, duration: dur(1, 4), pitch: NoteNumber(60))
+        part.noteTable.insert(attack: beat(1, 2), duration: dur(1, 4), pitch: NoteNumber(62))
+        try part.markTable.insert(time: beat(1, 4), mark: .fermata(Fermata(), span: #require(PositiveDuration(dur(1, 4)))))
+
+        let work = Work(name: "Rest", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
+        let sequence = try MIDI.Exporter().convert(work)
+
+        #expect(midiFermataMarkers(sequence).map(\.tick) == [480])
+    }
+
     @Test
     func convert_freeMeter_writesAMarkerAlone() throws {
         let events = try midiExportedMeterEvents(["0 4/4", "1 free"])
 
         #expect(events == ["0 4/4", "1920 Ivor meter free"])
+    }
+
+    @Test
+    func convert_grace_afterANote_soundsAtItsEnd() throws {
+        let event = try #require(KeyNotes.GraceFigure.Event(pitches: [NoteNumber(62)]))
+        let figure = try #require(KeyNotes.GraceFigure(events: [event]))
+        let sequence = try exportMIDISequence([(0, 60, .init(graceAfter: figure))])
+        let attacks = midiNoteOns(sequence)
+
+        #expect(attacks.map(\.key) == [60, 62])
+        #expect(attacks.last.map { $0.tick > 0 && $0.tick < 480 } == true)
+    }
+
+    @Test
+    func convert_grace_beforeANote_soundsFirst() throws {
+        let event = try #require(KeyNotes.GraceFigure.Event(pitches: [NoteNumber(62)]))
+        let figure = try #require(KeyNotes.GraceFigure(events: [event]))
+        let sequence = try exportMIDISequence([(beat(1, 4), 60, .init(graceBefore: figure))])
+
+        #expect(midiNoteOns(sequence).map(\.key) == [62, 60])
+        #expect(midiNoteOns(sequence).first?.tick == 480)
     }
 
     @Test
@@ -266,6 +335,34 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_key_atonalWritesNoSharpsOrFlats() throws {
+        let table = try keyTable([(0, .atonal)])
+
+        #expect(try midiExportedKeyEvents(table) == ["0 0 0"])
+    }
+
+    @Test
+    func convert_key_customKeyWritesNearestDiatonic() throws {
+        let table = try keyTable([(0, customKey([.fSharp, .gSharp]))])
+
+        #expect(try midiExportedKeyEvents(table) == ["0 1 0"])
+    }
+
+    @Test
+    func convert_key_emptyTableWritesNone() throws {
+        #expect(try midiExportedKeyEvents(KeyTable()).isEmpty)
+    }
+
+    @Test
+    func convert_key_onlyMinorSetsMi() throws {
+        let table = try keyTable([(0, key(-3, .minor)),
+                                  (1, key(1)),
+                                  (2, key(2, .dorian))])
+
+        #expect(try midiExportedKeyEvents(table) == ["0 -3 1", "1920 1 0", "3840 2 0"])
+    }
+
+    @Test
     func convert_keyboardBeat_empty() throws {
         let work = Work(name: "Test",
                         content: .keyboardBeat([],
@@ -385,6 +482,31 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_leadIn_growsThePickup() throws {
+        let quarter = try #require(Proportion(numberValue: Number(numerator: 1, denominator: 4)))
+        let event = try #require(KeyNotes.GraceFigure.Event(pitches: [NoteNumber(62)]))
+        let figure = try #require(KeyNotes.GraceFigure(events: [event],
+                                                       execution: .init(fromPrevious: .share(quarter))))
+        var part = Part<BeatTime, NoteNumber>(name: "P")
+
+        try part.noteTable.insert(attack: 0, duration: dur(1, 4), pitch: NoteNumber(60), ornamentation: .init(graceBefore: figure))
+
+        let work = try Work(name: "LeadIn",
+                            content: .keyboardBeat([part], TempoMap(), meterTable([(.zero, "4/4")]), KeyTable()))
+        let sequence = try MIDI.Exporter().convert(work)
+        let signatureTicks = sequence.tracks[0].events.compactMap { event -> UInt? in
+            guard case let .meta(time, .timeSignature) = event
+            else { return nil }
+
+            return time.uintValue
+        }
+
+        #expect(midiNoteOns(sequence).map(\.key) == [62, 60])
+        #expect(midiNoteOns(sequence).map(\.tick) == [0, 120])
+        #expect(signatureTicks == [0, 120])
+    }
+
+    @Test
     func convert_meterless_writesCommonTime() throws {
         let events = try midiExportedMeterEvents([])
 
@@ -427,6 +549,14 @@ extension MIDIExporterTests {
         let programIndex = events.firstIndex { if case .midi(_, .programChange) = $0 { true } else { false } }
 
         #expect(try #require(bankIndex) < #require(programIndex))
+    }
+
+    @Test(arguments: [(PartnerSide.above, UInt(62)), (.below, 58)])
+    func convert_mordent_soundsItsPartnerOnce(_ side: PartnerSide, _ partner: UInt) throws {
+        let mordent = try #require(KeyNotes.Ornament(sign: .mordent, partner: .step(side, written: nil)))
+        let sequence = try exportMIDISequence([(0, 60, .init(ornament: mordent))])
+
+        #expect(midiNoteOns(sequence).map(\.key) == [60, partner, 60])
     }
 
     @Test
@@ -811,6 +941,25 @@ extension MIDIExporterTests {
     }
 
     @Test
+    func convert_tremolo_repeatsTheNoteAtItsSubdivision() throws {
+        let strokes = try #require(TremoloStrokes(uintValue: 2))
+        let tremolo = try #require(KeyNotes.Ornament(sign: .tremolo(.measured(strokes)), partner: .repeat))
+        let sequence = try exportMIDISequence([(0, 60, .init(ornament: tremolo))])
+
+        #expect(midiNoteOns(sequence).map(\.tick) == [0, 120, 240, 360])
+    }
+
+    @Test
+    func convert_trill_alternatesWithItsPartner() throws {
+        let trill = try #require(KeyNotes.Ornament(sign: .trill, partner: .step(.above, written: nil)))
+        let sequence = try exportMIDISequence([(0, 60, .init(ornament: trill))])
+        let keys = midiNoteOns(sequence).map(\.key)
+
+        #expect(keys.count > 2)
+        #expect(Set(keys) == [60, 62])
+    }
+
+    @Test
     func convert_unsupportedContent_throws() {
         let work = Work(name: "Wall",
                         content: .standardWall([]))
@@ -946,8 +1095,6 @@ extension MIDIExporterTests {
 
         #expect(noteOns == ["62:50", "60:100"])
     }
-
-    // MIDI can only represent instantaneous tempo changes; after the first pass, further roundtrips must not alter the TempoMap.
 
     @Test
     func roundTrip_attackVelocity_preservesExactValue() throws {
@@ -1196,6 +1343,27 @@ extension MIDIExporterTests {
         // Program 41 is General MIDI's "Violin" — without the Instrument
         // Name meta event, this would round-trip back as "Violin" instead.
         #expect(recoveredPart.instrumentTable[.zero] == Instrument("Fiddle"))
+    }
+
+    @Test
+    func roundTrip_keyKeyChangesAndModes() throws {
+        let table = try keyTable([(0, key(-1, .minor)),
+                                  (1, key(4, .major)),
+                                  (frac(3, 2), key(-7, .minor))])
+        let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(table)))
+
+        #expect(keySummary(work.keyTable) == ["0 D minor", "1 E major", "3/2 Ab minor"])
+    }
+
+    @Test
+    func roundTrip_keyOtherModesAndNoModeComeBackAsMajor() throws {
+        // MIDI keys are taken at face value: `mi` 0 is major.
+        let table = try keyTable([(0, key(2, .dorian)),
+                                  (1, key(-1)),
+                                  (frac(3, 2), .atonal)])
+        let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(table)))
+
+        #expect(keySummary(work.keyTable) == ["0 D major", "1 F major", "3/2 C major"])
     }
 
     @Test
@@ -1500,6 +1668,7 @@ extension MIDIExporterTests {
         #expect(meterSummary(recovered.meterTable) == ["0 2/4"])
     }
 
+    // MIDI can only represent instantaneous tempo changes; after the first pass, further roundtrips must not alter the TempoMap.
     @Test
     func roundtrip_tempoMap_accelerando_isStableAfterFirstPass() throws {
         var smoothTempoMap = TempoMap()
@@ -1689,5 +1858,3 @@ extension MIDIExporterTests {
         }
     }
 }
-
-// swiftlint:enable file_length

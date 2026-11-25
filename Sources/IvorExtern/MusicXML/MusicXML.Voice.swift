@@ -11,7 +11,8 @@ internal import IvorTuning
 // voice's own notes that carried an explicit `dynamics` (velocity)
 // attribute — is similarly pre-resolved to this voice, unlike the part-wide
 // `tempoEvents`/`panEvents`/direction-dynamics `Importer.Walker.WalkResult`
-// carries alongside it.
+// carries alongside it, and so is `markTable`, its fermatas on rests and
+// bar lines and its caesuras.
 extension MusicXML {
 
     // MARK: Internal Nested Types
@@ -22,8 +23,10 @@ extension MusicXML {
 
         internal init(id: String?,
                       noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic)] = [],
-                      noteTable: NoteTable<BeatTime, IvorTuning.Pitch>) {
+                      noteTable: NoteTable<BeatTime, IvorTuning.Pitch>,
+                      markTable: PartMarkTable<BeatTime> = PartMarkTable()) {
             self.id = id
+            self.markTable = markTable
             self.noteDynamicEvents = noteDynamicEvents
             self.noteTable = noteTable
         }
@@ -33,6 +36,7 @@ extension MusicXML {
         // The `<voice>` identifier, or `nil` for the implicit single voice of
         // a part that never declares one.
         internal let id: String?
+        internal let markTable: PartMarkTable<BeatTime>
         internal let noteDynamicEvents: [(beatTime: BeatTime, dynamic: Dynamic)]
         internal let noteTable: NoteTable<BeatTime, IvorTuning.Pitch>
     }

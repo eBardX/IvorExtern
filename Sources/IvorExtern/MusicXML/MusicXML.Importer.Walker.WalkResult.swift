@@ -28,5 +28,6 @@ extension MusicXML.Importer.Walker {
         internal let part: MusicXML.Part
         internal let pedalEvents: [(beatTime: BeatTime, pedal: Pedal, level: Pedal.Level)]
         internal let tempoEvents: [(beatTime: BeatTime, tempo: Tempo)]
+        internal let warningCounts: [ExternWarning.Kind: Int]
     }
 }

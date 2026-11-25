@@ -64,11 +64,17 @@ extension ABCImporterWalkerTests {
             K:C
             TC ~D HE uF vG LA|
             """)
+        let ornamented = try abcNotes("""
+            X:1
+            L:1/4
+            K:C
+            TC ~D HE uF vG LA|
+            """)
 
         #expect(notes.count == 6)
-        #expect(hasFlag(notes[0], .trill))
+        #expect(ornamented[0].ornamentation?.ornament?.sign == .trill)
         #expect(stringValue(notes[1], .articulation) == "roll")
-        #expect(hasFlag(notes[2], .fermata))
+        #expect(ornamented[2].ornamentation?.fermata != nil)
         #expect(hasFlag(notes[3], .upBow))
         #expect(hasFlag(notes[4], .downBow))
         #expect(hasFlag(notes[5], .accent))
@@ -92,6 +98,28 @@ extension ABCImporterWalkerTests {
         #expect(events.first?.beatTime == .zero)
         #expect(events.first?.dynamic == .mf)
         #expect(events.first?.kind == .step)
+    }
+
+    // A decoration just before a bar line belongs to the bar line, not the
+    // next note (abc2midi's `check_and_call_bar` treats it the same way).
+    @Test
+    func walk_fermataBeforeBarLine_staysOffTheNextNote() throws {
+        let context = try abcContext("""
+            X:1
+            L:1/4
+            M:2/4
+            K:C
+            C D !fermata!|E F|
+            """)
+        let notes = Array(context.noteTable)
+
+        //
+        // It becomes a part mark over the D, the last event before the bar line.
+        //
+        #expect(notes.count == 4)
+        #expect(notes.allSatisfy { $0.ornamentation == nil })
+        #expect(context.markTable.map(\.time) == [BeatTime(numberValue: Number(numerator: 1, denominator: 4))])
+        #expect(context.markTable.first?.mark.span == BeatDuration(numberValue: Number(numerator: 1, denominator: 4)))
     }
 
     @Test
@@ -155,11 +183,17 @@ extension ABCImporterWalkerTests {
             K:C
             TC [U:T=!accent!] TD|
             """)
+        let ornamented = try abcNotes("""
+            X:1
+            L:1/4
+            K:C
+            TC [U:T=!accent!] TD|
+            """)
 
         #expect(notes.count == 2)
-        #expect(hasFlag(notes[0], .trill))
+        #expect(ornamented[0].ornamentation?.ornament?.sign == .trill)
         #expect(hasFlag(notes[1], .accent))
-        #expect(!hasFlag(notes[1], .trill))
+        #expect(ornamented[1].ornamentation == nil)
     }
 
     @Test
@@ -411,7 +445,13 @@ extension ABCImporterWalkerTests {
 
         #expect(notes.count == 1)
         #expect(hasFlag(notes[0], .staccato))
-        #expect(!hasFlag(notes[0], .trill))
+        #expect(try abcNotes("""
+            X:1
+            L:1/4
+            K:C
+            U: T = !staccato!
+            TC|
+            """).first?.ornamentation == nil)
     }
 
     @Test

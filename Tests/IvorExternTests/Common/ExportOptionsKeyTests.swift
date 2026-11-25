@@ -11,7 +11,7 @@ struct ExportOptionsKeyTests {
 extension ExportOptionsKeyTests {
     @Test
     func allCases() {
-        #expect(ExportOptions.Key.allCases == [.midiTicksPerQuarterNote, .midiTimeCode])
+        #expect(ExportOptions.Key.allCases == [.fermataMode, .midiTicksPerQuarterNote, .midiTimeCode])
     }
 
     @Test

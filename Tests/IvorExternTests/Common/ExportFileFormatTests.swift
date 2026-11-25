@@ -341,10 +341,12 @@ extension ExportFileFormatTests {
     }
 
     @Test
-    func supportedOptions_midiOnly() throws {
+    func supportedOptions_soundFormatsOnly() throws {
         let midi = try #require(ExportFileFormat.exportFileFormat(for: "midi"))
+        let dkm = try #require(ExportFileFormat.exportFileFormat(for: "dkm"))
 
-        #expect(midi.supportedOptions == [.midiTicksPerQuarterNote, .midiTimeCode])
+        #expect(midi.supportedOptions == [.fermataMode, .midiTicksPerQuarterNote, .midiTimeCode])
+        #expect(dkm.supportedOptions == [.fermataMode])
 
         for tag in ["abc", "gmn", "musicxml"] {
             let fmt = try #require(ExportFileFormat.exportFileFormat(for: tag))
@@ -390,11 +392,21 @@ extension ExportFileFormatTests {
     }
 
     @Test
+    func write_reportsWarnings() throws {
+        let fmt = try #require(ExportFileFormat.exportFileFormat(for: "abc"))
+        let work = try readABC("X:1\nT:Tune\nL:1/4\nK:C\nC {D}z E|\n")
+        let result = try fmt.write(works: [work, work])
+
+        #expect(result.warnings == [ExternWarning(kind: .movedFigureAfterNote, count: 1, workIndex: 0),
+                                    ExternWarning(kind: .movedFigureAfterNote, count: 1, workIndex: 1)])
+    }
+
+    @Test
     func write_validWork() throws {
         let fmt = try #require(ExportFileFormat.exportFileFormat(for: "abc"))
         let work = try readABC("X:1\nT:Tune\nK:C\nCDE|\n")
 
-        let file = try fmt.write(works: [work])
+        let file = try fmt.write(works: [work]).file
 
         #expect(file.regularFileContents?.isEmpty == false)
     }

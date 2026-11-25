@@ -13,5 +13,6 @@ internal protocol ImporterProtocol: Sendable {
     // MARK: Internal Instance Methods
 
     func read(from file: FileWrapper,
-              as fileFormat: FileFormat) throws -> [Work]
+              as fileFormat: FileFormat,
+              warnings: WarningCollector) throws -> [Work]
 }

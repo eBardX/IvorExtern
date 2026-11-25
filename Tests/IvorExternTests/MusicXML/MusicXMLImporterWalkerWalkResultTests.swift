@@ -32,7 +32,8 @@ extension MusicXMLImporterWalkerWalkResultTests {
                                                              panEvents: [(beatTime: .zero, pan: .center)],
                                                              part: part,
                                                              pedalEvents: [(beatTime: .zero, pedal: .sustain, level: .down)],
-                                                             tempoEvents: [(beatTime: .zero, tempo: .default)])
+                                                             tempoEvents: [(beatTime: .zero, tempo: .default)],
+                                                             warningCounts: [.droppedNonArpeggiate: 1])
 
         #expect(result.barlines.map(\.meter) == [.free])
         #expect(result.directionDynamicEvents.map(\.kind) == [.step])
@@ -41,5 +42,6 @@ extension MusicXMLImporterWalkerWalkResultTests {
         #expect(result.part.part == scorePart)
         #expect(result.pedalEvents.map(\.pedal) == [.sustain])
         #expect(result.tempoEvents.map(\.tempo) == [.default])
+        #expect(result.warningCounts == [.droppedNonArpeggiate: 1])
     }
 }

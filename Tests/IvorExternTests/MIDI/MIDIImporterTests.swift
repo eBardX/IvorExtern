@@ -99,6 +99,42 @@ extension MIDIImporterTests {
     }
 
     @Test
+    func convert_key_formatOne_usesFirstTrackWithKeys() throws {
+        let conductor = SMFTrack(events: [.meta(SMFEventTime(960), .keySignature(.dMajor)),
+                                          .meta(SMFEventTime(960), .endOfTrack)])
+        let notes = SMFTrack(events: [.meta(.zero, .keySignature(.fSharpMinor)),
+                                      .midi(.zero, .noteOn(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(100))),
+                                      .midi(SMFEventTime(480), .noteOff(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(64))),
+                                      .meta(SMFEventTime(480), .endOfTrack)])
+        let work = try MIDI.Importer().convert(SMFSequence(format: .format1,
+                                                           division: .metrical(SMFTickRate(480)),
+                                                           tracks: [conductor, notes]))
+
+        #expect(keySummary(work.keyTable) == ["1/2 D major"])
+    }
+
+    @Test
+    func convert_key_keysOnlyInANoteTrack() throws {
+        let conductor = SMFTrack(events: [.meta(.zero, .endOfTrack)])
+        let notes = SMFTrack(events: [.meta(.zero, .keySignature(.eFlatMajor)),
+                                      .midi(.zero, .noteOn(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(100))),
+                                      .midi(SMFEventTime(480), .noteOff(MIDIChannel(1), MIDIData1Value(60), MIDIData1Value(64))),
+                                      .meta(SMFEventTime(480), .endOfTrack)])
+        let work = try MIDI.Importer().convert(SMFSequence(format: .format1,
+                                                           division: .metrical(SMFTickRate(480)),
+                                                           tracks: [conductor, notes]))
+
+        #expect(keySummary(work.keyTable) == ["0 Eb major"])
+    }
+
+    @Test
+    func convert_key_noKeys_givesEmptyTable() throws {
+        let work = try MIDI.Importer().convert(MIDI.Exporter().convert(keyedKeyboardWork(KeyTable())))
+
+        #expect(work.keyTable?.isEmpty == true)
+    }
+
+    @Test
     func convert_metaEvents_populateInfo() throws {
         let key = MIDIData1Value(60)
         let conductor = SMFTrack(events: [.meta(.zero, .copyright(SMFText("(C) 1998 Acme"))),
@@ -708,5 +744,3 @@ extension MIDIImporterTests {
         #expect(MIDI.Importer().readableFileFormats.contains(.midi))
     }
 }
-
-// swiftlint:enable file_length

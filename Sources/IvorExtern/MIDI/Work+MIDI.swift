@@ -6,7 +6,7 @@ extension Work {
 
     // MARK: Public Instance Properties
 
-    /// A Boolean value indicating whether this work carries the timecode
+    /// A Boolean value indicating whether this work carries the time-code
     /// division of the Standard MIDI File it was imported from.
     ///
     /// Such a work’s times were measured in SMPTE frames, so exporting it as

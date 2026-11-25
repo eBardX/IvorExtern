@@ -378,7 +378,8 @@ extension JohnnySonic.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws(JohnnySonic.Error) -> [Work] {
+                       as fileFormat: FileFormat,
+                       warnings: WarningCollector = WarningCollector()) throws(JohnnySonic.Error) -> [Work] {
         switch fileFormat {
         case .dkm:
             guard let data = file.regularFileContents

@@ -65,6 +65,18 @@ private import IvorTuning
 ///
 /// For now a note that glides plays its start key only. Only a
 /// keyboard-pitch, wall-time work can be made into a performance.
+///
+/// A performance plays the notes as they stand, and renders nothing itself:
+/// grace notes, trills, mordents, tremolos and rolls, fermata holds and
+/// caesura pauses sound only in a rendered work (see
+/// ``IvorModel/Work/rendered(options:)``). So a caller renders the work
+/// first — while it’s still in beat time, where tempo-relative defaults can
+/// use its tempo map — then converts the rendered work to keyboard pitch and
+/// wall time, and makes the performance from that. A rendered grace note is
+/// a note like any other: it plays on its part’s channel, sounds under
+/// whatever pedal is down at its own time, has its pan sent before its
+/// attack, and, followed by the same key, is released before that key is
+/// struck again (see ``Event``).
 public struct WorkPerformance {
 
     // MARK: Public Initializers

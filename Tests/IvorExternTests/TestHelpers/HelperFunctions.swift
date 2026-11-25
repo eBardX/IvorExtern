@@ -2,6 +2,7 @@
 
 import Foundation
 import IvorABC
+import IvorDKM
 @testable import IvorExtern
 import IvorGMN
 import IvorMIDI
@@ -474,8 +475,8 @@ internal func roundTrip(_ work: Work,
                         importer: some ImporterProtocol,
                         fileFormat: FileFormat,
                         sourceLocation: SourceLocation = #_sourceLocation) throws -> Work {
-    let file = try exporter.write(works: [work], as: fileFormat, options: .default)
-    let works = try importer.read(from: file, as: fileFormat)
+    let file = try exporter.write(works: [work], as: fileFormat, options: .default, warnings: WarningCollector())
+    let works = try importer.read(from: file, as: fileFormat, warnings: WarningCollector())
 
     return try #require(works.first,
                         "Expected a recovered work",
@@ -515,6 +516,25 @@ internal func abcNoteExtras(_ abc: String) throws -> [Extras?] {
     }
 
     return extras
+}
+
+// A standard-pitch beat note table, the kind the notation formats read and write.
+internal typealias BeatNotes = NoteTable<BeatTime, Pitch>
+
+internal typealias KeyNotes = NoteTable<BeatTime, NoteNumber>
+
+// The walked first voice of the first tune in `abc`: its context, with its note table and
+// part marks.
+internal func abcContext(_ abc: String) throws -> ABC.Importer.Context {
+    let (tunebook, _) = try ABC.BaseParser().parse(Data(abc.utf8))
+    let tune = try #require(tunebook.tunes.first)
+
+    return try ABC.Importer.Walker().walk(tune, fileHeader: tunebook.fileHeader)[0].context
+}
+
+// The notes of the first voice of the first tune in `abc`, in order.
+internal func abcNotes(_ abc: String) throws -> [NoteTable<BeatTime, Pitch>.Note] {
+    try Array(abcContext(abc).noteTable)
 }
 
 internal func readABC(_ abc: String) throws -> Work {
@@ -922,6 +942,22 @@ internal func walkedExtras(notations: String,
                              sourceLocation: sourceLocation)
 
     return voice.noteTable.map(\.extras).first.flatMap(\.self)
+}
+
+// The ornamentation of a C4 carrying `notations`, once walked.
+internal func walkedOrnamentation(notations: String,
+                                  sourceLocation: SourceLocation = #_sourceLocation) throws -> NoteTable<BeatTime, Pitch>.Ornamentation? {
+    let results = try walkMusicXMLMeasure("""
+        <note>
+          <pitch><step>C</step><octave>4</octave></pitch>
+          <duration>1</duration>
+          <notations>\(notations)</notations>
+        </note>
+        """)
+    let voice = try #require(results.first?.part.voices.first,
+                             sourceLocation: sourceLocation)
+
+    return voice.noteTable.first?.ornamentation
 }
 
 // A score of four measures: a C4 filling the first, under `time` (a `<time>`
@@ -1347,6 +1383,18 @@ internal func dur(_ numerator: Int,
     BeatDuration(frac(numerator, denominator))
 }
 
+// A beat duration of `value` whole notes, which must be valid.
+internal func beats(_ value: Number) -> BeatDuration {
+    // swiftlint:disable:next force_unwrapping
+    BeatDuration(numberValue: value)!
+}
+
+// A beat time of `value` whole notes, which must be valid.
+internal func beatTime(_ value: Number) -> BeatTime {
+    // swiftlint:disable:next force_unwrapping
+    BeatTime(numberValue: value)!
+}
+
 internal func frac(_ numerator: Int,
                    _ denominator: Int) -> Number {
     Number(numerator: numerator,
@@ -1650,6 +1698,502 @@ internal func metronomeText(_ metronome: MXLMetronome?) -> String? {
     else { return nil }
 
     return "\(beatUnit.beatUnit)" + String(repeating: ".", count: beatUnit.dot) + " = \(perMinute.value)"
+}
+
+internal func pitchSemitones(_ pitch: Pitch) -> Int {
+    pitch.octave.intValue * 12 + letterSemitone(pitch.letter) + pitch.accidental.order
+}
+
+internal func abcExportWarnings(_ work: Work) throws -> [ExternWarning] {
+    let warnings = WarningCollector()
+
+    _ = try ABC.Exporter().write(works: [work], as: .abc, warnings: warnings)
+
+    return warnings.warnings
+}
+
+internal func firstPartOrnamentations(_ work: Work) throws -> [BeatNotes.Ornamentation?] {
+    try #require(standardBeatParts(of: work)?.first).noteTable.map(\.ornamentation)
+}
+
+internal func exportJohnnySonicScore(_ notes: [(attack: BeatTime, key: UInt, ornamentation: KeyNotes.Ornamentation?)],
+                                     fermataMode: RenderingOptions.FermataMode = .tempoChanges) throws -> JohnnySonic.Score {
+    var part = Part<BeatTime, NoteNumber>(name: "P")
+
+    for note in notes {
+        try part.noteTable.insert(attack: note.attack,
+                                  duration: dur(1, 4),
+                                  pitch: NoteNumber(note.key),
+                                  ornamentation: note.ornamentation)
+    }
+
+    let work = Work(name: "Rendered", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
+
+    return try JohnnySonic.Exporter().convert(work, fermataMode: fermataMode)
+}
+
+internal func johnnySonicNotes(_ score: JohnnySonic.Score) -> [DKMPitchesNote] {
+    score.commands.compactMap { command in
+        guard case let .pitchesNote(note) = command
+        else { return nil }
+
+        return note
+    }
+    .sorted { $0.startBeat < $1.startBeat }
+}
+
+internal func johnnySonicTempoLines(_ score: JohnnySonic.Score) -> [DKMTempoLine] {
+    score.commands.compactMap { command in
+        guard case let .tempoLine(line) = command
+        else { return nil }
+
+        return line
+    }
+}
+
+internal func exportMIDISequence(_ notes: [(attack: BeatTime, key: UInt, ornamentation: KeyNotes.Ornamentation?)],
+                                 fermataMode: RenderingOptions.FermataMode = .tempoChanges) throws -> MIDI.Sequence {
+    var part = Part<BeatTime, NoteNumber>(name: "P")
+
+    for note in notes {
+        try part.noteTable.insert(attack: note.attack,
+                                  duration: dur(1, 4),
+                                  pitch: NoteNumber(note.key),
+                                  ornamentation: note.ornamentation)
+    }
+
+    let work = Work(name: "Rendered", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
+
+    return try MIDI.Exporter().convert(work, fermataMode: fermataMode)
+}
+
+internal func midiFermataMarkers(_ sequence: MIDI.Sequence) -> [MIDIFermataMarker] {
+    sequence.tracks[0].events.compactMap { event in
+        guard case let .meta(time, .marker(text)) = event,
+              text.stringValue == "Fermata"
+        else { return nil }
+
+        return MIDIFermataMarker(tick: time.uintValue, text: text.stringValue)
+    }
+}
+
+internal func midiNoteOns(_ sequence: MIDI.Sequence) -> [(tick: UInt, key: UInt)] {
+    sequence.tracks.dropFirst().flatMap(\.events).compactMap { event -> (tick: UInt, key: UInt)? in
+        guard case let .midi(time, .noteOn(_, key, _)) = event
+        else { return nil }
+
+        return (time.uintValue, key.uintValue)
+    }
+    .sorted { ($0.tick, $0.key) < ($1.tick, $1.key) }
+}
+
+internal func midiTempoTicks(_ sequence: MIDI.Sequence) -> [UInt] {
+    sequence.tracks[0].events.compactMap { event in
+        guard case let .meta(time, .tempo) = event
+        else { return nil }
+
+        return time.uintValue
+    }
+}
+
+// The conductor track's key signature events, at 480 ticks per quarter,
+// as `"<tick> <sf> <mi>"`.
+internal func midiExportedKeyEvents(_ table: KeyTable) throws -> [String] {
+    let sequence = try MIDI.Exporter().convert(keyedKeyboardWork(table))
+
+    return sequence.tracks[0].events.compactMap { event in
+        guard case let .meta(eventTime, .keySignature(keySignature)) = event,
+              let bytes = keySignature.bytesValue
+        else { return nil }
+
+        return "\(eventTime.uintValue) \(Int8(bitPattern: bytes[0])) \(bytes[1])"
+    }
+}
+
+internal func guidoExportWarnings(_ work: Work) throws -> [ExternWarning] {
+    let warnings = WarningCollector()
+
+    _ = try Guido.Exporter().write(works: [work], as: .gmn, warnings: warnings)
+
+    return warnings.warnings
+}
+
+internal func writeGuido(_ work: Work) throws -> String {
+    let file = try Guido.Exporter().write(works: [work], as: .gmn)
+    let data = try #require(file.regularFileContents)
+
+    return try #require(String(data: data, encoding: .utf8))
+}
+
+internal func guidoNotes(_ gmn: String) throws -> [BeatNotes.Note] {
+    try Array(guidoPart(gmn).noteTable)
+}
+
+internal func guidoPart(_ gmn: String) throws -> Part<BeatTime, Pitch> {
+    try #require(standardBeatParts(of: readGuido(gmn))?.first)
+}
+
+// C4 for a quarter, then D4 graced by D4, panning from left to right over the bar.
+internal func renderedPerformance() throws -> WorkPerformance {
+    let event = try #require(NoteTable<BeatTime, NoteNumber>.GraceFigure.Event(pitches: [NoteNumber(62)]))
+    let figure = try #require(NoteTable<BeatTime, NoteNumber>.GraceFigure(events: [event]))
+    var part = Part<BeatTime, NoteNumber>(name: "P")
+
+    part.noteTable.insert(attack: .zero, duration: dur(1, 4), pitch: NoteNumber(60))
+    try part.noteTable.insert(attack: beat(1, 4),
+                              duration: dur(1, 4),
+                              pitch: NoteNumber(62),
+                              ornamentation: .init(graceBefore: figure))
+    part.panMap.insert(time: .zero, pan: .left)
+    part.panMap.insert(time: beat(1, 1), pan: .right)
+
+    let work = Work(name: "Graced", content: .keyboardBeat([part], TempoMap(), MeterTable(), KeyTable()))
+    let rendered = try work.rendered().work
+    let wall = try #require(try rendered.convert(timeBasis: .wall, pitchNotation: .keyboard))
+
+    return try #require(WorkPerformance(work: wall))
+}
+
+internal func exportTonePitches(_ tones: [ExportTone]) -> [Pitch] {
+    tones.map(\.pitch)
+}
+
+// The slices of a part with these notes (attack, duration, pitch), in whole
+// notes, at these boundaries.
+internal func exportSlices(_ notes: [(Int, Int, Pitch)],
+                           at boundaries: [Int]) -> [ExportSlice] {
+    var noteTable = NoteTable<BeatTime, Pitch>()
+
+    for (attack, duration, pitch) in notes {
+        noteTable.insert(attack: beat(attack), duration: dur(duration), pitch: pitch)
+    }
+
+    return ExportSlice.slices(of: ExportTone.tones(of: noteTable),
+                              at: boundaries.map { beat($0) })
+}
+
+// A note as `heldTiesSummary(_:)` gives it.
+internal func heldTiesEntry(_ pitch: Pitch,
+                            _ attack: Int,
+                            _ duration: Int) -> String {
+    "\(pitch) \(beat(attack).numberValue) \(dur(duration).numberValue)"
+}
+
+// Each note as `"<pitch> <attack> <duration>"`, in whole notes, sorted.
+internal func heldTiesSummary(_ noteTable: NoteTable<BeatTime, Pitch>) -> [String] {
+    noteTable.map { "\($0.startPitch) \($0.attack.numberValue) \($0.duration.numberValue)" }.sorted()
+}
+
+// A one-whole-note tone at `attack`.
+internal func heldTiesTone(_ attack: Int,
+                           _ pitch: Pitch,
+                           isTied: Bool = false) -> HeldTies.Tone {
+    HeldTies.Tone(attack: beat(attack),
+                  duration: dur(1),
+                  extras: nil,
+                  isTied: isTied,
+                  pitch: pitch)
+}
+
+internal func musicXMLExportWarnings(_ work: Work) throws -> [ExternWarning] {
+    let warnings = WarningCollector()
+
+    _ = try MusicXML.Exporter().write(works: [work], as: .musicXML, warnings: warnings)
+
+    return warnings.warnings
+}
+
+internal func firstPartMarkTable(_ work: Work) throws -> [String] {
+    try #require(standardBeatParts(of: work)?.first).markTable.map { "\($0.time) \($0.mark)" }
+}
+
+internal func musicXMLNoteItem(_ step: String,
+                               _ octave: Int,
+                               duration: Int = 4,
+                               chord: Bool = false,
+                               type: String? = nil,
+                               extra: String = "",
+                               notations: String = "") -> String {
+    """
+    <note>
+      \(chord ? "<chord/>" : "")
+      <pitch><step>\(step)</step><octave>\(octave)</octave></pitch>
+      <duration>\(duration)</duration>
+      <voice>1</voice>
+      \(type.map { "<type>\($0)</type>" } ?? "")
+      \(extra)
+      \(notations.isEmpty ? "" : "<notations>\(notations)</notations>")
+    </note>
+    """
+}
+
+internal func readMusicXMLDocument(_ items: [String]) throws -> Work {
+    try readMusicXMLText("""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">
+            <measure number="1">
+              <attributes><divisions>4</divisions></attributes>
+              \(items.joined(separator: "\n"))
+            </measure>
+          </part>
+        </score-partwise>
+        """)
+}
+
+internal func readMusicXMLText(_ text: String) throws -> Work {
+    try #require(MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(text.utf8)), as: .musicXML).first)
+}
+
+internal func writeMusicXML(_ work: Work) throws -> String {
+    let file = try MusicXML.Exporter().write(works: [work], as: .musicXML)
+    let data = try #require(file.regularFileContents)
+
+    return try #require(String(data: data, encoding: .utf8))
+}
+
+// Each `<key>` the first exported part writes, as
+// `"<measure>@<position> <fifths> <mode>"` for a traditional key or
+// `"<measure>@<position> <accidentals>"` for a non-traditional one, where
+// the position into the measure is in sixteenth notes.
+internal func musicXMLExportedKeys(_ table: KeyTable) throws -> [String] {
+    let score = try MusicXML.Exporter().convert(keyedStandardWork(table,
+                                                                  pitches: Array(repeating: .c4, count: 8),
+                                                                  meterTable: meterTable([(.zero, "4/4")])))
+    var result: [String] = []
+
+    for measure in score.parts[0].measures {
+        var position = 0
+        var divisions = 1
+
+        for item in measure.items {
+            switch item {
+            case let .attributes(attributes):
+                if let value = attributes.divisions?.intValue {
+                    divisions = value
+                }
+
+                for key in attributes.key {
+                    result.append("\(measure.number)@\(position * 4 / divisions) \(musicXMLKeyDescription(key))")
+                }
+
+            case let .note(note):
+                if case let .regularNote(fullNote, duration, _) = note.content, !fullNote.isChord {
+                    position += duration.intValue
+                }
+
+            default:
+                continue
+            }
+        }
+    }
+
+    return result
+}
+
+internal func musicXMLKeyDescription(_ key: MXLKey) -> String {
+    switch key.content {
+    case let .nonTraditionalKey(groups):
+        groups.map { "\($0.step)".uppercased() + ($0.alter < 0 ? "b" : "#") }.joined(separator: " ")
+
+    case let .traditionalKey(traditional):
+        ["\(traditional.fifths.intValue)", traditional.mode].compactMap(\.self).joined(separator: " ")
+    }
+}
+
+internal func nontraditionalKeyXML(_ pairs: [(step: String, alter: String)]) -> String {
+    "<key>" + pairs.map { "<key-step>\($0.step)</key-step><key-alter>\($0.alter)</key-alter>" }.joined() + "</key>"
+}
+
+internal func traditionalKeyXML(_ fifths: Int,
+                                mode: String? = nil) -> String {
+    "<key><fifths>\(fifths)</fifths>" + (mode.map { "<mode>\($0)</mode>" } ?? "") + "</key>"
+}
+
+internal func musicXMLDocument(_ measures: [[String]]) -> String {
+    let body = measures.enumerated().map { index, items in
+        """
+        <measure number="\(index + 1)">
+        \(index == 0 ? "<attributes><divisions>4</divisions></attributes>" : "")
+        \(items.joined(separator: "\n"))
+        </measure>
+        """
+    }.joined(separator: "\n")
+
+    return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+          </part-list>
+          <part id="P1">
+        \(body)
+          </part>
+        </score-partwise>
+        """
+}
+
+internal func musicXMLImportedPart(_ items: [String]) throws -> Part<BeatTime, Pitch> {
+    try musicXMLImportedPart(measures: [items])
+}
+
+internal func musicXMLImportedPart(measures: [[String]]) throws -> Part<BeatTime, Pitch> {
+    try #require(musicXMLImportedParts(musicXMLDocument(measures)).first)
+}
+
+// Two MusicXML parts of one measure each.
+internal func musicXMLImportedTwoParts(eachInOnePart measures: [[String]]) throws -> [Part<BeatTime, Pitch>] {
+    let musicXML = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <score-partwise version="4.0">
+          <part-list>
+            <score-part id="P1"><part-name>P</part-name></score-part>
+            <score-part id="P2"><part-name>Q</part-name></score-part>
+          </part-list>
+          <part id="P1">
+            <measure number="1"><attributes><divisions>4</divisions></attributes>\(measures[0].joined())</measure>
+          </part>
+          <part id="P2">
+            <measure number="1"><attributes><divisions>4</divisions></attributes>\(measures[1].joined())</measure>
+          </part>
+        </score-partwise>
+        """
+
+    return try musicXMLImportedParts(musicXML)
+}
+
+internal func musicXMLImportWarnings(_ items: [String]) throws -> [ExternWarning] {
+    let warnings = WarningCollector()
+
+    _ = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(musicXMLDocument([items]).utf8)),
+                                     as: .musicXML,
+                                     warnings: warnings)
+
+    return warnings.warnings
+}
+
+internal func mxlGrace(_ step: String,
+                       _ octave: Int = 4,
+                       type: String? = nil,
+                       dots: Int = 0,
+                       chord: Bool = false,
+                       tie: String? = nil,
+                       attributes: String = "",
+                       notations: String = "") -> String {
+    """
+    <note>
+      <grace \(attributes)/>
+      \(chord ? "<chord/>" : "")
+      <pitch><step>\(step)</step><octave>\(octave)</octave></pitch>
+      \(tie.map { #"<tie type="\#($0)"/>"# } ?? "")
+      <voice>1</voice>
+      \(type.map { "<type>\($0)</type>" } ?? "")
+      \(String(repeating: "<dot/>", count: dots))
+      \(notations.isEmpty ? "" : "<notations>\(notations)</notations>")
+    </note>
+    """
+}
+
+internal func mxlNote(_ step: String,
+                      _ octave: Int,
+                      _ duration: Int,
+                      voice: Int = 1,
+                      chord: Bool = false,
+                      tie: String? = nil,
+                      type: String? = nil,
+                      extra: String = "",
+                      notations: String = "") -> String {
+    """
+    <note>
+      \(chord ? "<chord/>" : "")
+      <pitch><step>\(step)</step><octave>\(octave)</octave></pitch>
+      <duration>\(duration)</duration>
+      \(tie.map { #"<tie type="\#($0)"/>"# } ?? "")
+      <voice>\(voice)</voice>
+      \(type.map { "<type>\($0)</type>" } ?? "")
+      \(extra)
+      \(notations.isEmpty ? "" : "<notations>\(notations)</notations>")
+    </note>
+    """
+}
+
+// A standard-pitch grace figure of one event, with `pitches` struck together.
+internal func graceFigure(_ pitches: Pitch...) throws -> BeatNotes.GraceFigure {
+    let event = try #require(BeatNotes.GraceFigure.Event(pitches: pitches))
+
+    return try #require(BeatNotes.GraceFigure(events: [event]))
+}
+
+// A MusicXML grace-run event with `pitches` struck together and the given
+// `<grace>` timing.
+internal func graceRunEvent(_ pitches: [Pitch],
+                            length: PositiveDuration<BeatDuration>? = nil,
+                            makeTime: BeatDuration? = nil,
+                            stealTimeFollowing: MXLPercent? = nil,
+                            stealTimePrevious: MXLPercent? = nil) -> MusicXML.Importer.GraceRun.Event {
+    MusicXML.Importer.GraceRun.Event(length: length,
+                                     makeTime: makeTime,
+                                     pitches: pitches,
+                                     stealTimeFollowing: stealTimeFollowing,
+                                     stealTimePrevious: stealTimePrevious)
+}
+
+// The proportion `numerator`/`denominator`, which must be valid.
+internal func proportion(_ numerator: Int,
+                         _ denominator: Int) throws -> Proportion {
+    try #require(Proportion(numberValue: Number(numerator: numerator, denominator: denominator)))
+}
+
+// The notes of the first voice of a one-measure MusicXML part, at one
+// division per quarter note, holding `items`.
+internal func walkedFirstVoiceNotes(_ items: String,
+                                    sourceLocation: SourceLocation = #_sourceLocation) throws -> [BeatNotes.Note] {
+    let results = try walkMusicXMLMeasure(items)
+    let voice = try #require(results.first?.part.voices.first,
+                             sourceLocation: sourceLocation)
+
+    return Array(voice.noteTable)
+}
+
+// A MusicXML ornament writer for `part`, as the exporter makes one for the
+// first part of the first work, with every slice start a bar time.
+internal func musicXMLOrnamentWriter(_ part: Part<BeatTime, Pitch>,
+                                     sliceStarts: Set<BeatTime> = []) -> MusicXML.Exporter.OrnamentWriter {
+    MusicXML.Exporter.OrnamentWriter(part: part,
+                                     partIndex: 0,
+                                     sharedRolls: [:],
+                                     sliceStarts: sliceStarts,
+                                     barTimes: sliceStarts,
+                                     warnings: WarningCollector(),
+                                     workIndex: 0)
+}
+
+// Each regular `<note>` among `items`, summarized.
+internal func mxlNoteItems(_ items: [MXLMusicItem]) -> [ExportedMXLNote] {
+    items.compactMap { item in
+        guard case let .note(note) = item,
+              case let .regularNote(fullNote, duration, tie) = note.content
+        else { return nil }
+
+        let step = switch fullNote.content {
+        case let .pitch(pitch):
+            "\(pitch.step)"
+
+        case .rest:
+            "rest"
+
+        default:
+            "other"
+        }
+
+        return ExportedMXLNote(duration: duration.intValue,
+                               isChord: fullNote.isChord,
+                               step: step,
+                               ties: tie.map(\.kind))
+    }
 }
 
 // swiftlint:enable file_length

@@ -19,7 +19,7 @@ struct MusicXMLExporterTests {
 
 extension MusicXMLExporterTests {
     @Test
-    func convert_chordGrouping_differingDurationsStaySeparate() throws {
+    func convert_chordGrouping_differingDurationsSplitAndTie() throws {
         var table = NoteTable<BeatTime, Pitch>()
 
         table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
@@ -29,8 +29,9 @@ extension MusicXMLExporterTests {
         let score = try MusicXML.Exporter().convert(work)
         let notes = pitchedNotes(in: score)
 
-        #expect(notes.count == 2)
-        #expect(notes.allSatisfy { !isChord($0) })
+        // A C4–E4 chord with only the E4 tied, into an E4 of its own.
+        #expect(notes.map(isChord) == [false, true, false])
+        #expect(notes.map(ties) == [[], [.start], [.stop]])
     }
 
     @Test
@@ -899,6 +900,52 @@ extension MusicXMLExporterTests {
         #expect(notes.map(\.duration) == [dur(5, 2)])
     }
 
+    @Test
+    func roundTrip_overlappingNotes_keepANoteUnderAHeldNote() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "C4")
+        table.insert(attack: BeatTime(1), duration: BeatDuration(1), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test
+    func roundTrip_overlappingNotes_keepTheirTimes() throws {
+        var table = NoteTable<BeatTime, Pitch>()
+
+        table.insert(attack: BeatTime(0), duration: BeatDuration(1), pitch: "C4")
+        table.insert(attack: BeatTime(0), duration: BeatDuration(2), pitch: "E4")
+
+        let work = standardBeatWork(parts: [Part(name: "", noteTable: table)])
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+        let part = try #require(standardBeatParts(of: recovered)?.first)
+
+        expectNoteTablesMatch(part.noteTable, table)
+    }
+
+    @Test(arguments: OverlapCase.allCases)
+    func roundTrip_overlappingNotes_splitAndTie(_ overlap: OverlapCase) throws {
+        let work = try overlap.work()
+        let recovered = try roundTrip(work,
+                                      exporter: MusicXML.Exporter(),
+                                      importer: MusicXML.Importer(),
+                                      fileFormat: .musicXML)
+
+        try expectNoteTablesMatch(#require(standardBeatParts(of: recovered)?.first).noteTable,
+                                  #require(standardBeatParts(of: work)?.first).noteTable)
+    }
+
     // MusicXML declares elevation once per part, so it applies to every
     // pan change in that part, not just the first.
 
@@ -1130,6 +1177,46 @@ extension MusicXMLExporterTests {
         let recoveredPart = try #require(standardBeatParts(of: recovered)?.first)
 
         expectNoteTablesMatch(recoveredPart.noteTable, table)
+    }
+
+    // MusicXML's `<inverted-mordent>` (no vertical stroke) is the upper
+    // mordent: main, upper, main.
+    @Test
+    func roundTrip_upperMordent_keepsItsDirection() throws {
+        let musicXML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="4.0">
+              <part-list>
+                <score-part id="P1"><part-name>Piano</part-name></score-part>
+              </part-list>
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>1</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>5</octave></pitch>
+                    <duration>1</duration>
+                    <type>quarter</type>
+                    <notations><ornaments><inverted-mordent/></ornaments></notations>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+            """
+        let works = try MusicXML.Importer().read(from: FileWrapper(regularFileWithContents: Data(musicXML.utf8)),
+                                                 as: .musicXML)
+        let score = try MusicXML.Exporter().convert(#require(works.first))
+        let ornaments = pitchedNotes(in: score).flatMap { note in
+            note.notations.flatMap(\.items).flatMap { item -> [MXLOrnaments.Content] in
+                guard case let .ornaments(ornaments) = item
+                else { return [] }
+
+                return ornaments.entries.map(\.content)
+            }
+        }
+
+        #expect(ornaments.count == 1)
+
+        #expect(ornaments.contains { if case .invertedMordent = $0 { true } else { false } })
     }
 
     @Test

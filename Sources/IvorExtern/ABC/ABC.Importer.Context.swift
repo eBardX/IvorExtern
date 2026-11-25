@@ -17,7 +17,9 @@ internal import XestiTools
 // committing a just-built note/chord/rest to `noteTable` until it knows
 // whether the very next item is a broken-rhythm marker (which rescales it in
 // place) or a tie continuation (which merges into it) — see
-// `ABC.Importer.Walker`. `tempoEvents` collects every `Q:` field's resolved
+// `ABC.Importer.Walker`. `heldTies` holds each committed tone tied to
+// whatever follows (`C-`, or the C of `[C-E]`), not yet in `noteTable` (see
+// `HeldTies`). `tempoEvents` collects every `Q:` field's resolved
 // beats-per-minute, in source order, for the importer to fold into a
 // `TempoMap` once every voice has been walked.
 //
@@ -47,6 +49,16 @@ internal import XestiTools
 // after every bar line — what `makeMeterTable(_:)` builds the work's meter
 // table from. The importer drops the ones at or after the end of the music.
 //
+// `stagedOrnaments` collects the grace group, ornament, tremolo, roll and
+// fermata decorations read since the last note, chord or rest, for the next
+// one (see `ABC.Importer.Ornaments`); the pending event carries its own.
+// `pendingTwoNoteTremolo` holds a `!tremN!` mark's stroke count until the
+// note after it, which joins the note before it. `markTable` holds the
+// fermatas on rests and before bar lines, and `lastEvent` the span of the
+// last event committed, which a fermata before a bar line spans when no
+// event is pending. `nextArpeggioGroup` numbers each rolled chord, across
+// every voice of the tune (resolution 13 of the grace-notes plan).
+//
 // `keyEvents` holds each `K:` field (header or inline) as it's met, with
 // the key `convertToKey(_:)` gives it — what `makeKeyTable(_:)` builds the
 // work's key table from. A key it can't represent is left out.
@@ -70,19 +82,25 @@ extension ABC.Importer {
         internal var currentBeatTime: BeatTime = .zero
         internal var dynamicEvents: [DynamicEvent] = []
         internal var hasExplicitUnitNoteLength = false
+        internal var heldTies = HeldTies()
         internal var keyAccidentals: [ABCPitch.Letter: ABCPitch.Accidental] = [:]
         internal var keyEvents: [(beatTime: BeatTime, key: Key)] = []
         internal var lastDynamic: Dynamic = .mp
+        internal var lastEvent: (attack: BeatTime, duration: BeatDuration)?
         internal var macros: [ABCMacro] = []
+        internal var markTable = PartMarkTable<BeatTime>()
         internal var meter: ABCTimeSignature?
+        internal var nextArpeggioGroup: UInt = 1
         internal var noteTable: NoteTable<BeatTime, Pitch> = NoteTable()
         internal var pendingBrokenRhythmRight: (numerator: UInt, denominator: UInt)?
         internal var pendingCrescendo: (beatTime: BeatTime, dynamic: Dynamic)?
         internal var pendingDiminuendo: (beatTime: BeatTime, dynamic: Dynamic)?
-        internal var pendingEvent: (attack: BeatTime, event: ABC.Event, extras: [Extra])?
+        internal var pendingEvent: ABC.Importer.PendingEvent?
         internal var pendingNoteExtras: [Extra] = []
         internal var pendingTuplet: (beatCount: UInt, noteCount: UInt, remainingCount: UInt)?
+        internal var pendingTwoNoteTremolo: UInt?
         internal var shorthands: [ABCShorthand: ABCUserSymbol.Definition] = Self.defaultShorthands
+        internal var stagedOrnaments = ABC.Importer.Ornaments()
         internal var sustainTable: PedalTable<BeatTime> = PedalTable()
         internal var tempoEvents: [(beatTime: BeatTime, tempo: Tempo, text: String?)] = []
         internal var tieArmed = false

@@ -123,9 +123,9 @@ extension ImportFileFormatTests {
     func read_pedalSimplification_simplifiesEveryTable() throws {
         let fmt = try #require(ImportFileFormat.importFileFormat(for: "midi"))
         let file = try FileWrapper(regularFileWithContents: Fixtures.pedalMIDI())
-        let asReadWork = try #require(fmt.read(from: file).first)
+        let asReadWork = try #require(fmt.read(from: file).works.first)
         let snappedWork = try #require(fmt.read(from: file,
-                                                options: ImportOptions(pedalSimplification: .snap)).first)
+                                                options: ImportOptions(pedalSimplification: .snap)).works.first)
         let asRead = try #require(keyboardBeatParts(of: asReadWork)?.first)
         let snapped = try #require(keyboardBeatParts(of: snappedWork)?.first)
         let asReadSustain = try #require(asRead.pedals[.sustain])
@@ -141,7 +141,7 @@ extension ImportFileFormatTests {
         let fmt = try #require(ImportFileFormat.importFileFormat(for: "abc"))
         let file = FileWrapper(regularFileWithContents: Data("X:1\nT:Tune\nK:C\nCDE|\n".utf8))
 
-        let works = try fmt.read(from: file)
+        let works = try fmt.read(from: file).works
 
         #expect(works.count == 1)
         #expect(works.first?.name == "Tune")

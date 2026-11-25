@@ -57,6 +57,7 @@ extension ABC.Importer {
                         dynamicMap: _makeDynamicMap(result.context.dynamicEvents),
                         instrumentTable: instrumentTable,
                         pedals: [.sustain: result.context.sustainTable],
+                        markTable: result.context.markTable,
                         extras: extras)
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
@@ -467,7 +468,8 @@ extension ABC.Importer: ImporterProtocol {
     // MARK: Internal Instance Methods
 
     internal func read(from file: FileWrapper,
-                       as fileFormat: FileFormat) throws(ABC.Error) -> [Work] {
+                       as fileFormat: FileFormat,
+                       warnings: WarningCollector = WarningCollector()) throws(ABC.Error) -> [Work] {
         switch fileFormat {
         case .abc:
             guard let data = file.regularFileContents

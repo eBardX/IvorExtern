@@ -43,11 +43,12 @@ and pitch notations.
 ## Importing
 
 ``ImportFileFormat/read(from:options:)`` reads every work a `FileWrapper` holds — an ABC
-file can hold a whole tunebook:
+file can hold a whole tunebook — as an ``ImportResult``:
 
 ```swift
-let works = try ImportFileFormat.importFileFormat(for: "abc")!
+let result = try ImportFileFormat.importFileFormat(for: "abc")!
     .read(from: FileWrapper(url: url))
+let works = result.works
 ```
 
 Each work comes back in the time basis and pitch notation of its format, as
@@ -66,7 +67,7 @@ format ignores any option it doesn’t use, and
 
 A format can write a work only in a time basis and pitch notation it supports.
 ``ExportFileFormat/canWrite(_:)`` checks a work, and IvorModel’s
-`convert(timeBasis:pitchNotation:context:dropsUnconvertibleNotes:)` converts
+`convert(timeBasis:pitchNotation:context:dropsUnconvertibleNotes:appliesFermataHolds:)` converts
 one that doesn’t fit:
 
 ```swift
@@ -77,11 +78,30 @@ if !midi.canWrite(work) {
     work = try work.convert(timeBasis: .beat, pitchNotation: .keyboard)!
 }
 
-let file = try midi.write(works: [work])   // a FileWrapper
+let file = try midi.write(works: [work]).file   // a FileWrapper
 ```
 
 ``ExportFileFormat/write(works:options:)`` writes one or more works to a `FileWrapper`,
-ready to save or share.
+ready to save or share, as an ``ExportResult``.
+
+### Warnings
+
+Reading and writing both report what a format couldn’t carry over exactly, as
+``ExternWarning`` values in ``ImportResult/warnings`` and
+``ExportResult/warnings``: one per kind of loss in each work, with a count. ABC
+has no figure after a note, for example, so writing one moves it before the next
+note and reports ``ExternWarning/Kind/movedFigureAfterNote``; and it has no
+caesura, so writing one drops it and reports
+``ExternWarning/Kind/droppedCaesura``. A warning never stops a read or write.
+
+### Ornaments in ABC
+
+ABC reads and writes grace groups (with chords in braces, the slash, and a tie
+into the main note), trills, both mordents, rolled chords, abcm2ps’s tremolo
+marks (`!/!` to `!///!`, and `!trem1!` to `!trem4!` between two notes), and
+fermatas — on a note, on a rest, or before a bar line, where it becomes a
+fermata mark over the last event. A lone grace note is an eighth and each of a
+group a sixteenth, whatever `L:` says, as the ABC renderers read them.
 
 ### Keys
 
@@ -101,11 +121,16 @@ as `K:Am`, and MusicXML’s `<mode>ionian</mode>` as `<mode>major</mode>`.
  Guido       | `\key`: a number of fifths (no mode), a key name (major or minor), or a free key | `\key`: a key name for major or minor, a number of fifths otherwise, or a free key for a custom key | Modes other than major and minor; an atonal key, written as no sharps or flats
  JohnnySonic | —                                           | —                                           | Every key
 
-``ExportOptions`` adjusts how a format writes. For now its only options are
-the ``MIDIExportOptions`` of a Standard MIDI File: the ticks per quarter note
-for a beat-time work, and the frame rate and ticks per frame for a wall-time
-one. A format ignores any option it doesn’t use, and
-``ExportFileFormat/supportedOptions`` lists the ones it does.
+``ExportOptions`` adjusts how a format writes. The formats that write sound —
+a Standard MIDI File and a JohnnySonic score — render the work first (see
+IvorModel’s `Work.rendered(options:)`), so its grace notes, trills, mordents,
+tremolos and rolls become the notes that sound, and its fermatas and caesuras
+become time; ``ExportOptions/fermataMode`` says how, slowing the tempo over
+each hold by default. A Standard MIDI File also marks each fermata with a
+marker meta event, in every mode. The ``MIDIExportOptions`` of a Standard MIDI
+File give the ticks per quarter note for a beat-time work, and the frame rate
+and ticks per frame for a wall-time one. A format ignores any option it doesn’t
+use, and ``ExportFileFormat/supportedOptions`` lists the ones it does.
 
 ## Playing a work
 
@@ -113,10 +138,12 @@ A ``WorkPerformance`` is a work as a MIDI player plays it: every part’s channe
 messages, each at its time in the work, in the order they are sent. It is made
 from a work in keyboard pitch and wall time — the initializer returns `nil` for
 any other — and, optionally, a realization from IvorModel that says what each
-instrument sounds as:
+instrument sounds as. A performance plays the notes as they stand, so render
+the work first, while it’s still in beat time, then convert it:
 
 ```swift
-let playable    = try work.convert(timeBasis: .wall, pitchNotation: .keyboard)!
+let rendered    = try work.rendered().work
+let playable    = try rendered.convert(timeBasis: .wall, pitchNotation: .keyboard)!
 let performance = WorkPerformance(work: playable)!
 
 performance.duration        // the time of the last event
@@ -160,11 +187,12 @@ the error of the lower-level package that failed, if any.
  ``ExportFileFormat/Error``   | ``ExportFileFormat/write(works:options:)``
 
 Looking up a format returns `nil` for an unsupported tag, and
-``WorkPerformance/init(work:realization:)`` returns `nil` for a work not in
-keyboard pitch and wall time.
+``WorkPerformance/init(work:realization:partsWithoutExpression:)`` returns
+`nil` for a work not in keyboard pitch and wall time.
 
 ## Concurrency
 
 IvorExtern is built for Swift 6 strict concurrency. Every public type is a
-`Sendable` value type, so instances can be freely shared across tasks and actor
-boundaries.
+value type, and every one but ``ExportResult`` — whose `FileWrapper` isn’t
+`Sendable` — is `Sendable`, so instances can be freely shared across tasks and
+actor boundaries.

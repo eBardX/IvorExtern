@@ -28,14 +28,14 @@ import IvorModel
 
 // Read every work in an ABC file.
 let abc   = ImportFileFormat.importFileFormat(for: "abc")!
-let works = try abc.read(from: FileWrapper(url: abcURL))
+let works = try abc.read(from: FileWrapper(url: abcURL)).works
 
 // A Standard MIDI File holds keyboard pitch, so convert the work first.
 let midi = ExportFileFormat.exportFileFormat(for: "mid")!
 let work = try works[0].convert(timeBasis: .beat, pitchNotation: .keyboard)!
 
 if midi.canWrite(work) {
-    try midi.write(works: [work]).write(to: midiURL, originalContentsURL: nil)
+    try midi.write(works: [work]).file.write(to: midiURL, originalContentsURL: nil)
 }
 ```
 
@@ -52,6 +52,12 @@ exporting, playing a work, and error handling.
 
 - ``ImportFileFormat``
 - ``ExportFileFormat``
+
+### Results and warnings
+
+- ``ImportResult``
+- ``ExportResult``
+- ``ExternWarning``
 
 ### Options
 

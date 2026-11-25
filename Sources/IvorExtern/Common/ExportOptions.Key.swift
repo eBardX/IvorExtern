@@ -6,6 +6,9 @@ extension ExportOptions {
 
     /// An export option that a format can use (see ``ExportFileFormat/supportedOptions``).
     public enum Key {
+        /// The ``ExportOptions/fermataMode`` option, for a format that writes sound.
+        case fermataMode
+
         /// The ``MIDIExportOptions/ticksPerQuarterNote`` option, for a beat-time work.
         case midiTicksPerQuarterNote
 

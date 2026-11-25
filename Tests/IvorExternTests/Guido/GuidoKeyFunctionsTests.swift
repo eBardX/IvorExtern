@@ -14,14 +14,30 @@ import XestiTools
 // out, and back.
 //
 
-struct GuidoKeyTests {
+struct GuidoKeyFunctionsTests {
 }
 
 // MARK: -
 
-extension GuidoKeyTests {
+extension GuidoKeyFunctionsTests {
+    @Test
+    func export_tags() throws {
+        let table = try keyTable([(0, key(-3, .minor)),
+                                  (frac(1, 2), key(2, .major)),
+                                  (1, key(4, .dorian)),
+                                  (frac(5, 4), key(-1)),
+                                  (frac(3, 2), customKey([.fSharp, .bFlat])),
+                                  (frac(7, 4), .atonal)])
+        let score = try Guido.Exporter().convert(keyedStandardWork(table, pitches: Array(repeating: .c4, count: 8)))
+        let keys = symbols(in: score).compactMap { symbol -> GMNTag.NumberOrName? in
+            guard case let .tag(.key(key)) = symbol
+            else { return nil }
 
-    // MARK: Import
+            return key.key
+        }
+
+        #expect(keys == [.name("c"), .name("D"), .number(4), .number(-1), .name("free=b&f#"), .number(0)])
+    }
 
     @Test(arguments: [(#"\key<"D">"#, "0 D major"),
                       (#"\key<"b">"#, "0 B minor"),
@@ -52,52 +68,6 @@ extension GuidoKeyTests {
     }
 
     @Test
-    func roundTrip_noteAcrossAKeyChangeStaysWhole() throws {
-        // A half note from 0, and a key change a quarter note into it: the
-        // exporter splits the note there with a tie, and the `\key` between
-        // the halves mustn't break it.
-        var noteTable = NoteTable<BeatTime, Pitch>()
-
-        noteTable.insert(attack: .zero, duration: .half, pitch: .c4)
-
-        let table = try keyTable([(0, key(1, .major)), (frac(1, 4), key(-1, .major))])
-        let work = Work(name: "Keyed",
-                        content: .standardBeat([Part(name: "Piano", noteTable: noteTable)], TempoMap(), MeterTable(), table))
-        let recovered = try roundTrip(work,
-                                      exporter: Guido.Exporter(),
-                                      importer: Guido.Importer(),
-                                      fileFormat: .gmn)
-        let notes = try namedStandardPart(recovered, "Piano").noteTable
-
-        #expect(keySummary(recovered.keyTable) == ["0 G major", "1/4 F major"])
-        #expect(notes.count == 1)
-        #expect(notes.first?.duration == .half)
-    }
-
-    // MARK: Export
-
-    @Test
-    func export_tags() throws {
-        let table = try keyTable([(0, key(-3, .minor)),
-                                  (frac(1, 2), key(2, .major)),
-                                  (1, key(4, .dorian)),
-                                  (frac(5, 4), key(-1)),
-                                  (frac(3, 2), customKey([.fSharp, .bFlat])),
-                                  (frac(7, 4), .atonal)])
-        let score = try Guido.Exporter().convert(keyedStandardWork(table, pitches: Array(repeating: .c4, count: 8)))
-        let keys = symbols(in: score).compactMap { symbol -> GMNTag.NumberOrName? in
-            guard case let .tag(.key(key)) = symbol
-            else { return nil }
-
-            return key.key
-        }
-
-        #expect(keys == [.name("c"), .name("D"), .number(4), .number(-1), .name("free=b&f#"), .number(0)])
-    }
-
-    // MARK: Round trips
-
-    @Test
     func roundTrip_keysAndModes() throws {
         let table = try keyTable([(0, key(-6, .minor)),
                                   (frac(1, 4), key(7, .major)),
@@ -124,5 +94,28 @@ extension GuidoKeyTests {
                                       fileFormat: .gmn)
 
         #expect(recovered.keyTable?.isEmpty == true)
+    }
+
+    @Test
+    func roundTrip_noteAcrossAKeyChangeStaysWhole() throws {
+        // A half note from 0, and a key change a quarter note into it: the
+        // exporter splits the note there with a tie, and the `\key` between
+        // the halves mustn't break it.
+        var noteTable = NoteTable<BeatTime, Pitch>()
+
+        noteTable.insert(attack: .zero, duration: .half, pitch: .c4)
+
+        let table = try keyTable([(0, key(1, .major)), (frac(1, 4), key(-1, .major))])
+        let work = Work(name: "Keyed",
+                        content: .standardBeat([Part(name: "Piano", noteTable: noteTable)], TempoMap(), MeterTable(), table))
+        let recovered = try roundTrip(work,
+                                      exporter: Guido.Exporter(),
+                                      importer: Guido.Importer(),
+                                      fileFormat: .gmn)
+        let notes = try namedStandardPart(recovered, "Piano").noteTable
+
+        #expect(keySummary(recovered.keyTable) == ["0 G major", "1/4 F major"])
+        #expect(notes.count == 1)
+        #expect(notes.first?.duration == .half)
     }
 }

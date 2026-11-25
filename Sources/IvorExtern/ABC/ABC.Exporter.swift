@@ -18,23 +18,7 @@ extension ABC {
     // Not a namespace: `ExporterProtocol`'s instance members live in the
     // following extension, invisible to this check from here.
     // swiftformat:disable:next enumNamespaces
-    internal struct Exporter { // swiftlint:disable:this convenience_type
-
-        // MARK: Private Nested Types
-
-        private struct Event {
-
-            // MARK: Fileprivate Instance Properties
-
-            fileprivate let attack: BeatTime
-            fileprivate let duration: BeatDuration
-            fileprivate var extrasList: [Extras?]
-            fileprivate var pitches: [IvorTuning.Pitch]
-
-            fileprivate var end: BeatTime {
-                BeatTime(attack.numberValue + duration.numberValue)
-            }
-        }
+    internal struct Exporter {
     }
 }
 
@@ -44,9 +28,11 @@ extension ABC.Exporter {
 
     // MARK: Internal Instance Methods
 
-    internal func convert(_ work: Work) throws(ABC.Error) -> ABCTune {
+    internal func convert(_ work: Work,
+                          workIndex: Int? = nil,
+                          warnings: WarningCollector = WarningCollector()) throws(ABC.Error) -> ABCTune {
         do {
-            return try Self._convert(work: work)
+            return try Self._convert(work: work) { warnings.add($0, workIndex: workIndex) }
         } catch let error as any EnhancedError {
             throw ABC.Error.convertFailure(error)
         } catch {
@@ -61,7 +47,7 @@ extension ABC.Exporter {
 
     // MARK: Private Type Methods
 
-    private static func _boundaries(events: [Event],
+    private static func _boundaries(tones: [ExportTone],
                                     barTimes: Set<BeatTime>,
                                     keyTimes: [BeatTime],
                                     endTime: BeatTime) -> [BeatTime] {
@@ -75,15 +61,16 @@ extension ABC.Exporter {
             boundaries.insert(keyTime)
         }
 
-        for event in events {
-            boundaries.insert(event.attack)
-            boundaries.insert(event.end)
+        for tone in tones {
+            boundaries.insert(tone.attack)
+            boundaries.insert(tone.end)
         }
 
         return boundaries.sorted()
     }
 
-    private static func _convert(work: Work) throws(ABC.Error) -> ABCTune {
+    private static func _convert(work: Work,
+                                 report: (ExternWarning.Kind) -> Void) throws(ABC.Error) -> ABCTune {
         guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
         else {
             guard work.pitchNotation == .standard
@@ -101,7 +88,8 @@ extension ABC.Exporter {
                                  keyTable: keyTable)
         let body = try _makeBody(parts: parts,
                                  bars: bars,
-                                 keyTable: keyTable)
+                                 keyTable: keyTable,
+                                 report: report)
 
         guard let tune = ABCTune(header: header,
                                  body: body)
@@ -156,30 +144,6 @@ extension ABC.Exporter {
         }
 
         return annotations
-    }
-
-    // Every note table entry is walked once, in time order. Consecutive
-    // entries sharing an attack time and a duration are a chord (§4.17);
-    // anything else stays a separate event. Ending pitch is dropped — a
-    // glissando exports at its start pitch, per the module-wide rule.
-    private static func _events(_ noteTable: NoteTable<BeatTime, Pitch>) -> [Event] {
-        var events: [Event] = []
-
-        for note in noteTable {
-            if let last = events.last,
-               last.attack == note.attack,
-               last.duration == note.duration {
-                events[events.count - 1].pitches.append(note.startPitch)
-                events[events.count - 1].extrasList.append(note.extras)
-            } else {
-                events.append(Event(attack: note.attack,
-                                    duration: note.duration,
-                                    extrasList: [note.extras],
-                                    pitches: [note.startPitch]))
-            }
-        }
-
-        return events
     }
 
     // The string fields after the title (see `ABC.Importer._makeInfo`
@@ -288,8 +252,8 @@ extension ABC.Exporter {
 
     // Decoration symbols (Tier 1 flags + the `articulation` catch-all) plus
     // a `(` slur-start marker, both written immediately before a note/
-    // chord's own symbol(s) — only called for an event's *first* segment,
-    // never a tie-continuation.
+    // chord's own symbol(s), from the tones attacked there — never from a
+    // tie-continuation.
     private static func _leadingArticulationSymbols(_ extrasList: [Extras?]) -> [ABCSymbol] {
         let elements = _unionElements(extrasList)
         var symbols: [ABCSymbol] = []
@@ -307,74 +271,13 @@ extension ABC.Exporter {
         return symbols
     }
 
-    // A non-power-of-2 denominator has no plain ABC spelling (`ABCLength`
-    // requires one), so the odd factor left after removing every factor of
-    // 2 becomes the tuplet's `noteCount`, always paired with an explicit
-    // `beatCount` of 2 chosen by this exporter — since both the tuplet
-    // marker and the written length it precedes are emitted together here,
-    // there's no need to match ABC's own note-count-keyed default beat
-    // count table (§4.13); only internal consistency with the written
-    // length below matters. `affectedCount` is always 1: every event gets
-    // its own tuplet marker rather than trying to merge a run of equal
-    // durations into one grouped marker, so a chord and a following single
-    // note each scale independently even when they'd share a marker in
-    // idiomatic hand-written ABC.
-    private static func _lengthAndTuplet(for duration: BeatDuration) throws(ABC.Error) -> (length: ABCLength, tuplet: ABCTuplet?) {
-        // In units of the `L:1/4` this exporter always writes.
-        let numberValue = duration.numberValue * 4
-
-        guard numberValue.isRational
-        else { throw ABC.Error.unrepresentableDuration("\(duration)") }
-
-        let numerator = numberValue.numerator.uintValue
-        let denominator = numberValue.denominator.uintValue
-
-        guard numerator > 0
-        else { throw ABC.Error.unrepresentableDuration("\(duration)") }
-
-        var oddPart = denominator
-
-        while oddPart.isMultiple(of: 2) {
-            oddPart /= 2
-        }
-
-        if oddPart == 1 {
-            guard let length = ABCLength(numerator: numerator,
-                                         denominator: denominator)
-            else { throw ABC.Error.unrepresentableDuration("\(duration)") }
-
-            return (length, nil)
-        }
-
-        guard (2...9).contains(oddPart),
-              let tuplet = ABCTuplet(noteCount: oddPart,
-                                     beatCount: 2,
-                                     affectedCount: 1)
-        else { throw ABC.Error.unrepresentableDuration("\(duration)") }
-
-        // `ABCLength.init?` requires the *raw* denominator it's given to
-        // already be a power of 2 — it validates before reducing, so a
-        // denominator that would only become one after gcd reduction still
-        // fails. Written length = duration × noteCount / beatCount =
-        // (numerator / (oddPart × pow2Part)) × (oddPart / 2); the `oddPart`
-        // introduced by the tuplet scale exactly cancels the one just
-        // divided out of `denominator`, leaving `numerator` unchanged over
-        // a denominator of `pow2Part × 2` — already a power of 2 by
-        // construction, with no reduction required.
-        let pow2Part = denominator / oddPart
-
-        guard let length = ABCLength(numerator: numerator,
-                                     denominator: pow2Part * 2)
-        else { throw ABC.Error.unrepresentableDuration("\(duration)") }
-
-        return (length, tuplet)
-    }
-
     private static func _makeBody(parts: [Part<BeatTime, Pitch>],
                                   bars: [ExportBar],
-                                  keyTable: KeyTable) throws(ABC.Error) -> [ABCBodyEntry] {
+                                  keyTable: KeyTable,
+                                  report: (ExternWarning.Kind) -> Void) throws(ABC.Error) -> [ABCBodyEntry] {
         var body: [ABCBodyEntry] = []
         let needsVoiceFields = _needsVoiceFields(parts: parts)
+        let sharedRolls = RollKey.sharedRolls(parts)
 
         for index in parts.indices {
             if needsVoiceFields {
@@ -382,8 +285,11 @@ extension ABC.Exporter {
             }
 
             body += try _makePartBody(part: parts[index],
+                                      partIndex: index,
                                       bars: bars,
-                                      keyTable: keyTable)
+                                      keyTable: keyTable,
+                                      sharedRolls: sharedRolls,
+                                      report: report)
         }
 
         return body
@@ -443,32 +349,43 @@ extension ABC.Exporter {
     }
 
     // Lays one part's notes onto the work's bars (see
-    // `exportBars(_:through:)`): a note or chord crossing a barline splits
-    // into tied segments (each independently tuplet-scaled), gaps become
-    // rests, and every bar sums to its actual length, so a pickup or a short
-    // bar is written short. A bar whose meter is written (other than the
+    // `exportBars(_:through:)`): each piece between boundaries (see
+    // `ExportSlice`) is one note, chord or rest, each independently
+    // tuplet-scaled; a note crossing a barline, or held across another
+    // note's attack or release, splits into tied pieces. Every bar sums to
+    // its actual length, so a pickup or a short bar is written short. A bar whose meter is written (other than the
     // first, whose meter is the header's `M:`) starts with an inline `[M:…]`
-    // field. See `_lengthAndTuplet(for:)` for how a non-power-of-2 duration
+    // field. See `lengthAndTuplet(for:)` for how a non-power-of-2 duration
     // becomes a tuplet-marked segment instead. Only the sustain pedal is
     // written, as abcm2ps's `!ped!`/`!ped-up!` on the first note at or after
     // each change (see `_pedalDecorations(_:)`).
     private static func _makePartBody(part: Part<BeatTime, Pitch>,
+                                      partIndex: Int,
                                       bars: [ExportBar],
-                                      keyTable: KeyTable) throws(ABC.Error) -> [ABCBodyEntry] {
-        let events = _events(part.noteTable)
+                                      keyTable: KeyTable,
+                                      sharedRolls: [RollKey: Int],
+                                      report: (ExternWarning.Kind) -> Void) throws(ABC.Error) -> [ABCBodyEntry] {
+        let tones = ExportTone.tones(of: part.noteTable)
         let annotations = _dynamicAnnotations(part.dynamicMap)
         let directives = _instrumentDirectives(part)
         let pedalDecorations = _pedalDecorations(part.pedals[.sustain])
         let endTime = bars.last?.end ?? .zero
         let barTimes = Set(bars.dropFirst().map(\.start))
         let meterChanges = _meterChanges(bars)
-        let sortedBoundaries = _boundaries(events: events,
+        let sortedBoundaries = _boundaries(tones: tones,
                                            barTimes: barTimes,
                                            keyTimes: keyTable.map(\.beatTime),
                                            endTime: endTime)
+        let slices = ExportSlice.slices(of: tones,
+                                        at: sortedBoundaries)
+        let fermataMarks = FermataMarkPlacements(part.markTable,
+                                                 sliceStarts: Set(slices.map(\.start)),
+                                                 barTimes: barTimes.union([endTime]),
+                                                 report: report)
         var accidentals = AccidentalState(keyTable: keyTable)
         var entries: [ABCBodyEntry] = []
         var pending: [ABCSymbol] = []
+        var carriedFigure: NoteTable<BeatTime, Pitch>.GraceFigure?
         var directiveIndex = 0
         var pedalIndex = 0
 
@@ -480,12 +397,9 @@ extension ABC.Exporter {
             pending = []
         }
 
-        for index in 0..<(sortedBoundaries.count - 1) {
-            let start = sortedBoundaries[index]
-            let end = sortedBoundaries[index + 1]
-
-            guard start < end
-            else { continue }
+        for slice in slices {
+            let start = slice.start
+            let end = slice.end
 
             pending += meterChanges[start].map { [.inlineField(.meter($0))] } ?? []
 
@@ -507,30 +421,51 @@ extension ABC.Exporter {
 
             let segmentDuration = BeatDuration(end.numberValue - start.numberValue)
 
-            if let event = events.first(where: { $0.attack <= start && $0.end >= end }) {
-                let isFirstSegment = event.attack == start
-                let isLastSegment = event.end == end
+            if !slice.tones.isEmpty {
+                let attackedTones = slice.attackedTones
+                let releasedTones = slice.releasedTones
 
-                if isFirstSegment {
+                if !attackedTones.isEmpty {
                     while pedalIndex < pedalDecorations.count,
                           pedalDecorations[pedalIndex].0 <= start {
                         pending.append(.decoration(pedalDecorations[pedalIndex].1))
                         pedalIndex += 1
                     }
 
-                    pending += _leadingArticulationSymbols(event.extrasList)
+                    pending += try graceSymbols(attackedTones,
+                                                carried: carriedFigure,
+                                                accidentals: &accidentals,
+                                                report: report)
+                    pending += ornamentSymbols(attackedTones,
+                                               duration: segmentDuration,
+                                               hasFermataMark: fermataMarks.atStart[start] != nil,
+                                               sharedRolls: sharedRolls,
+                                               partIndex: partIndex,
+                                               report: report)
+                    pending += _leadingArticulationSymbols(attackedTones.map(\.extras))
+                    carriedFigure = nil
                 }
 
-                pending += try _makeSymbols(pitches: event.pitches,
+                pending += try _noteSymbols(slice: slice,
                                             duration: segmentDuration,
-                                            tie: !isLastSegment,
                                             accidentals: &accidentals)
 
-                if isLastSegment {
-                    pending += _trailingSlurEndSymbol(event.extrasList)
+                pending += _trailingSlurEndSymbol(releasedTones.map(\.extras))
+
+                //
+                // ABC has no figure after a note: it graces the next note instead.
+                //
+                if let figure = releasedTones.lazy.compactMap(\.ornamentation?.graceAfter).first {
+                    carriedFigure = figure
+                    report(.movedFigureAfterNote)
                 }
             } else {
-                pending += try _makeRestSymbols(duration: segmentDuration)
+                pending += try _makeRestSymbols(duration: segmentDuration,
+                                                hasFermata: fermataMarks.atStart[start] != nil)
+            }
+
+            if fermataMarks.beforeBar[end] != nil {
+                pending.append(abcDecoration("fermata"))
             }
 
             if barTimes.contains(end) {
@@ -547,9 +482,10 @@ extension ABC.Exporter {
 
     // A rest never carries a tie, so a tuplet-scaled rest segment simply
     // emits its (optional) tuplet marker followed by the rest itself.
-    private static func _makeRestSymbols(duration: BeatDuration) throws(ABC.Error) -> [ABCSymbol] {
-        let (length, tuplet) = try _lengthAndTuplet(for: duration)
-        var symbols: [ABCSymbol] = []
+    private static func _makeRestSymbols(duration: BeatDuration,
+                                         hasFermata: Bool = false) throws(ABC.Error) -> [ABCSymbol] {
+        let (length, tuplet) = try lengthAndTuplet(for: duration)
+        var symbols: [ABCSymbol] = hasFermata ? [abcDecoration("fermata")] : []
 
         if let tuplet {
             symbols.append(.tuplet(tuplet))
@@ -560,42 +496,44 @@ extension ABC.Exporter {
         return symbols
     }
 
-    // `tie` is `true` when this segment is not the last piece of a note or
-    // chord split across a barline — see
-    // `_makePartBody(part:bars:keyTable:)`. Each pitch is written
-    // relative to the key signature and the bar's accidentals so far (see
-    // `AccidentalState`).
-    private static func _makeSymbols(pitches: [Pitch],
+    // Each tone that continues past `slice` gets a tie of its own (`[C-E]`
+    // ties only the C, §4.11); a chord whose every tone continues is also
+    // tied as a whole (`[C-E-]-`). Each pitch is written relative to the key
+    // signature and the bar's accidentals so far (see `AccidentalState`).
+    private static func _makeSymbols(slice: ExportSlice,
                                      duration: BeatDuration,
-                                     tie: Bool,
                                      accidentals: inout AccidentalState) throws(ABC.Error) -> [ABCSymbol] {
-        let (length, tuplet) = try _lengthAndTuplet(for: duration)
+        let (length, tuplet) = try lengthAndTuplet(for: duration)
         var symbols: [ABCSymbol] = []
 
         if let tuplet {
             symbols.append(.tuplet(tuplet))
         }
 
-        let tieValue: ABCTie? = tie ? .regular : nil
+        func tie(_ tone: ExportTone) -> ABCTie? {
+            slice.continues(tone) ? .regular : nil
+        }
 
-        if pitches.count == 1 {
-            try symbols.append(.note(ABCNote(pitch: accidentals.abcPitch(for: pitches[0]),
+        if slice.tones.count == 1 {
+            let tone = slice.tones[0]
+
+            try symbols.append(.note(ABCNote(pitch: accidentals.abcPitch(for: tone.pitch),
                                              length: length,
-                                             tie: tieValue)))
+                                             tie: tie(tone))))
         } else {
             let unitLength = ABCLength(numerator: 1,
                                        denominator: 1).require()
             var notes: [ABCNote] = []
 
-            for pitch in pitches {
-                try notes.append(ABCNote(pitch: accidentals.abcPitch(for: pitch),
+            for tone in slice.tones {
+                try notes.append(ABCNote(pitch: accidentals.abcPitch(for: tone.pitch),
                                          length: unitLength,
-                                         tie: tieValue))
+                                         tie: tie(tone)))
             }
 
             guard let chord = ABCChord(notes: notes,
                                        length: length,
-                                       tie: tieValue)
+                                       tie: slice.isWhollyTied ? .regular : nil)
             else { throw ABC.Error.unrepresentableDuration("\(duration)") }
 
             symbols.append(.chord(chord))
@@ -643,6 +581,22 @@ extension ABC.Exporter {
     // `V:` field, since that's ABC's only place to record a part name.
     private static func _needsVoiceFields(parts: [Part<BeatTime, Pitch>]) -> Bool {
         parts.count > 1 || parts.first.map { !$0.name.isEmpty } ?? false
+    }
+
+    // A note or chord, or a two-note tremolo written back as its two halves (see
+    // `twoNoteTremoloSymbols(_:duration:accidentals:)`).
+    private static func _noteSymbols(slice: ExportSlice,
+                                     duration: BeatDuration,
+                                     accidentals: inout AccidentalState) throws(ABC.Error) -> [ABCSymbol] {
+        if let halves = try twoNoteTremoloSymbols(slice,
+                                                  duration: duration,
+                                                  accidentals: &accidentals) {
+            return halves
+        }
+
+        return try _makeSymbols(slice: slice,
+                                duration: duration,
+                                accidentals: &accidentals)
     }
 
     // The sustain pedal thresholded at `Pedal.Level.isDown`: `!ped!` where it
@@ -709,7 +663,7 @@ extension ABC.Exporter {
     }
 
     // A `)` slur-end marker, written immediately after a note/chord's own
-    // symbol(s) — only called for an event's *last* segment.
+    // symbol(s), from the tones released there.
     private static func _trailingSlurEndSymbol(_ extrasList: [Extras?]) -> [ABCSymbol] {
         _unionElements(extrasList).contains { $0.name == Extra.slurEnd.name } ? [.slur(.endRegular)] : []
     }
@@ -750,13 +704,16 @@ extension ABC.Exporter: ExporterProtocol {
     // exactly one.
     internal func write(works: [Work],
                         as fileFormat: FileFormat,
-                        options: ExportOptions = .default) throws(ABC.Error) -> FileWrapper {
+                        options: ExportOptions = .default,
+                        warnings: WarningCollector = WarningCollector()) throws(ABC.Error) -> FileWrapper {
         switch fileFormat {
         case .abc:
             guard !works.isEmpty
             else { throw ABC.Error.noWorksToExport }
 
-            let tunes = try works.map(convert)
+            let tunes = try works.enumerated().map { index, work throws(ABC.Error) in
+                try convert(work, workIndex: index, warnings: warnings)
+            }
 
             guard let tunebook = ABCTunebook(fileHeader: [],
                                              tunes: tunes)

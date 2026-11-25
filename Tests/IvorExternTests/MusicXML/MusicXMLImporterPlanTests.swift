@@ -117,6 +117,33 @@ extension MusicXMLImporterPlanTests {
     }
 
     @Test
+    func init_endingStopWithNoStart_closingARepeat_isAFirstEnding() throws {
+        //
+        // Old Finale exports close a first ending that was never opened, with an
+        // empty number, on the barline of its backward repeat.
+        //
+        let strayStop = #"<barline location="right"><ending number="" type="stop"/><repeat direction="backward"/></barline>"#
+        let order = try plannedOrder([forward,
+                                      strayStop,
+                                      lastEnding(2),
+                                      ""])
+
+        #expect(order == [0, 1, 0, 2, 3])
+    }
+
+    @Test
+    func init_endingStopWithNoStart_elsewhere_endsNothing() throws {
+        let strayStop = #"<barline location="right"><ending number="2" type="stop"/></barline>"#
+        let order = try plannedOrder([forward,
+                                      firstEnding(1),
+                                      lastEnding(2),
+                                      strayStop,
+                                      ""])
+
+        #expect(order == [0, 1, 0, 2, 3, 4])
+    }
+
+    @Test
     func init_explicitTimes_winsOverFewerEndings() throws {
         let start = #"<barline location="left"><ending number="1, 2" type="start"/></barline>"#
         let stop = #"<ending number="1, 2" type="stop"/><repeat direction="backward" times="3"/>"#
@@ -167,33 +194,6 @@ extension MusicXMLImporterPlanTests {
         let plan = try MusicXML.Importer.Plan(score)
 
         #expect(plan.order == [0, 1, 0, 2, 3])
-    }
-
-    @Test
-    func init_endingStopWithNoStart_closingARepeat_isAFirstEnding() throws {
-        //
-        // Old Finale exports close a first ending that was never opened, with an
-        // empty number, on the barline of its backward repeat.
-        //
-        let strayStop = #"<barline location="right"><ending number="" type="stop"/><repeat direction="backward"/></barline>"#
-        let order = try plannedOrder([forward,
-                                      strayStop,
-                                      lastEnding(2),
-                                      ""])
-
-        #expect(order == [0, 1, 0, 2, 3])
-    }
-
-    @Test
-    func init_endingStopWithNoStart_elsewhere_endsNothing() throws {
-        let strayStop = #"<barline location="right"><ending number="2" type="stop"/></barline>"#
-        let order = try plannedOrder([forward,
-                                      firstEnding(1),
-                                      lastEnding(2),
-                                      strayStop,
-                                      ""])
-
-        #expect(order == [0, 1, 0, 2, 3, 4])
     }
 
     @Test

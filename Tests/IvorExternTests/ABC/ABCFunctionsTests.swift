@@ -41,14 +41,11 @@ extension ABCFunctionsTests {
     @Test(arguments: [Extra.accent,
                       .breathMark,
                       .downBow,
-                      .fermata,
                       .harmonic,
                       .marcato,
-                      .mordent,
                       .pizzicato,
                       .staccato,
                       .tenuto,
-                      .trill,
                       .turn,
                       .upBow])
     func convertToABCDecorationName_extra_tier1Flag_roundTrips(extra: Extra) throws {
@@ -112,11 +109,8 @@ extension ABCFunctionsTests {
     @Test
     func convertToArticulationExtra_aliases_readAsTheirFlag() throws {
         let aliases: [(String, Extra)] = [("emphasis", .accent),
-                                          ("invertedfermata", .fermata),
-                                          ("lowermordent", .mordent),
                                           ("open", .harmonic),
-                                          ("plus", .pizzicato),
-                                          ("uppermordent", .mordent)]
+                                          ("plus", .pizzicato)]
 
         for (text, extra) in aliases {
             let name = try #require(ABCDecoration.Name(stringValue: text))
@@ -127,9 +121,9 @@ extension ABCFunctionsTests {
 
     @Test
     func convertToArticulationExtra_ignoresCase() throws {
-        let name = try #require(ABCDecoration.Name(stringValue: "TRILL"))
+        let name = try #require(ABCDecoration.Name(stringValue: "ACCENT"))
 
-        #expect(convertToArticulationExtra(name)?.name == Extra.trill.name)
+        #expect(convertToArticulationExtra(name)?.name == Extra.accent.name)
     }
 
     @Test

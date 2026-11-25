@@ -181,14 +181,11 @@ extension MusicXMLFunctionsTests {
     @Test(arguments: [Extra.accent,
                       .breathMark,
                       .downBow,
-                      .fermata,
                       .harmonic,
                       .marcato,
-                      .mordent,
                       .pizzicato,
                       .staccato,
                       .tenuto,
-                      .trill,
                       .turn,
                       .upBow])
     func convertToMusicXMLNotationItems_tier1Flag_roundTripsThroughImport(extra: Extra) throws {
