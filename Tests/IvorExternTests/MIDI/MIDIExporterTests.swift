@@ -69,7 +69,7 @@ extension MIDIExporterTests {
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(recoveredParts, _, _, _) = recovered.content
+        guard case let .keyboardBeat(recoveredParts, _, _, _) = recovered.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         let recoveredChannels = recoveredParts.map { intValue($0.extras, .midiChannel) }
@@ -1190,7 +1190,7 @@ extension MIDIExporterTests {
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _, _) = recovered.content,
+        guard case let .keyboardBeat(parts, _, _, _) = recovered.content.cases,
               let recoveredPart = parts.first
         else { Issue.record("Expected a recovered part"); return }
 
@@ -1574,7 +1574,7 @@ extension MIDIExporterTests {
         let sequence = try MIDI.Exporter().convert(work)
         let recovered = try MIDI.Importer().convert(sequence)
 
-        guard case let .keyboardBeat(parts, _, _, _) = recovered.content,
+        guard case let .keyboardBeat(parts, _, _, _) = recovered.content.cases,
               let recoveredPart = parts.first
         else { Issue.record("Expected a recovered part"); return }
 

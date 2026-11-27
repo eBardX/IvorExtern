@@ -64,6 +64,7 @@ extension ABCImporterOrnamentsTests {
 
     @Test
     func isEmpty_eachDecoration() throws {
+        let group = try #require(ArpeggioGroup(uintValue: 1))
         var arpeggio = ABC.Importer.Ornaments()
         var fermata = ABC.Importer.Ornaments()
         var graceAfter = ABC.Importer.Ornaments()
@@ -71,7 +72,7 @@ extension ABCImporterOrnamentsTests {
         var ornament = ABC.Importer.Ornaments()
         var tremolo = ABC.Importer.Ornaments()
 
-        arpeggio.arpeggio = try #require(ArpeggioGroup(uintValue: 1))
+        arpeggio.arpeggio = group
         fermata.fermata = true
         graceAfter.graceAfter = try graceFigure("D4")
         graceBefore.graceBefore = try graceFigure("D4")

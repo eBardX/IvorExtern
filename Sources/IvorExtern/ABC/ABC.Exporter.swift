@@ -71,7 +71,7 @@ extension ABC.Exporter {
 
     private static func _convert(work: Work,
                                  report: (ExternWarning.Kind) -> Void) throws(ABC.Error) -> ABCTune {
-        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content.cases
         else {
             guard work.pitchNotation == .standard
             else { throw ABC.Error.unsupportedPitchNotation(work.pitchNotation) }

@@ -249,7 +249,7 @@ extension MIDI.Exporter {
                                  exportTimeCode: MIDI.TimeCode) throws(MIDI.Error) -> MIDI.Sequence {
         let timeCode = determineTimeCode(work)
 
-        switch work.content {
+        switch work.content.cases {
         case let .keyboardBeat(parts, tempoMap, meterTable, keyTable):
             return try _convert(work: work,
                                 parts: parts,

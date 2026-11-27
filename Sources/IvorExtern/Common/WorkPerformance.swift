@@ -97,7 +97,7 @@ public struct WorkPerformance {
     public init?(work: Work,
                  realization: Realization? = nil,
                  partsWithoutExpression: Set<Int> = []) {
-        guard case let .keyboardWall(parts) = work.content
+        guard case let .keyboardWall(parts) = work.content.cases
         else { return nil }
 
         let partChannels = parts.indices.map { Self.channels[$0 % Self.channels.count] }

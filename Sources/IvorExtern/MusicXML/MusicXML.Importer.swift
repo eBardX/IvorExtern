@@ -58,12 +58,12 @@ extension MusicXML.Importer {
 
         let groupNames = _groupNames(score)
 
-        return try Work(name: determineWorkName(score),
-                        content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
-                                               _makeTempoMap(results.flatMap(\.tempoEvents)),
-                                               makeMeterTable(results.first?.barlines ?? []),
-                                               makeKeyTable(results.first?.keyEvents ?? [])),
-                        info: determineWorkInfo(score))
+        return Work(name: determineWorkName(score),
+                    content: .standardBeat(fillEmptyPartNames(_convert(results, groupNames)),
+                                           _makeTempoMap(results.flatMap(\.tempoEvents)),
+                                           makeMeterTable(results.first?.barlines ?? []),
+                                           makeKeyTable(results.first?.keyEvents ?? [])),
+                    info: determineWorkInfo(score))
     }
 
     // Each Ivor `Part` carries a single note table, so a MusicXML part with

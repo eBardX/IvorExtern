@@ -65,7 +65,7 @@ extension MIDIFormatterTests {
         let parsedSequence = try MIDI.Parser().parse(data)
         let recovered = try MIDI.Importer().convert(parsedSequence)
 
-        guard case let .keyboardBeat(recoveredParts, _, _, _) = recovered.content
+        guard case let .keyboardBeat(recoveredParts, _, _, _) = recovered.content.cases
         else { Issue.record("Unexpected content type"); return }
 
         var totalNotes = 0

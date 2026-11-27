@@ -175,7 +175,7 @@ extension GuidoExporterTests {
         let score = try Guido.Exporter().convert(standardBeatWork(parts: parts))
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(imported, _, _, _) = work.content
+        guard case let .standardBeat(imported, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(imported.map(\.name) == ["Voice 1", "Bass"])

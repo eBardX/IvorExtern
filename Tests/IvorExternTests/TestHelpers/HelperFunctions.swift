@@ -71,28 +71,28 @@ internal func notes(in part: Part<BeatTime, Pitch>,
 }
 
 internal func absoluteBeatParts(of work: Work) -> [Part<BeatTime, Frequency>]? {
-    guard case let .absoluteBeat(parts, _, _, _) = work.content
+    guard case let .absoluteBeat(parts, _, _, _) = work.content.cases
     else { return nil }
 
     return parts
 }
 
 internal func keyboardBeatParts(of work: Work) -> [Part<BeatTime, NoteNumber>]? {
-    guard case let .keyboardBeat(parts, _, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
     else { return nil }
 
     return parts
 }
 
 internal func keyboardWallParts(of work: Work) -> [Part<WallTime, NoteNumber>]? {
-    guard case let .keyboardWall(parts) = work.content
+    guard case let .keyboardWall(parts) = work.content.cases
     else { return nil }
 
     return parts
 }
 
 internal func standardBeatParts(of work: Work) -> [Part<BeatTime, Pitch>]? {
-    guard case let .standardBeat(parts, _, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content.cases
     else { return nil }
 
     return parts
@@ -744,7 +744,7 @@ internal func unnamedPartNames(_ track: SMFTrack) throws -> [String] {
                                tracks: [track])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
     else { Issue.record("Expected keyboardBeat content"); return [] }
 
     return parts.map(\.name)
@@ -1150,7 +1150,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
         \(body)
         """)
 
-    guard case let .standardBeat(parts, _, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content.cases
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1159,7 +1159,7 @@ internal func abcPedalPart(_ body: String) throws -> Part<BeatTime, Pitch> {
 internal func guidoPedalPart(_ gmn: String) throws -> Part<BeatTime, Pitch> {
     let work = try Guido.Importer().convert(Guido.Parser().parse(Data(gmn.utf8)))
 
-    guard case let .standardBeat(parts, _, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content.cases
     else { Issue.record("Expected standardBeat content"); throw CancellationError() }
 
     return try #require(parts.first)
@@ -1185,7 +1185,7 @@ internal func midiImportedPedals(_ events: [(tick: UInt, controller: MIDIControl
                                tracks: [SMFTrack(events: smfEvents)])
     let work = try MIDI.Importer().convert(sequence)
 
-    guard case let .keyboardBeat(parts, _, _, _) = work.content
+    guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
     else { Issue.record("Expected keyboardBeat content"); return [:] }
 
     return try #require(parts.first).pedals
@@ -1236,7 +1236,7 @@ internal func musicXMLImportedParts(_ musicXML: String) throws -> [Part<BeatTime
                                              as: .musicXML)
     let work = try #require(works.first)
 
-    guard case let .standardBeat(parts, _, _, _) = work.content
+    guard case let .standardBeat(parts, _, _, _) = work.content.cases
     else { Issue.record("Expected standardBeat content"); return [] }
 
     return parts

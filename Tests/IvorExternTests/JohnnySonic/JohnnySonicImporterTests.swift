@@ -35,7 +35,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(before), .end, .pitchesNote(after)])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .absoluteBeat(parts, _, _, _) = work.content
+        guard case let .absoluteBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected absoluteBeat content"); return }
 
         var attacks: [BeatTime] = []
@@ -66,7 +66,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(first), .pitchesNote(second), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(parts, _, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         // Every `/Pitches` line has its own instrument, read off at its own
@@ -96,7 +96,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(parts, _, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(parts[0].instrumentTable[.zero] == Instrument("Piano"))
@@ -121,7 +121,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(before), .end, .pitchesNote(after)])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(parts, _, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var attacks: [BeatTime] = []
@@ -147,7 +147,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(first), .tempoLine(second), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         //
@@ -172,7 +172,7 @@ extension JohnnySonicImporterTests {
                                   instrument: "Piano")
         let work = try JohnnySonic.Importer().convert(JohnnySonic.Score(commands: [.pitchesNote(note)]))
 
-        guard case let .keyboardBeat(parts, _, _, _) = work.content
+        guard case let .keyboardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         var noteVelocities: [Int?] = []
@@ -226,7 +226,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .end, .tempoLine(tempo)])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(tempoMap.isEmpty)
@@ -245,7 +245,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(tempo), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
@@ -270,7 +270,7 @@ extension JohnnySonicImporterTests {
         let score = JohnnySonic.Score(commands: [.pitchesNote(note), .tempoLine(ramp), .end])
         let work = try JohnnySonic.Importer().convert(score)
 
-        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content
+        guard case let .keyboardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected keyboardBeat content"); return }
 
         #expect(tempoMap[convertToBeatTime(0.5)] == Tempo(65))
@@ -297,7 +297,7 @@ extension JohnnySonicImporterTests {
 
         #expect(read.count == 1)
 
-        if case let .absoluteBeat(parts, _, _, _) = read[0].content {
+        if case let .absoluteBeat(parts, _, _, _) = read[0].content.cases {
             #expect(parts.count == 1)
             #expect(!parts[0].noteTable.isEmpty)
         } else {
@@ -343,7 +343,7 @@ extension JohnnySonicImporterTests {
         #expect(read.count == 1)
         #expect(read[0].name == "Round Trip")
 
-        if case let .keyboardBeat(parts, _, _, _) = read[0].content {
+        if case let .keyboardBeat(parts, _, _, _) = read[0].content.cases {
             #expect(parts.count == 1)
             #expect(!parts[0].noteTable.isEmpty)
         } else {
@@ -371,7 +371,7 @@ extension JohnnySonicImporterTests {
         let read = try JohnnySonic.Importer().read(from: written,
                                                    as: .dkm)
 
-        if case let .keyboardBeat(parts, _, _, _) = read[0].content {
+        if case let .keyboardBeat(parts, _, _, _) = read[0].content.cases {
             #expect(parts[0].dynamicMap[BeatTime(0)] == .mp)
         } else {
             Issue.record("Expected keyboardBeat content")
@@ -400,7 +400,7 @@ extension JohnnySonicImporterTests {
         let read = try JohnnySonic.Importer().read(from: written,
                                                    as: .dkm)
 
-        if case let .keyboardBeat(parts, _, _, _) = read[0].content {
+        if case let .keyboardBeat(parts, _, _, _) = read[0].content.cases {
             #expect(parts[0].panMap[BeatTime(0)] == Pan(horizontal: 45))
         } else {
             Issue.record("Expected keyboardBeat content")
@@ -435,7 +435,7 @@ extension JohnnySonicImporterTests {
 
         #expect(read.count == 1)
 
-        if case let .keyboardBeat(_, readTempoMap, _, _) = read[0].content {
+        if case let .keyboardBeat(_, readTempoMap, _, _) = read[0].content.cases {
             #expect(!readTempoMap.isEmpty)
         } else {
             Issue.record("Expected keyboardBeat content")

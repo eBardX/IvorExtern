@@ -62,14 +62,14 @@ extension ABC.Importer {
         }
         let tempoEvents = results.flatMap(\.context.tempoEvents)
 
-        return try Work(name: determineWorkName(tune),
-                        content: .standardBeat(fillEmptyPartNames(parts),
-                                               _makeTempoMap(tempoEvents),
-                                               _makeMeterTable(results),
-                                               _makeKeyTable(results)),
-                        info: _makeInfo(tune,
-                                        fileHeader: fileHeader,
-                                        version: version))
+        return Work(name: determineWorkName(tune),
+                    content: .standardBeat(fillEmptyPartNames(parts),
+                                           _makeTempoMap(tempoEvents),
+                                           _makeMeterTable(results),
+                                           _makeKeyTable(results)),
+                    info: _makeInfo(tune,
+                                    fileHeader: fileHeader,
+                                    version: version))
     }
 
     // Normalization rewrites the tunebook's version to the current one, so

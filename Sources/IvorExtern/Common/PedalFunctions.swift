@@ -101,7 +101,7 @@ internal func simplifyingPedals(of work: Work,
                                 _ mode: Pedal.SimplifyMode) throws -> Work {
     var work = work
 
-    switch work.content {
+    switch work.content.cases {
     case let .absoluteBeat(parts, tempoMap, meterTable, keyTable):
         try work.replaceContent(with: .absoluteBeat(_simplifyingPedals(of: parts, mode), tempoMap, meterTable, keyTable))
 

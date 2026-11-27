@@ -215,7 +215,7 @@ extension JohnnySonic.Exporter {
                                      work: work)
         }
 
-        switch work.content {
+        switch work.content.cases {
         case let .absoluteBeat(parts, _, _, _):
             commands += try _convert(parts: parts)
 

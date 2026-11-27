@@ -825,7 +825,7 @@ extension ABCImporterTests {
             D
             """)
 
-        guard case let .standardBeat(_, tempoMap, _, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(tempoMap.map(\.beatTime) == [.zero, beat(1, 4), beat(1, 4)])
@@ -846,7 +846,7 @@ extension ABCImporterTests {
         let works = try ABC.Importer().read(from: wrapper, as: .abc)
         let work = try #require(works.first)
 
-        guard case let .standardBeat(_, tempoMap, _, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)

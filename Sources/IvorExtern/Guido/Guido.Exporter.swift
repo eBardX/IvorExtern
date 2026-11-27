@@ -115,7 +115,7 @@ extension Guido.Exporter {
     private static func _convert(work: Work,
                                  workIndex: Int?,
                                  warnings: WarningCollector) throws(Guido.Error) -> Guido.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content.cases
         else {
             guard work.pitchNotation == .standard
             else { throw Guido.Error.unsupportedPitchNotation(work.pitchNotation) }

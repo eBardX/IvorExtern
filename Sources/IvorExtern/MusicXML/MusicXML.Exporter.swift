@@ -128,7 +128,7 @@ extension MusicXML.Exporter {
     private static func _convert(work: Work,
                                  workIndex: Int?,
                                  warnings: WarningCollector) throws(MusicXML.Error) -> MusicXML.Score {
-        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content
+        guard case let .standardBeat(parts, tempoMap, meterTable, keyTable) = work.content.cases
         else {
             guard work.pitchNotation == .standard
             else { throw MusicXML.Error.unsupportedPitchNotation(work.pitchNotation) }

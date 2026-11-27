@@ -54,7 +54,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Piano"])
@@ -66,7 +66,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable[.zero] == Instrument("Piano"))
@@ -82,7 +82,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.first?.instrumentTable.map(\.time) == [.zero])
@@ -99,7 +99,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         let instrumentTable = try #require(parts.first?.instrumentTable)
@@ -115,7 +115,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Flute"])
@@ -146,7 +146,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == ["Voice 1", "Bass", "Voice 3"])
@@ -218,7 +218,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(parts, _, _, _) = work.content
+        guard case let .standardBeat(parts, _, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(parts.map(\.name) == [""])
@@ -228,7 +228,7 @@ extension GuidoImporterTests {
     func convert_tempoChange_isAStep() throws {
         let work = try readGuido(#"[ \tempo<"Fast", "1/4=120"> c \tempo<"Slow", "1/4=60"> d ]"#)
 
-        guard case let .standardBeat(_, tempoMap, _, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(tempoMap.map(\.beatTime) == [.zero, beat(1, 4), beat(1, 4)])
@@ -241,7 +241,7 @@ extension GuidoImporterTests {
         let score = try Guido.Parser().parse(data)
         let work = try Guido.Importer().convert(score)
 
-        guard case let .standardBeat(_, tempoMap, _, _) = work.content
+        guard case let .standardBeat(_, tempoMap, _, _) = work.content.cases
         else { Issue.record("Expected standardBeat content"); return }
 
         #expect(!tempoMap.isEmpty)
